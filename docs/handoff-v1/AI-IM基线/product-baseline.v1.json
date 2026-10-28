@@ -1,0 +1,1234 @@
+{
+  "baseline_id": "enterprise-ai-im",
+  "version": "1.0.0",
+  "status": "fixed_design_baseline",
+  "effective_date": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "locale": "zh-CN",
+  "implementation_status": "not_implemented",
+  "authority_note": "规格与选型基线；不表示已实现的运行时或实测结果。",
+  "product_principle": "人表达目标，AI帮助推进；讨论有沉淀，行动有回执，成果能修改，经验能复用。整个过程清晰、克制，并保留人的掌控感。",
+  "layers": {
+    "policy": "定义好的工作状态、协作关系、价值取舍和质量标准。",
+    "capability": "将审美实现为可组合、可鉴权、可执行、可验收的工作能力。",
+    "asset": "支撑工作的事实、内容、关系、方法、成果及其身份、来源、版本、权限和生命周期。"
+  },
+  "policy_composition": {
+    "precedence": [
+      "组织基线",
+      "工作区/项目覆盖",
+      "任务约束",
+      "个人表达偏好"
+    ],
+    "hard_constraints": "有效权限取交集；更低层偏好不能扩大授权。",
+    "same_level_conflict": "影响行为的冲突交有权主体判断。",
+    "soft_preferences": "更具体适用范围优先，记录有效规则版本。"
+  },
+  "policies": [
+    {
+      "id": "P01",
+      "name": "讨论沉淀为成果",
+      "principle": "讨论中的获准行动应形成真实决定、任务或成果对象。",
+      "when": "讨论被指派为行动或交付任务时。",
+      "expected": "产出对象并关联原消息与项目，回读实际状态。",
+      "avoid": "仅输出已处理，没有真实对象。",
+      "enforcement": [
+        "服务端结果校验",
+        "场景评估"
+      ],
+      "capability_ids": [
+        "C03",
+        "C04",
+        "C05"
+      ],
+      "asset_ids": [
+        "A02",
+        "A03",
+        "A06",
+        "A08",
+        "A10"
+      ],
+      "evaluation_ids": [
+        "E01",
+        "E07"
+      ]
+    },
+    {
+      "id": "P02",
+      "name": "理解连续的工作上下文",
+      "principle": "依据项目、人员、版本与决定关系理解指代。",
+      "when": "出现这个项目、上次方案等上下文引用时。",
+      "expected": "优先关联权威对象；影响执行的歧义须澄清。",
+      "avoid": "凭同名或相似度直接执行。",
+      "enforcement": [
+        "上下文构建",
+        "目标校验",
+        "场景评估"
+      ],
+      "capability_ids": [
+        "C01",
+        "C02",
+        "C03"
+      ],
+      "asset_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A06",
+        "A08"
+      ],
+      "evaluation_ids": [
+        "E02"
+      ]
+    },
+    {
+      "id": "P03",
+      "name": "主动参与有分寸",
+      "principle": "授权任务主动推进，通知与重要变化相匹配。",
+      "when": "任务跟进、阻塞、状态变化和周期检查时。",
+      "expected": "合并通知，状态不变且无须行动时保持安静。",
+      "avoid": "逐条群消息回复、重复播报未变化状态。",
+      "enforcement": [
+        "调度与通知规则",
+        "人工体验评估"
+      ],
+      "capability_ids": [
+        "C03",
+        "C05"
+      ],
+      "asset_ids": [
+        "A01",
+        "A02",
+        "A06",
+        "A10"
+      ],
+      "evaluation_ids": [
+        "E03"
+      ]
+    },
+    {
+      "id": "P04",
+      "name": "人保持掌控",
+      "principle": "范围可见，可纠正、取消、接管，并遵守有效授权。",
+      "when": "每次读取、动作和执行范围变化时。",
+      "expected": "沿用有效授权；范围外动作取得授权；调用时重新鉴权。",
+      "avoid": "管理员权限旁路、重复确认低风险获准动作、取消后继续新动作。",
+      "enforcement": [
+        "业务权限强制检查",
+        "有效确认校验",
+        "取消与接管"
+      ],
+      "capability_ids": [
+        "C00",
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06",
+        "C07"
+      ],
+      "asset_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10"
+      ],
+      "evaluation_ids": [
+        "E04",
+        "E09",
+        "E10"
+      ]
+    },
+    {
+      "id": "P05",
+      "name": "成果持续可修改",
+      "principle": "成果有稳定身份、版本、反馈与修订入口。",
+      "when": "生成、反馈、修改与验收成果时。",
+      "expected": "区分草稿和已验收，关联前后版本及修改原因。",
+      "avoid": "覆盖后丢失旧版、反馈或来源。",
+      "enforcement": [
+        "成果版本服务",
+        "场景评估"
+      ],
+      "capability_ids": [
+        "C04",
+        "C06"
+      ],
+      "asset_ids": [
+        "A04",
+        "A06",
+        "A08",
+        "A09"
+      ],
+      "evaluation_ids": [
+        "E05"
+      ]
+    },
+    {
+      "id": "P06",
+      "name": "经验形成复用资产",
+      "principle": "被验证的方法与案例可复用、可追溯、可撤回。",
+      "when": "任务完成并积累方法或模板时。",
+      "expected": "保存维护人、来源和验证状态；组织级发布由有权维护者确认。",
+      "avoid": "将猜测或单次输出自动升级为公司制度。",
+      "enforcement": [
+        "方法资产发布规则",
+        "复用效果评估"
+      ],
+      "capability_ids": [
+        "C02",
+        "C04",
+        "C06"
+      ],
+      "asset_ids": [
+        "A06",
+        "A07",
+        "A08",
+        "A09"
+      ],
+      "evaluation_ids": [
+        "E06"
+      ]
+    },
+    {
+      "id": "P07",
+      "name": "事实与结果有依据",
+      "principle": "当前业务状态查询权威来源，未知与推断明确标记。",
+      "when": "事实回答、来源引用和动作完成报告时。",
+      "expected": "返回可访问引用；执行回读；不明副作用进入对账。",
+      "avoid": "以历史摘要推断当前审批状态，以执行器文本宣称成功。",
+      "enforcement": [
+        "来源与新鲜度校验",
+        "动作回执与对账",
+        "场景评估"
+      ],
+      "capability_ids": [
+        "C01",
+        "C02",
+        "C04",
+        "C05",
+        "C06"
+      ],
+      "asset_ids": [
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10"
+      ],
+      "evaluation_ids": [
+        "E01",
+        "E07",
+        "E10"
+      ]
+    },
+    {
+      "id": "P08",
+      "name": "表达清晰且节制",
+      "principle": "先展示结果、状态与必要下一步，过程细节按需展开。",
+      "when": "展示回复、进度、成果或异常时。",
+      "expected": "用工作语言提供清晰可操作结果与修改入口。",
+      "avoid": "用冗长技术日志掩盖结果或待处理事项。",
+      "enforcement": [
+        "界面规则",
+        "输出量规",
+        "人工体验评估"
+      ],
+      "capability_ids": [
+        "C00",
+        "C01",
+        "C03",
+        "C04",
+        "C05"
+      ],
+      "asset_ids": [
+        "A02",
+        "A03",
+        "A08",
+        "A09",
+        "A10"
+      ],
+      "evaluation_ids": [
+        "E08"
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "C00",
+      "name": "基础通信与身份",
+      "policy_ids": [
+        "P04",
+        "P08"
+      ],
+      "asset_ids": [
+        "A01",
+        "A03",
+        "A04",
+        "A06",
+        "A10"
+      ],
+      "inputs": [
+        "认证身份",
+        "目标会话",
+        "消息或附件"
+      ],
+      "operations": [
+        "单聊/群聊与成员管理",
+        "消息/附件读写",
+        "历史同步与通知",
+        "通信搜索"
+      ],
+      "outputs": [
+        "源会话/消息ID映射",
+        "实际投递或源端接收状态"
+      ],
+      "completion": "按动作回读源系统状态，区分已发送、已送达与已处理。",
+      "on_failure": "身份不明拒绝业务动作；投递状态不明进入对账。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    },
+    {
+      "id": "C01",
+      "name": "理解工作",
+      "policy_ids": [
+        "P02",
+        "P04",
+        "P07",
+        "P08"
+      ],
+      "asset_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A06",
+        "A07"
+      ],
+      "inputs": [
+        "用户意图",
+        "任务上下文",
+        "有效规则"
+      ],
+      "operations": [
+        "识别目标与范围",
+        "提取约束和缺口",
+        "必要澄清"
+      ],
+      "outputs": [
+        "任务说明",
+        "可执行完成标准"
+      ],
+      "completion": "目标对象与必要约束明确，未知显式标记。",
+      "on_failure": "影响执行的歧义先澄清，其余保留说明。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    },
+    {
+      "id": "C02",
+      "name": "获取上下文",
+      "policy_ids": [
+        "P02",
+        "P04",
+        "P06",
+        "P07"
+      ],
+      "asset_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08"
+      ],
+      "inputs": [
+        "已验证主体",
+        "查询与范围",
+        "来源绑定"
+      ],
+      "operations": [
+        "当前事实查询",
+        "授权检索",
+        "版本和来源定位"
+      ],
+      "outputs": [
+        "可见上下文",
+        "来源与源版本"
+      ],
+      "completion": "上下文在允许范围内且来源可定位。",
+      "on_failure": "无权不返回内容；过期或解析失败显式报告。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    },
+    {
+      "id": "C03",
+      "name": "组织协作",
+      "policy_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P08"
+      ],
+      "asset_ids": [
+        "A01",
+        "A02",
+        "A03",
+        "A06",
+        "A07",
+        "A08",
+        "A10"
+      ],
+      "inputs": [
+        "项目/参与人",
+        "目标与时限",
+        "有效授权"
+      ],
+      "operations": [
+        "关联项目与会话",
+        "建立待办与分工",
+        "记录决定",
+        "安排日历"
+      ],
+      "outputs": [
+        "项目关系",
+        "待办/决定/日历对象"
+      ],
+      "completion": "对象已实际创建或更新，负责人和状态可核验。",
+      "on_failure": "权限或对象不明时停止对应动作，保留已完成记录。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    },
+    {
+      "id": "C04",
+      "name": "制作与修改成果",
+      "policy_ids": [
+        "P01",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08"
+      ],
+      "asset_ids": [
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10"
+      ],
+      "inputs": [
+        "交付目标",
+        "可访问资料",
+        "模板或反馈"
+      ],
+      "operations": [
+        "生成",
+        "保存",
+        "引用",
+        "版本化修改",
+        "发起验收"
+      ],
+      "outputs": [
+        "ArtifactVersion",
+        "来源与差异",
+        "草稿或验收状态"
+      ],
+      "completion": "成果可访问、可修改，格式与内容符合任务标准。",
+      "on_failure": "格式失败不报告已交付；保留草稿并说明缺口。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    },
+    {
+      "id": "C05",
+      "name": "推进与验证执行",
+      "policy_ids": [
+        "P01",
+        "P03",
+        "P04",
+        "P07",
+        "P08"
+      ],
+      "asset_ids": [
+        "A01",
+        "A02",
+        "A06",
+        "A08",
+        "A10"
+      ],
+      "inputs": [
+        "Run",
+        "工具范围",
+        "有效规则与限制"
+      ],
+      "operations": [
+        "调用工具",
+        "受控跟进",
+        "确认与取消",
+        "恢复",
+        "回读与对账"
+      ],
+      "outputs": [
+        "标准事件",
+        "动作回执",
+        "最终或待恢复状态"
+      ],
+      "completion": "成果与实际业务状态匹配，未决副作用有明确记录。",
+      "on_failure": "失败可说明；外部结果不明进入recovery_required。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    },
+    {
+      "id": "C06",
+      "name": "沉淀经验",
+      "policy_ids": [
+        "P04",
+        "P05",
+        "P06",
+        "P07"
+      ],
+      "asset_ids": [
+        "A04",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10"
+      ],
+      "inputs": [
+        "已完成任务",
+        "反馈与证据",
+        "发布权限"
+      ],
+      "operations": [
+        "整理方法/模板",
+        "标记验证状态",
+        "授权发布",
+        "复用与撤回"
+      ],
+      "outputs": [
+        "方法或案例资产版本",
+        "复用记录"
+      ],
+      "completion": "有维护人、来源和验证状态，组织级发布有有效授权。",
+      "on_failure": "推断先标候选，不静默修改组织规则。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    },
+    {
+      "id": "C07",
+      "name": "管理模型与产品配置",
+      "policy_ids": [
+        "P04"
+      ],
+      "asset_ids": [
+        "A01",
+        "A10"
+      ],
+      "inputs": [
+        "管理员或个人主体",
+        "配置意图",
+        "凭据安全录入"
+      ],
+      "operations": [
+        "配置模型用途和endpoint",
+        "绑定凭据引用",
+        "管理额度与Policy",
+        "选择引擎路由"
+      ],
+      "outputs": [
+        "版本化配置",
+        "连接/能力验证记录"
+      ],
+      "completion": "配置范围正确，秘密不进入对话/日志/索引；实际验证与未验证明确。",
+      "on_failure": "错误配置不覆盖可用配置；不并发改写共享运行环境。",
+      "interfaces": {
+        "human": "产品界面调用同一业务服务",
+        "ai": "ToolGateway中的授权工具；凭据原文通过安全录入"
+      },
+      "notifications": "遵守P03与P08，按重要变化通知"
+    }
+  ],
+  "asset_categories": [
+    "事实",
+    "内容",
+    "关系",
+    "方法",
+    "成果"
+  ],
+  "asset_required_metadata": [
+    "asset_id",
+    "category",
+    "type",
+    "workspace_id",
+    "source_ref",
+    "source_object_id",
+    "owner",
+    "access_policy_ref",
+    "source_version",
+    "collected_at",
+    "updated_at",
+    "validity",
+    "freshness",
+    "derived_from",
+    "content_ref",
+    "deletion_state"
+  ],
+  "index_required_metadata": [
+    "asset_id",
+    "source_version",
+    "embedding_provider",
+    "embedding_model",
+    "dimensions",
+    "index_version"
+  ],
+  "assets": [
+    {
+      "id": "A01",
+      "category": "事实",
+      "name": "身份与组织",
+      "data_types": [
+        "员工",
+        "部门",
+        "角色",
+        "成员关系"
+      ],
+      "authority": "上游身份与产品授权记录",
+      "refresh": "身份/授权变更时同步并在操作时复核",
+      "stage": "S1",
+      "capability_ids": [
+        "C00",
+        "C01",
+        "C02",
+        "C03",
+        "C05",
+        "C07"
+      ],
+      "policy_ids": [
+        "P02",
+        "P03",
+        "P04"
+      ]
+    },
+    {
+      "id": "A02",
+      "category": "事实",
+      "name": "工作状态",
+      "data_types": [
+        "项目",
+        "里程碑",
+        "业务待办",
+        "日历",
+        "流程状态"
+      ],
+      "authority": "相应业务服务",
+      "refresh": "查询当前状态；同步副本带版本/时间",
+      "stage": "S1",
+      "capability_ids": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05"
+      ],
+      "policy_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P07",
+        "P08"
+      ]
+    },
+    {
+      "id": "A03",
+      "category": "内容",
+      "name": "通信内容",
+      "data_types": [
+        "消息",
+        "回复关系",
+        "附件引用"
+      ],
+      "authority": "通信Provider",
+      "refresh": "增量同步；编辑/删除/成员撤权传播",
+      "stage": "S1",
+      "capability_ids": [
+        "C00",
+        "C01",
+        "C02",
+        "C03",
+        "C04"
+      ],
+      "policy_ids": [
+        "P01",
+        "P02",
+        "P04",
+        "P07",
+        "P08"
+      ]
+    },
+    {
+      "id": "A04",
+      "category": "内容",
+      "name": "文档与表格",
+      "data_types": [
+        "text/plain",
+        "text/markdown",
+        "application/pdf",
+        "办公文档",
+        "表格"
+      ],
+      "authority": "原件与经核验的派生解析",
+      "refresh": "文件变更后按源版本更新解析与索引",
+      "stage": "S1",
+      "capability_ids": [
+        "C00",
+        "C02",
+        "C04",
+        "C06"
+      ],
+      "policy_ids": [
+        "P02",
+        "P04",
+        "P05",
+        "P07"
+      ]
+    },
+    {
+      "id": "A05",
+      "category": "内容",
+      "name": "多模态资料",
+      "data_types": [
+        "图片",
+        "音频",
+        "视频",
+        "OCR",
+        "转写与时间定位"
+      ],
+      "authority": "原件与带处理版本的派生内容",
+      "refresh": "按源/解析模型版本重建，保留定位",
+      "stage": "S2",
+      "capability_ids": [
+        "C02",
+        "C04"
+      ],
+      "policy_ids": [
+        "P04",
+        "P07"
+      ]
+    },
+    {
+      "id": "A06",
+      "category": "关系",
+      "name": "工作关系",
+      "data_types": [
+        "人—项目",
+        "群—项目",
+        "文档—任务",
+        "决定—依据"
+      ],
+      "authority": "产品关系目录与来源映射",
+      "refresh": "引用对象/来源更新和撤权时维护",
+      "stage": "S1",
+      "capability_ids": [
+        "C00",
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06"
+      ],
+      "policy_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07"
+      ]
+    },
+    {
+      "id": "A07",
+      "category": "方法",
+      "name": "工作方法",
+      "data_types": [
+        "SOP",
+        "术语",
+        "模板",
+        "质量量规",
+        "有效案例"
+      ],
+      "authority": "有维护人的发布记录",
+      "refresh": "维护人发布新版本或撤回",
+      "stage": "S1",
+      "capability_ids": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C06"
+      ],
+      "policy_ids": [
+        "P04",
+        "P06",
+        "P07"
+      ]
+    },
+    {
+      "id": "A08",
+      "category": "成果",
+      "name": "成果与版本",
+      "data_types": [
+        "Artifact",
+        "ArtifactVersion",
+        "差异",
+        "引用",
+        "验收状态"
+      ],
+      "authority": "产品成果目录与原件版本",
+      "refresh": "每次交付/修改/验收创建相应记录",
+      "stage": "S1",
+      "capability_ids": [
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06"
+      ],
+      "policy_ids": [
+        "P01",
+        "P02",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08"
+      ]
+    },
+    {
+      "id": "A09",
+      "category": "成果",
+      "name": "反馈与评估",
+      "data_types": [
+        "反馈",
+        "验收记录",
+        "场景评估",
+        "改进记录"
+      ],
+      "authority": "用户反馈与实际评估",
+      "refresh": "追加记录并关联对象版本，遵守撤权与删除",
+      "stage": "S1",
+      "capability_ids": [
+        "C04",
+        "C06"
+      ],
+      "policy_ids": [
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08"
+      ]
+    },
+    {
+      "id": "A10",
+      "category": "事实",
+      "name": "执行与回执",
+      "data_types": [
+        "Run",
+        "动作",
+        "确认",
+        "消耗",
+        "源端回执"
+      ],
+      "authority": "RunService与实际业务系统",
+      "refresh": "持久化事件，回读状态，对未知副作用对账",
+      "stage": "S1",
+      "capability_ids": [
+        "C00",
+        "C03",
+        "C04",
+        "C05",
+        "C06",
+        "C07"
+      ],
+      "policy_ids": [
+        "P01",
+        "P03",
+        "P04",
+        "P07",
+        "P08"
+      ]
+    }
+  ],
+  "source_binding_required_fields": [
+    "binding_id",
+    "policy_ids",
+    "capability_ids",
+    "evaluation_ids",
+    "connector",
+    "object_selector",
+    "field_allowlist",
+    "time_scope",
+    "credential_ref",
+    "access_policy_ref",
+    "sync_policy",
+    "revocation_policy",
+    "deletion_policy"
+  ],
+  "source_bindings": [],
+  "engine_contract": {
+    "version": "1.0.0",
+    "default_engine": "dsh",
+    "required_compatible_engine": "hermes",
+    "product_methods": [
+      "describeCapabilities",
+      "startRun",
+      "sendInput",
+      "respondToRequest",
+      "cancelRun",
+      "getRun",
+      "subscribeEvents"
+    ],
+    "required_run_fields": [
+      "run_id",
+      "workspace_id",
+      "subject_ref",
+      "conversation_ref",
+      "capability_ids",
+      "policy_snapshot_ref",
+      "context_asset_refs",
+      "model_profile_ref",
+      "tool_scope_ref",
+      "limits"
+    ],
+    "states": [
+      "queued",
+      "running",
+      "waiting_input",
+      "waiting_confirmation",
+      "succeeded",
+      "failed",
+      "cancelled",
+      "recovery_required"
+    ],
+    "events": [
+      "run.started",
+      "message.delta",
+      "progress.updated",
+      "input.required",
+      "action.proposed",
+      "action.completed",
+      "artifact.updated",
+      "usage.updated",
+      "run.completed",
+      "run.failed",
+      "run.cancelled",
+      "run.recovery_required"
+    ],
+    "event_envelope": [
+      "event_id",
+      "run_id",
+      "sequence",
+      "occurred_at",
+      "schema_version",
+      "payload_ref"
+    ],
+    "switching": {
+      "new_runs": "按配置选择执行器",
+      "completed_history": "产品可见历史和资产引用重新构建上下文",
+      "inflight": "原执行器完成，或停止并对账后在安全业务边界创建关联新Run",
+      "native_checkpoint": "不承诺跨引擎迁移",
+      "maintenance": "原生协议升级可能需要Adapter修改；业务/前端/资产契约保持稳定"
+    }
+  },
+  "runtime_adapter_plan": [
+    {
+      "engine": "dsh",
+      "role": "default",
+      "integration": "官方SDK/运行时，经独立进程Adapter",
+      "acceptance_status": "not_tested"
+    },
+    {
+      "engine": "hermes",
+      "role": "required_compatible",
+      "integration": "官方JSON-RPC，经独立进程Adapter",
+      "acceptance_status": "not_tested"
+    }
+  ],
+  "evaluations": [
+    {
+      "id": "E01",
+      "name": "讨论转纪要与待办",
+      "policy_ids": [
+        "P01",
+        "P07"
+      ],
+      "capability_ids": [
+        "C02",
+        "C03",
+        "C04",
+        "C05"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "源消息可引用",
+        "纪要与待办真实存在",
+        "实际负责人和状态回读"
+      ],
+      "acceptance": "必须匹配真实测试对象",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E02",
+      "name": "含糊指代与旧版本",
+      "policy_ids": [
+        "P02"
+      ],
+      "capability_ids": [
+        "C01",
+        "C02"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "同名项目不误认",
+        "影响执行时澄清",
+        "明确采用的源版本"
+      ],
+      "acceptance": "不得用相似度替代对象确认",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E03",
+      "name": "静默跟进与变化通知",
+      "policy_ids": [
+        "P03"
+      ],
+      "capability_ids": [
+        "C03",
+        "C05"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "无变化且无需行动时静默",
+        "重要变化合并通知",
+        "遵守授权范围与用户偏好"
+      ],
+      "acceptance": "通知轨迹可检查",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E04",
+      "name": "权限与接管",
+      "policy_ids": [
+        "P04"
+      ],
+      "capability_ids": [
+        "C00",
+        "C02",
+        "C05"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "越权请求被拒绝",
+        "有效授权不反复确认",
+        "取消后不开始新动作",
+        "撤权重新约束后续动作"
+      ],
+      "acceptance": "已发生副作用必须单独报告",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E05",
+      "name": "反馈修改成果",
+      "policy_ids": [
+        "P05"
+      ],
+      "capability_ids": [
+        "C04"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "新旧版本可查",
+        "反馈关联正确版本",
+        "修改结果可访问",
+        "验收状态明确"
+      ],
+      "acceptance": "可持续修改",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E06",
+      "name": "经验复用与撤回",
+      "policy_ids": [
+        "P06"
+      ],
+      "capability_ids": [
+        "C02",
+        "C06"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "候选经验有来源",
+        "组织发布有维护人授权",
+        "撤回后不作为有效方法调用"
+      ],
+      "acceptance": "事实、推断和制度分开标记",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E07",
+      "name": "事实及真实结果",
+      "policy_ids": [
+        "P01",
+        "P07"
+      ],
+      "capability_ids": [
+        "C02",
+        "C05"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "当前状态来自权威业务源",
+        "引用有权限且可定位",
+        "未知显式标记"
+      ],
+      "acceptance": "仅有生成文本不得判定执行成功",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E08",
+      "name": "清晰成果与节制表达",
+      "policy_ids": [
+        "P08"
+      ],
+      "capability_ids": [
+        "C00",
+        "C04",
+        "C05"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "结果/状态/下一步清晰",
+        "详细日志按需展开",
+        "失败说明可操作"
+      ],
+      "acceptance": "人工依据固定量规评估，不要求逐字相同",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E09",
+      "name": "多员工并发隔离",
+      "policy_ids": [
+        "P04"
+      ],
+      "capability_ids": [
+        "C00",
+        "C02",
+        "C05",
+        "C07"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "凭据不串用",
+        "确认请求绑定主体/参数",
+        "会话与资产可见范围正确",
+        "不共享可写运行目录"
+      ],
+      "acceptance": "不得只用不同session_id声称隔离",
+      "execution_status": "not_run"
+    },
+    {
+      "id": "E10",
+      "name": "切换、重复事件和中断",
+      "policy_ids": [
+        "P04",
+        "P07"
+      ],
+      "capability_ids": [
+        "C03",
+        "C05"
+      ],
+      "engines": [
+        "dsh",
+        "hermes"
+      ],
+      "checks": [
+        "新任务按路由切换",
+        "旧任务不热迁移私有检查点",
+        "未知结果先对账",
+        "重复消息不重复业务动作"
+      ],
+      "acceptance": "前端、业务和资产契约不因引擎改变",
+      "execution_status": "not_run"
+    }
+  ],
+  "change_rule": "同步更新三层定义、结构化规格和技术决定；记录影响编号、接口/数据迁移、测试和回退。"
+}

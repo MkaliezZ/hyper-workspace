@@ -1,0 +1,84 @@
+{
+  "package_id": "企业AI-IM开发交接包-v1.0-2026-10-29",
+  "package_version": "1.0.0",
+  "baseline_version": "1.0.0",
+  "created_date": "2026-10-29",
+  "hash_algorithm": "sha256",
+  "excluded_metadata": [
+    "MANIFEST.sha256.json",
+    ".DS_Store",
+    "__pycache__"
+  ],
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 6598,
+      "sha256": "8c648fb6814464ffb07c013f80efda1385b549732c2aff1c8120063f7e3a9aee"
+    },
+    {
+      "path": "AI-IM基线/README.md",
+      "bytes": 3803,
+      "sha256": "3fca6dfec36dee253ff028d3d7d7722aaa4f1eb615ba8b76a10a4e7850e6837c"
+    },
+    {
+      "path": "AI-IM基线/product-baseline.v1.json",
+      "bytes": 29410,
+      "sha256": "6a4d1101fb116ca99038248c8159f7b042225cef706a7eabef6fe0785b56bef9"
+    },
+    {
+      "path": "AI-IM基线/三层定义-v1.0.md",
+      "bytes": 10116,
+      "sha256": "aafdf48e41881bf20ab7e253ce8867fd346140e11f4800a6bf9557ce310c4974"
+    },
+    {
+      "path": "AI-IM基线/技术选型与模块契约-v1.0.md",
+      "bytes": 19188,
+      "sha256": "a219f007fd9f286f91aa055d559f11dfb71c5736418ea47ef26daddef95ed768"
+    },
+    {
+      "path": "AI-IM基线/核验记录.md",
+      "bytes": 1523,
+      "sha256": "f18d01e6fe4270a15a7cfb0a0b75bb9d7e41d8a05ad7a8de7b530352ceb6d7cc"
+    },
+    {
+      "path": "PACKAGE_VERIFICATION.md",
+      "bytes": 2071,
+      "sha256": "b0781adde8d2b04d9b6b52d6fcc0f72a4a28bb1235a259f08c0b42c33a78e2aa"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3939,
+      "sha256": "2cd34f79a6dc9ba7fe43d989b3823bc0cbf455bbfb3c4ea7f5e7b177b971b293"
+    },
+    {
+      "path": "SOURCE_SNAPSHOT.json",
+      "bytes": 866,
+      "sha256": "6c7173aa5c82f2f413e379cf30b0ebcf01ceba9147b0a947ec675b03552d5858"
+    },
+    {
+      "path": "verify_package.py",
+      "bytes": 6822,
+      "sha256": "d72b9802436e47cd201994f56525917584ce366df8d9faa4600e4ff779cc0e45"
+    },
+    {
+      "path": "企业AI-IM可行性与开源选型-2026-10-29.md",
+      "bytes": 17242,
+      "sha256": "6ded5558218ca762ce30c8dc794655a2ccc7a0398ce3fa87e186e28f16ebda30"
+    },
+    {
+      "path": "变更记录模板.md",
+      "bytes": 752,
+      "sha256": "aa9f2a24796ef79cd26ac86926eea7b7a211350ab86a2b68eca58aff11b70470"
+    },
+    {
+      "path": "开发交接状态.md",
+      "bytes": 3696,
+      "sha256": "11d528010fbfe0bb535d7e1e0bf31d631daced4c05d993634993280d071a172f"
+    },
+    {
+      "path": "开发接续提示词.md",
+      "bytes": 1633,
+      "sha256": "531d308774a53b9058995395d5b534639e66f008677a564b8c71ed5f275c9b94"
+    }
+  ]
+}

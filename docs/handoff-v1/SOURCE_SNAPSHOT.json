@@ -1,0 +1,13 @@
+{
+  "baseline_version": "1.0.0",
+  "source_date": "2026-10-29",
+  "note": "原始基线与历史报告的字节摘要；可离开原工作区使用，不含绝对路径依赖。",
+  "files": {
+    "AI-IM基线/README.md": "3fca6dfec36dee253ff028d3d7d7722aaa4f1eb615ba8b76a10a4e7850e6837c",
+    "AI-IM基线/product-baseline.v1.json": "6a4d1101fb116ca99038248c8159f7b042225cef706a7eabef6fe0785b56bef9",
+    "AI-IM基线/三层定义-v1.0.md": "aafdf48e41881bf20ab7e253ce8867fd346140e11f4800a6bf9557ce310c4974",
+    "AI-IM基线/技术选型与模块契约-v1.0.md": "a219f007fd9f286f91aa055d559f11dfb71c5736418ea47ef26daddef95ed768",
+    "AI-IM基线/核验记录.md": "f18d01e6fe4270a15a7cfb0a0b75bb9d7e41d8a05ad7a8de7b530352ceb6d7cc",
+    "企业AI-IM可行性与开源选型-2026-10-29.md": "6ded5558218ca762ce30c8dc794655a2ccc7a0398ce3fa87e186e28f16ebda30"
+  }
+}
