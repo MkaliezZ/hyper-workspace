@@ -1,0 +1,743 @@
+import { useCallback, useEffect, useState } from "react";
+import type { Artifact, Task, Project, WorkspaceView } from "@hyper/contracts";
+import {
+  Plus,
+  FileText,
+  Search,
+  ArrowRight,
+  LoaderCircle,
+  X,
+} from "lucide-react";
+import { api, mutation, ApiError } from "./api";
+import { Navigation, MainHeader, type Section } from "./components/Shell";
+import { Discussion } from "./components/Discussion";
+import {
+  ContextPanel,
+  TasksPanel,
+  ArtifactsPanel,
+} from "./components/WorkPanels";
+import { Dialog } from "./components/Dialog";
+type Tab = "discussion" | "tasks" | "artifacts";
+export function App() {
+  const [view, setView] = useState<WorkspaceView | null>(null),
+    [login, setLogin] = useState(false),
+    [status, setStatus] = useState<{
+      demoEnabled: boolean;
+      nextcloudConfigured: boolean;
+    }>(),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const [section, setSection] = useState<Section>("messages"),
+    [tab, setTab] = useState<Tab>("discussion"),
+    [query, setQuery] = useState(""),
+    [navOpen, setNavOpen] = useState(false),
+    [contextOpen, setContextOpen] = useState(false);
+  const [dialog, setDialog] = useState<
+      "run" | "task" | "artifact" | "project" | null
+    >(null),
+    [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null),
+    [title, setTitle] = useState(""),
+    [assignee, setAssignee] = useState(""),
+    [due, setDue] = useState(""),
+    [goal, setGoal] = useState("");
+  const [instruction, setInstruction] = useState(
+      "请把当前讨论整理成纪要，保留明确分工与时间。",
+    ),
+    [workflow, setWorkflow] = useState("discussion_to_minutes"),
+    [engine, setEngine] = useState("dsh"),
+    [run, setRun] = useState<any>(null);
+  const [edit, setEdit] = useState(""),
+    [feedback, setFeedback] = useState(""),
+    [knowledge, setKnowledge] = useState<any[]>([]),
+    [knowledgeQuery, setKnowledgeQuery] = useState(""),
+    [models, setModels] = useState<any[]>([]);
+  const [modelName, setModelName] = useState(""),
+    [endpoint, setEndpoint] = useState(""),
+    [model, setModel] = useState(""),
+    [apiKey, setApiKey] = useState(""),
+    [scope, setScope] = useState("personal");
+  const load = useCallback(async (projectId?: string) => {
+    try {
+      const v = await api<WorkspaceView>(
+        "/workspace" + (projectId ? "?projectId=" + projectId : ""),
+      );
+      setView(v);
+      setLogin(false);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) setLogin(true);
+      else setError((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+    void api<typeof status>("/auth/status")
+      .then(setStatus)
+      .catch(() => {});
+  }, [load]);
+  useEffect(() => {
+    if (section === "settings" && view)
+      void api<any[]>("/models")
+        .then(setModels)
+        .catch((e) => setError(e.message));
+  }, [section, view?.user.id]);
+  useEffect(() => {
+    if (
+      !run ||
+      ["succeeded", "failed", "cancelled", "recovery_required"].includes(
+        run.state,
+      )
+    )
+      return;
+    let alive = true;
+    const timer = setInterval(() => {
+      void api("/runs/" + run.id)
+        .then((r) => {
+          if (alive) {
+            setRun(r);
+            if (
+              [
+                "succeeded",
+                "failed",
+                "cancelled",
+                "recovery_required",
+              ].includes(r.state)
+            )
+              void load(view?.project.id);
+          }
+        })
+        .catch((e) => {
+          if (alive) setError(e.message);
+        });
+    }, 700);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [run?.id, run?.state, load, view?.project.id]);
+  async function act(fn: () => Promise<void>) {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function refresh() {
+    await load(view?.project.id);
+  }
+  function openTask(t = "") {
+    setTitle(t);
+    setAssignee("");
+    setDue("");
+    setDialog("task");
+  }
+  function openArtifact(a: Artifact) {
+    setSelectedArtifact(a);
+    setEdit(a.content);
+    setFeedback("");
+    setDialog("artifact");
+  }
+  function selectProject(p: Project) {
+    setSection("messages");
+    setTab("discussion");
+    setQuery("");
+    setNavOpen(false);
+    void load(p.id);
+  }
+  function navigate(s: Section) {
+    setSection(s);
+    setQuery("");
+    setNavOpen(false);
+  }
+  if (!view)
+    return (
+      <div className="login-page">
+        <div className="login-brand">H</div>
+        <h1>Hyper Workspace</h1>
+        <p>让讨论有沉淀，让工作持续向前。</p>
+        {error ? <p className="error-text">{error}</p> : null}
+        {login ? (
+          <>
+            <button
+              className="primary login-button"
+              disabled={busy || !status?.demoEnabled}
+              onClick={() =>
+                void act(async () => {
+                  await mutation("/auth/demo", {});
+                  await load();
+                })
+              }
+            >
+              {busy ? <LoaderCircle size={18} /> : null}进入演示工作区
+              <ArrowRight size={18} />
+            </button>
+            <small>
+              {status?.demoEnabled
+                ? "使用独立演示资料，未连接企业数据。"
+                : "演示模式未启用。请配置工作区登录服务。"}
+            </small>
+          </>
+        ) : (
+          <p>正在连接工作区…</p>
+        )}
+      </div>
+    );
+  const projectTitle =
+    section === "knowledge"
+      ? "知识库"
+      : section === "settings"
+        ? "设置"
+        : view.project.name;
+  return (
+    <div className="app-shell">
+      <Navigation
+        view={view}
+        section={section}
+        onSection={navigate}
+        onProject={selectProject}
+        onRun={() => {
+          setDialog("run");
+          setEngine("dsh");
+        }}
+        onNewProject={() => {
+          setTitle("");
+          setGoal("");
+          setDialog("project");
+        }}
+        open={navOpen}
+      />
+      <main className="main-pane">
+        <MainHeader
+          title={projectTitle}
+          subtitle={
+            section === "knowledge"
+              ? "有来源、可复用的工作资料"
+              : section === "settings"
+                ? "模型与执行服务"
+                : "项目空间"
+          }
+          query={query}
+          onQuery={setQuery}
+          onMenu={() => setNavOpen((v) => !v)}
+          onContext={() => setContextOpen((v) => !v)}
+        />
+        {error ? (
+          <div role="alert" className="error-banner">
+            <span>{error}</span>
+            <button
+              className="icon-button"
+              aria-label="关闭错误提示"
+              onClick={() => setError("")}
+            >
+              <X size={17} />
+            </button>
+          </div>
+        ) : null}
+        {run ? (
+          <div className={"run-strip " + run.state}>
+            <span>
+              {run.engine === "fixture" ? "演示执行" : "AI 执行"} ·{" "}
+              {(
+                {
+                  queued: "等待处理",
+                  running: "正在推进",
+                  succeeded: "已完成",
+                  failed: "执行未完成",
+                  cancelled: "已停止",
+                  recovery_required: "需要核对已执行操作",
+                } as any
+              )[run.state] ?? run.state}
+              {run.error ? "：" + run.error : ""}
+            </span>
+            {![
+              "succeeded",
+              "failed",
+              "cancelled",
+              "recovery_required",
+            ].includes(run.state) ? (
+              <button
+                onClick={() =>
+                  void act(async () => {
+                    setRun(await mutation("/runs/" + run.id + "/cancel", {}));
+                  })
+                }
+              >
+                停止
+              </button>
+            ) : (
+              <button onClick={() => setRun(null)}>收起</button>
+            )}
+          </div>
+        ) : null}
+        {section === "messages" || section === "projects" ? (
+          <>
+            <div className="tabs" role="tablist">
+              {(
+                [
+                  ["discussion", "讨论"],
+                  ["tasks", "任务"],
+                  ["artifacts", "成果"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  role="tab"
+                  aria-selected={tab === id}
+                  className={tab === id ? "active" : ""}
+                  onClick={() => setTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {tab === "discussion" ? (
+              <Discussion
+                messages={view.messages}
+                artifacts={view.artifacts}
+                onArtifact={openArtifact}
+                onTask={openTask}
+                query={query}
+                busy={busy}
+                demo={view.user.demo}
+                onSend={(text) =>
+                  act(async () => {
+                    await mutation(
+                      "/conversations/" +
+                        view.project.conversationId +
+                        "/messages",
+                      { content: text },
+                    );
+                    await refresh();
+                  })
+                }
+              />
+            ) : tab === "tasks" ? (
+              <TasksPanel
+                tasks={view.tasks}
+                query={query}
+                onNew={() => openTask()}
+                onToggle={(t) =>
+                  void act(async () => {
+                    await mutation(
+                      "/tasks/" + t.id,
+                      { status: t.status === "done" ? "open" : "done" },
+                      "PATCH",
+                    );
+                    await refresh();
+                  })
+                }
+              />
+            ) : (
+              <ArtifactsPanel
+                artifacts={view.artifacts}
+                query={query}
+                onArtifact={openArtifact}
+              />
+            )}
+          </>
+        ) : null}
+        {section === "knowledge" ? (
+          <div className="work-panel">
+            <h3>从企业资料中找到依据</h3>
+            <p className="muted">
+              当前提供按权限过滤的文字检索；未配置向量模型时不会模拟语义搜索。
+            </p>
+            <form
+              className="knowledge-search"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void act(async () =>
+                  setKnowledge(
+                    await api(
+                      "/knowledge?q=" + encodeURIComponent(knowledgeQuery),
+                    ),
+                  ),
+                );
+              }}
+            >
+              <input
+                aria-label="检索资料"
+                placeholder="输入关键词"
+                value={knowledgeQuery}
+                onChange={(e) => setKnowledgeQuery(e.target.value)}
+              />
+              <button className="primary" disabled={busy}>
+                <Search size={17} />
+                检索
+              </button>
+            </form>
+            {knowledge.map((a) => (
+              <article className="knowledge-result" key={a.id}>
+                <h4>
+                  <FileText size={20} />
+                  {a.title}
+                </h4>
+                <p>{a.content}</p>
+                <small>
+                  来源：{a.sourceRef ?? "产品资产"} · 版本 {a.sourceVersion}
+                </small>
+              </article>
+            ))}
+            {!knowledge.length ? (
+              <div className="empty-state">
+                输入关键词，查找有权限访问的资料。
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {section === "settings" ? (
+          <div className="work-panel settings-panel">
+            <h3>模型连接</h3>
+            <p className="muted">
+              支持自定义服务地址与个人 API Key，密钥仅在服务端加密保存。
+            </p>
+            {models.map((m) => (
+              <div className="model-row" key={m.id}>
+                <strong>{m.name}</strong>
+                <span>{m.model}</span>
+                <small>
+                  {m.keyHint ?? "未设置 Key"} ·{" "}
+                  {m.verifiedAt ? "已验证" : "尚未验证"}
+                </small>
+              </div>
+            ))}
+            <form
+              className="settings-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void act(async () => {
+                  await mutation("/models", {
+                    name: modelName,
+                    provider: "openai-compatible",
+                    endpoint,
+                    model,
+                    apiKey: apiKey || undefined,
+                    purpose: "chat",
+                    scope,
+                  });
+                  setApiKey("");
+                  setModels(await api("/models"));
+                });
+              }}
+            >
+              <label>
+                连接名称
+                <input
+                  required
+                  value={modelName}
+                  onChange={(e) => setModelName(e.target.value)}
+                  placeholder="例如：团队推理模型"
+                />
+              </label>
+              <label>
+                服务地址
+                <input
+                  required
+                  type="url"
+                  value={endpoint}
+                  onChange={(e) => setEndpoint(e.target.value)}
+                  placeholder="https://服务地址/v1"
+                />
+              </label>
+              <label>
+                模型名称
+                <input
+                  required
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="服务提供方的模型 ID"
+                />
+              </label>
+              <label>
+                API Key
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="在服务端加密保存"
+                />
+              </label>
+              <label>
+                使用范围
+                <select
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value)}
+                >
+                  <option value="personal">仅个人</option>
+                  {view.user.role === "admin" ? (
+                    <option value="workspace">工作区</option>
+                  ) : null}
+                </select>
+              </label>
+              <button className="primary" disabled={busy}>
+                保存连接（未验证）
+              </button>
+            </form>
+            <h3 className="settings-section">执行服务</h3>
+            {Object.entries(view.engines)
+              .filter(([id]) => id !== "fixture")
+              .map(([id, e]) => (
+                <div className="model-row" key={id}>
+                  <strong>
+                    {id === "dsh" ? "DSH · 默认执行器" : "Hermes · 兼容执行器"}
+                  </strong>
+                  <span>
+                    {e.configured ? "已配置，真实能力待验证" : "尚未配置"}
+                  </span>
+                </div>
+              ))}
+          </div>
+        ) : null}
+      </main>
+      <ContextPanel
+        view={view}
+        open={contextOpen}
+        onTask={openTask}
+        onArtifact={openArtifact}
+        onToggle={(t) =>
+          void act(async () => {
+            await mutation(
+              "/tasks/" + t.id,
+              { status: t.status === "done" ? "open" : "done" },
+              "PATCH",
+            );
+            await refresh();
+          })
+        }
+      />
+      {dialog === "task" ? (
+        <Dialog title="新建待办" onClose={() => setDialog(null)}>
+          <form
+            className="dialog-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void act(async () => {
+                await mutation(
+                  "/conversations/" + view.project.conversationId + "/tasks",
+                  {
+                    title,
+                    assignee: assignee || "待分配",
+                    dueDate: due || null,
+                  },
+                );
+                setDialog(null);
+                await refresh();
+              });
+            }}
+          >
+            <label>
+              待办事项
+              <input
+                required
+                autoFocus
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </label>
+            <label>
+              负责人
+              <input
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+                placeholder="待分配"
+              />
+            </label>
+            <label>
+              截止日期
+              <input
+                type="date"
+                value={due}
+                onChange={(e) => setDue(e.target.value)}
+              />
+            </label>
+            <button className="primary" disabled={busy}>
+              创建待办
+            </button>
+          </form>
+        </Dialog>
+      ) : null}
+      {dialog === "project" ? (
+        <Dialog title="新建项目空间" onClose={() => setDialog(null)}>
+          <form
+            className="dialog-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void act(async () => {
+                const p = await mutation("/projects", { name: title, goal });
+                setDialog(null);
+                await load(p.id);
+              });
+            }}
+          >
+            <label>
+              项目名称
+              <input
+                required
+                autoFocus
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </label>
+            <label>
+              当前目标
+              <textarea
+                required
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+              />
+            </label>
+            <button className="primary" disabled={busy}>
+              创建项目
+            </button>
+          </form>
+        </Dialog>
+      ) : null}
+      {dialog === "run" ? (
+        <Dialog title="让 AI 帮你推进工作" onClose={() => setDialog(null)}>
+          <form
+            className="dialog-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void act(async () => {
+                setRun(
+                  await mutation("/runs", {
+                    conversationId: view.project.conversationId,
+                    workflow,
+                    engine,
+                    instruction,
+                    idempotencyKey: crypto.randomUUID(),
+                    ...(workflow === "revise_artifact" && selectedArtifact
+                      ? { artifactId: selectedArtifact.id }
+                      : {}),
+                  }),
+                );
+                setDialog(null);
+              });
+            }}
+          >
+            <label>
+              工作类型
+              <select
+                value={workflow}
+                onChange={(e) => setWorkflow(e.target.value)}
+              >
+                <option value="discussion_to_minutes">讨论 → 纪要</option>
+                <option value="project_report">项目周报</option>
+                <option value="follow_up">检查待办进展</option>
+                {selectedArtifact ? (
+                  <option value="revise_artifact">按反馈修改成果</option>
+                ) : null}
+              </select>
+            </label>
+            <label>
+              工作要求
+              <textarea
+                required
+                autoFocus
+                rows={4}
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+              />
+            </label>
+            <label>
+              执行服务
+              <select
+                value={engine}
+                onChange={(e) => setEngine(e.target.value)}
+              >
+                <option value="dsh">
+                  DSH{view.engines.dsh?.configured ? "" : " · 未配置"}
+                </option>
+                <option value="hermes">
+                  Hermes{view.engines.hermes?.configured ? "" : " · 未配置"}
+                </option>
+                {view.user.demo ? (
+                  <option value="fixture">演示流程 · 不调用真实模型</option>
+                ) : null}
+              </select>
+            </label>
+            <p className="muted small">
+              {engine === "fixture"
+                ? "验证保存成果与业务回执，不代表模型执行效果。"
+                : "使用服务端配置的执行器；未连接时会明确报告。"}
+            </p>
+            <button className="primary" disabled={busy}>
+              {busy ? "正在提交…" : "开始执行"}
+            </button>
+          </form>
+        </Dialog>
+      ) : null}
+      {dialog === "artifact" && selectedArtifact ? (
+        <Dialog
+          title={selectedArtifact.title}
+          wide
+          onClose={() => setDialog(null)}
+        >
+          <form
+            className="dialog-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void act(async () => {
+                await mutation(
+                  "/artifacts/" + selectedArtifact.id + "/revisions",
+                  {
+                    content: edit,
+                    feedback,
+                    expectedVersion: selectedArtifact.version,
+                  },
+                );
+                setDialog(null);
+                await refresh();
+              });
+            }}
+          >
+            <div className="artifact-version-label">
+              草稿 · v{selectedArtifact.version} · 修改将保留历史版本
+            </div>
+            <label>
+              成果内容
+              <textarea
+                className="artifact-editor"
+                aria-label="成果内容"
+                value={edit}
+                onChange={(e) => setEdit(e.target.value)}
+              />
+            </label>
+            <label>
+              修改说明
+              <input
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="记录这次修改的原因"
+              />
+            </label>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setWorkflow("revise_artifact");
+                  setInstruction(
+                    feedback || "请改进这份成果，保留原有事实与引用。",
+                  );
+                  setDialog("run");
+                }}
+              >
+                让 AI 按反馈修改
+              </button>
+              <button className="primary" disabled={busy}>
+                保存新版本
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      ) : null}
+    </div>
+  );
+}

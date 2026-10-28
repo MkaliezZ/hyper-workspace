@@ -1,4 +1,4 @@
-# Chaowei Workspace 开发规则
+# Hyper Workspace 开发规则
 
 必须先读取 docs/handoff-v1/AGENTS.md、docs/handoff-v1/AI-IM基线/README.md、三层定义-v1.0.md、product-baseline.v1.json、技术选型与模块契约-v1.0.md。原交接包中的路径以 docs/handoff-v1/ 为根解析。原快照保持可校验，开发状态另存 docs/IMPLEMENTATION.md。
 

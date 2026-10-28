@@ -1,0 +1,24 @@
+{
+  "name": "@hyper/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@hyper/contracts": "0.1.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "lucide-react": "0.577.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.4",
+    "vite": "7.3.7"
+  }
+}

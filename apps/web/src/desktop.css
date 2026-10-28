@@ -1,0 +1,222 @@
+/* Desktop dimensions extracted from the selected 1504 × 1045 concept. */
+@media (min-width: 1280px) {
+  .app-shell {
+    grid-template-columns: 90px 264px minmax(360px, 1fr) 344px;
+  }
+  .app-rail {
+    padding-top: 27px;
+  }
+  .brand-mark {
+    width: 56px;
+    height: 60px;
+    font-size: 39px;
+  }
+  .rail-actions {
+    margin-top: 47px;
+    gap: 23px;
+  }
+  .rail-actions button {
+    width: 48px;
+    height: 48px;
+  }
+  .rail-actions svg {
+    width: 26px;
+    height: 26px;
+  }
+  .sidebar {
+    padding: 16px 22px;
+  }
+  .workspace-brand {
+    padding: 0;
+  }
+  .workspace-brand h1 {
+    font-size: 28px;
+    line-height: 1.08;
+  }
+  .workspace-brand > span {
+    margin-top: 12px;
+    font-size: 16px;
+  }
+  .new-run {
+    margin: 20px 0 25px;
+    height: 52px;
+    font-size: 17px;
+  }
+  .nav-item {
+    padding: 12px 14px;
+    min-height: 50px;
+    font-size: 18px;
+    gap: 14px;
+  }
+  .nav-item svg {
+    width: 23px;
+    height: 23px;
+  }
+  .sidebar nav {
+    gap: 7px;
+  }
+  .sidebar-divider {
+    margin: 25px 0;
+  }
+  .section-label {
+    margin: 0 0 11px;
+    font-size: 15px;
+  }
+  .project-list {
+    gap: 6px;
+  }
+  .main-header {
+    padding: 27px 28px 20px;
+    min-height: 126px;
+  }
+  .heading h2 {
+    font-size: 32px;
+  }
+  .heading p {
+    font-size: 17px;
+    margin-top: 7px;
+  }
+  .search-box {
+    width: 305px;
+    max-width: 305px;
+    padding: 11px 13px;
+    margin-top: 2px;
+  }
+  .search-box input {
+    font-size: 15px;
+  }
+  .tabs {
+    padding: 0 26px;
+    gap: 31px;
+  }
+  .tabs button {
+    height: 47px;
+    font-size: 18px;
+    padding: 0 14px;
+  }
+  .discussion-scroll {
+    padding: 38px 28px 10px;
+  }
+  .message-row {
+    gap: 18px;
+    margin-bottom: 38px;
+  }
+  .avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+  }
+  .avatar.ai {
+    font-size: 23px;
+  }
+  .message-meta {
+    height: 28px;
+    gap: 15px;
+    font-size: 18px;
+  }
+  .message-meta time {
+    font-size: 15px;
+  }
+  .message-bubble {
+    margin-top: 7px;
+    padding: 14px 18px;
+    font-size: 17px;
+    line-height: 1.7;
+  }
+  .message-bubble.has-document {
+    padding: 14px 18px 17px;
+  }
+  .document-preview {
+    margin-top: 21px;
+    padding: 20px 16px 0;
+  }
+  .document-preview header {
+    font-size: 21px;
+    gap: 13px;
+  }
+  .document-preview header svg {
+    width: 32px;
+    height: 34px;
+  }
+  .document-excerpt {
+    padding: 28px 0 23px;
+    font-size: 17px;
+    line-height: 1.9;
+  }
+  .document-preview footer {
+    padding: 12px 0;
+  }
+  .document-preview footer button {
+    font-size: 17px;
+    padding: 7px;
+  }
+  .document-preview footer svg {
+    width: 23px;
+    height: 23px;
+  }
+  .composer-area {
+    padding: 0 24px 40px 28px;
+  }
+  .demo-note {
+    font-size: 15px;
+    margin: 17px 0 24px;
+  }
+  .composer {
+    min-height: 80px;
+    padding: 12px;
+    gap: 17px;
+  }
+  .composer textarea {
+    font-size: 17px;
+  }
+  .attachment-button {
+    padding: 7px 18px 7px 5px;
+  }
+  .send-button {
+    min-height: 50px;
+    padding: 12px 16px;
+    font-size: 17px;
+  }
+  .context-panel {
+    padding: 27px 26px;
+  }
+  .context-panel > h2 {
+    font-size: 23px;
+    line-height: 30px;
+    margin-bottom: 42px;
+  }
+  .context-panel section {
+    margin-bottom: 46px;
+  }
+  .context-panel h3 {
+    font-size: 18px;
+    gap: 13px;
+    margin-bottom: 22px;
+  }
+  .goal-box {
+    padding: 20px;
+    font-size: 16px;
+    line-height: 1.8;
+  }
+  .context-tasks {
+    gap: 17px;
+  }
+  .context-panel .task-check-row {
+    font-size: 17px;
+    gap: 15px;
+  }
+  .context-panel .checkbox {
+    width: 23px;
+    height: 23px;
+  }
+  .artifact-row {
+    padding: 18px 15px;
+    gap: 13px;
+  }
+  .artifact-row strong {
+    font-size: 16px;
+  }
+  .artifact-row small {
+    font-size: 14px;
+  }
+}

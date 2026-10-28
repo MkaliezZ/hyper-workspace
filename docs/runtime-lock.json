@@ -1,0 +1,26 @@
+{
+  "recordedDate": "2026-10-29",
+  "application": "Hyper Workspace",
+  "node": "24.14.1",
+  "npm": "11.11.0",
+  "postgresLocalVerified": "17.11",
+  "pgvectorLocalVerified": "0.8.7",
+  "pgvectorSourceCommit": "f37c13f68b57d2c3472b2214fbcff699d6d34876",
+  "ciPostgresImage": "pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d",
+  "npmDependencies": "Exact direct versions plus package-lock.json",
+  "engines": {
+    "dsh": {
+      "status": "adapter-draft-unverified",
+      "runtimeVersion": null
+    },
+    "hermes": {
+      "status": "adapter-draft-unverified",
+      "runtimeVersion": null
+    }
+  },
+  "nextcloud": {
+    "status": "not-connected",
+    "runtimeVersion": null
+  },
+  "note": "Implemented dependency pins do not claim a fully validated production runtime combination."
+}

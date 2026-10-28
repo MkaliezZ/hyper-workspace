@@ -1,0 +1,49 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+        env:
+          POSTGRES_USER: hyper
+          POSTGRES_PASSWORD: hyper-ci-only
+          POSTGRES_DB: hyper_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hyper -d hyper_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://hyper:hyper-ci-only@127.0.0.1:5432/hyper_test
+      TEST_DATABASE_URL: postgres://hyper:hyper-ci-only@127.0.0.1:5432/hyper_test
+      DEMO_MODE: "true"
+      APP_ORIGIN: http://127.0.0.1:5173
+      API_PORT: "3100"
+      CREDENTIAL_MASTER_KEY: "abababababababababababababababababababababababababababababababab"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.14.1"
+          cache: npm
+      - run: npm ci
+      - run: python3 docs/handoff-v1/verify_package.py
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run build
+      - run: npm run migrate && npm run seed
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
