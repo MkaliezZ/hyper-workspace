@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "tsx --test tests/*.test.ts",
     "test:integration": "tsx --test tests/integration/*.test.ts",
+    "test:runtime:dsh": "tsx --test tests/runtime/dsh.test.ts",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm test && npm run build",
     "migrate": "npm run migrate -w @hyper/api",

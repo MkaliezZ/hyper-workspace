@@ -3,6 +3,13 @@ import { createInterface } from "node:readline";
 export class JsonRpcProcess {
   private child?: ChildProcessWithoutNullStreams;
   private sequence = 0;
+  private closed = false;
+  private closing?: Promise<void>;
+  private waiters = new Set<{
+    accept: (method: string, params: any) => boolean;
+    resolve: (params: any) => void;
+    reject: (error: Error) => void;
+  }>();
   private pending = new Map<
     string,
     {
@@ -22,6 +29,7 @@ export class JsonRpcProcess {
     private timeoutMs = 120000,
   ) {}
   start() {
+    if (this.closed) throw new Error("Runtime connection closed.");
     if (this.child) return;
     const executable = this.command[0];
     if (!executable) throw new Error("Runtime command is empty");
@@ -44,7 +52,7 @@ export class JsonRpcProcess {
       } catch {
         return;
       }
-      if (m.jsonrpc !== "2.0") return;
+      if (!m || typeof m !== "object" || m.jsonrpc !== "2.0") return;
       if (m.method && m.id !== undefined) {
         void this.onRequest(m.method, m.params)
           .then((result) => this.write({ jsonrpc: "2.0", id: m.id, result }))
@@ -65,11 +73,22 @@ export class JsonRpcProcess {
           this.pending.delete(String(m.id));
           m.error
             ? p.reject(
-                new Error("Runtime RPC failed: " + String(m.error.message)),
+                new Error(
+                  "Runtime RPC failed (" +
+                    (typeof m.error.code === "number"
+                      ? m.error.code
+                      : "unknown") +
+                    ").",
+                ),
               )
             : p.resolve(m.result);
         }
-      } else if (m.method) this.onNotification(m.method, m.params);
+      } else if (m.method) {
+        for (const waiter of [...this.waiters]) {
+          if (waiter.accept(m.method, m.params)) waiter.resolve(m.params);
+        }
+        this.onNotification(m.method, m.params);
+      }
     });
     // Runtime stderr can contain secrets: never echo it into a product event or HTTP response.
     child.stderr.on("data", () => {});
@@ -88,6 +107,10 @@ export class JsonRpcProcess {
     this.start();
     const id = String(++this.sequence);
     return new Promise((resolve, reject) => {
+      if (this.closed) {
+        reject(new Error("Runtime connection closed."));
+        return;
+      }
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error("Runtime request timed out: " + method));
@@ -100,27 +123,83 @@ export class JsonRpcProcess {
     this.start();
     this.write({ jsonrpc: "2.0", method, params });
   }
+  waitForNotification(
+    method: string,
+    predicate: (params: any) => boolean,
+    signal: AbortSignal,
+    timeoutMs = this.timeoutMs,
+  ): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (this.closed) {
+        reject(new Error("Runtime connection closed."));
+        return;
+      }
+      if (signal.aborted) {
+        reject(new Error("Runtime wait cancelled."));
+        return;
+      }
+      const cleanup = () => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", abort);
+        this.waiters.delete(waiter);
+      };
+      const waiter = {
+        accept: (name: string, params: any) =>
+          name === method && predicate(params),
+        resolve: (params: any) => {
+          cleanup();
+          resolve(params);
+        },
+        reject: (error: Error) => {
+          cleanup();
+          reject(error);
+        },
+      };
+      const abort = () => waiter.reject(new Error("Runtime wait cancelled."));
+      const timer = setTimeout(
+        () => waiter.reject(new Error("Runtime notification timed out.")),
+        timeoutMs,
+      );
+      signal.addEventListener("abort", abort, { once: true });
+      this.waiters.add(waiter);
+    });
+  }
   private fail(e: Error) {
+    this.closed = true;
     for (const p of this.pending.values()) {
       clearTimeout(p.timer);
       p.reject(e);
     }
     this.pending.clear();
+    for (const waiter of [...this.waiters]) waiter.reject(e);
   }
-  async close() {
+  close(): Promise<void> {
+    if (!this.closing) {
+      this.closed = true;
+      this.closing = this.terminate();
+    }
+    return this.closing;
+  }
+  private async terminate() {
     const c = this.child;
     this.child = undefined;
-    if (!c) return;
     this.fail(new Error("Runtime connection closed."));
+    if (!c) return;
     c.stdin.end();
-    if (c.exitCode !== null) return;
-    await new Promise<void>((resolve) => {
+    if (c.exitCode !== null || c.signalCode !== null) return;
+    await new Promise<void>((resolve, reject) => {
+      let finalTimer: NodeJS.Timeout | undefined;
       const timer = setTimeout(() => {
         c.kill("SIGKILL");
-        resolve();
+        finalTimer = setTimeout(
+          () =>
+            reject(new Error("Runtime termination could not be confirmed.")),
+          1500,
+        );
       }, 1500);
       c.once("exit", () => {
         clearTimeout(timer);
+        clearTimeout(finalTimer);
         resolve();
       });
       c.kill("SIGTERM");

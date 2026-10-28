@@ -43,6 +43,7 @@ export const RunInput = z
     engine: EngineId.default("dsh"),
     instruction: z.string().trim().min(1).max(20000),
     artifactId: z.uuid().optional(),
+    modelProfileId: z.uuid().optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
   .strict();
@@ -152,8 +153,32 @@ export interface EngineRequest {
   context: string;
   policy: string;
   workdir: string;
+  /** Backend-only connection. Never serialize credentials into product events. */
+  model?: {
+    id: string;
+    provider: string;
+    endpoint: string;
+    model: string;
+    apiKey?: string;
+  };
   signal: AbortSignal;
   onProgress: (text: string) => Promise<void>;
+}
+export function toolsForWorkflow(
+  workflow: Workflow,
+): readonly PlannedAction["tool"][] {
+  switch (workflow) {
+    case "discussion_to_minutes":
+      return ["artifact.create", "task.create"];
+    case "project_report":
+      return ["artifact.create", "project.report"];
+    case "revise_artifact":
+      return ["artifact.revise"];
+    case "follow_up":
+      return ["follow_up.check"];
+    case "chat":
+      return [];
+  }
 }
 export interface EngineResult {
   text: string;

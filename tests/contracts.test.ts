@@ -50,7 +50,7 @@ test("Real stdio transport handles responses, errors and bounded timeouts withou
       params: { value: 42 },
     });
     assert.deepEqual(await rpc.request("env"), { secretPresent: false });
-    await assert.rejects(rpc.request("error"), /expected fixture error/);
+    await assert.rejects(rpc.request("error"), /Runtime RPC failed \(-32000\)/);
     await assert.rejects(rpc.request("hang"), /timed out/);
   } finally {
     await rpc.close();

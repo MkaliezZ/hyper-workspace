@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { PgBoss } from "pg-boss";
 import {
   TaskInput,
+  toolsForWorkflow,
   type EngineId,
   type Subject,
   type PlannedAction,
@@ -12,6 +13,7 @@ import { Database } from "../db/database.js";
 import { WorkspaceService, appendEvent } from "./workspace.js";
 import { assertMember, stableDigest } from "./security.js";
 import { refreshArtifactIndex } from "./knowledge.js";
+import { ModelService } from "./models.js";
 export class RunProcessor {
   readonly boss: PgBoss;
   private sweep?: NodeJS.Timeout;
@@ -116,6 +118,7 @@ export class RunProcessor {
         engine: run.engine,
         evidence: run.engine === "fixture" ? "fixture" : "runtime-unverified",
         policyVersion: run.policy_version,
+        modelProfileId: run.model_profile_id,
       });
       const conversation = await this.service.conversation(
         subject,
@@ -130,9 +133,28 @@ export class RunProcessor {
       let context = messages
         .map((m) => m.author + ": " + m.content + " [message:" + m.id + "]")
         .join("\n");
+      const tasks = (
+        await db.pool.query(
+          "SELECT id,title,assignee,due_date,status FROM cw_tasks WHERE workspace_id=$1 AND project_id=$2 ORDER BY created_at,id",
+          [subject.workspaceId, conversation.project_id],
+        )
+      ).rows;
+      context =
+        "Project: " +
+        conversation.name +
+        "\nGoal: " +
+        conversation.goal +
+        "\nCurrent tasks: " +
+        JSON.stringify(tasks) +
+        "\nDiscussion:\n" +
+        context;
       if (run.artifact_id) {
         const a = await this.service.artifact(subject, run.artifact_id);
-        context = a.current.content;
+        if (a.current.version !== run.expected_artifact_version)
+          throw new Error("成果版本已变化，请基于最新版本重新发起修改。");
+        context =
+          `Artifact ${run.artifact_id}@${a.current.version}\n` +
+          a.current.content;
       }
       const policy = JSON.parse(
         await readFile(
@@ -161,6 +183,14 @@ export class RunProcessor {
           "\n" +
           policy.policies.map((p: any) => p.id + " " + p.principle).join("\n"),
         workdir,
+        model:
+          run.engine === "fixture"
+            ? undefined
+            : await new ModelService(db).resolve(
+                subject,
+                "chat",
+                run.model_profile_id,
+              ),
         signal: abort.signal,
         onProgress: (text) => event("progress.updated", { text }),
       });
@@ -243,6 +273,8 @@ export class RunProcessor {
     index: number,
     sourceIds: string[],
   ) {
+    if (!toolsForWorkflow(run.workflow).includes(action.tool))
+      throw new Error("本次工作类型未授权该业务动作。");
     return this.service.db.tx(async (c) => {
       const current = (
         await c.query(
@@ -340,6 +372,8 @@ export class RunProcessor {
           )
         ).rows[0];
         if (!a) throw new Error("成果不在本次授权项目。");
+        if (a.current_version !== run.expected_artifact_version)
+          throw new Error("成果已由他人修改，请基于最新版本重新发起。");
         const content = action.args.content;
         if (
           typeof content !== "string" ||

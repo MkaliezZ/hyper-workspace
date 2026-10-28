@@ -10,12 +10,16 @@
   "npmDependencies": "Exact direct versions plus package-lock.json",
   "engines": {
     "dsh": {
-      "status": "adapter-draft-unverified",
-      "runtimeVersion": null
+      "status": "real-runtime-local-protocol-fixture-verified",
+      "runtimeVersion": "0.2.1-rc.2",
+      "wireServerInfoVersion": "0.0.1",
+      "dependencyLock": "runtime/dsh/package-lock.json",
+      "modelEvidence": "local deterministic protocol service, not a real model"
     },
     "hermes": {
-      "status": "adapter-draft-unverified",
-      "runtimeVersion": null
+      "status": "wire-fixture-verified-native-runtime-unverified",
+      "runtimeVersion": null,
+      "protocolReferenceCommit": "780d5a3313d7e1f64c0a0f3ec6b644d50f156e90"
     }
   },
   "nextcloud": {

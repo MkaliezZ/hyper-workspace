@@ -4,6 +4,9 @@ import type {
   EngineResult,
   EngineId,
 } from "@hyper/contracts";
+import { toolsForWorkflow } from "@hyper/contracts";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { JsonRpcProcess, runtimeCommand } from "./rpc.js";
 import { z } from "zod";
 const resultSchema = z.object({
@@ -31,6 +34,14 @@ function parseResult(text: string): EngineResult {
     .replace(/^\x60\x60\x60(?:json)?\s*/, "")
     .replace(/\s*\x60\x60\x60$/, "");
   return { ...resultSchema.parse(JSON.parse(clean)), evidence: "runtime" };
+}
+function installedDshCommand(): string[] | undefined {
+  const directory = new URL("../../../../runtime/dsh/", import.meta.url);
+  return existsSync(
+    new URL("node_modules/@deepseek-ai/dsh/package.json", directory),
+  )
+    ? [process.execPath, fileURLToPath(new URL("launch.mjs", directory))]
+    : undefined;
 }
 export class FixtureAdapter implements EngineAdapter {
   readonly id = "fixture" as const;
@@ -103,7 +114,14 @@ export class FixtureAdapter implements EngineAdapter {
 }
 export class DshAdapter implements EngineAdapter {
   readonly id = "dsh" as const;
-  constructor(private command = runtimeCommand(process.env.DSH_COMMAND)) {}
+  constructor(
+    private command = runtimeCommand(process.env.DSH_COMMAND) ??
+      installedDshCommand(),
+    private route = {
+      provider: process.env.DSH_PROVIDER ?? "hyper-model",
+      model: process.env.DSH_MODEL ?? "",
+    },
+  ) {}
   describeCapabilities() {
     return {
       configured: !!this.command,
@@ -118,44 +136,61 @@ export class DshAdapter implements EngineAdapter {
     };
   }
   async execute(r: EngineRequest): Promise<EngineResult> {
+    r.signal.throwIfAborted();
     if (!this.command)
       throw new Error(
-        "DSH 尚未配置。请在服务端设置 DSH_COMMAND 并验证运行时。",
+        "DSH 尚未安装。请安装 runtime/dsh 依赖，或设置经过验证的 DSH_COMMAND。",
       );
+    const model = r.model?.model ?? this.route.model;
+    if (!model) throw new Error("本次执行缺少模型配置。");
     const rpc = new JsonRpcProcess(this.command, r.workdir, {
       DSH_HOME: r.workdir,
+      HYPER_MODEL_PROVIDER: r.model?.provider,
+      HYPER_MODEL_ENDPOINT: r.model?.endpoint,
+      HYPER_MODEL_NAME: model,
+      HYPER_MODEL_API_KEY: r.model?.apiKey,
+      DSH_SYSTEM_PROMPT:
+        r.policy +
+        "\n" +
+        instruction +
+        "\nAllowed actions: " +
+        toolsForWorkflow(r.workflow).join(","),
     });
-    let text = "";
     const abort = () => {
-      void rpc.close();
+      void rpc.close().catch(() => {});
     };
     r.signal.addEventListener("abort", abort, { once: true });
     rpc.onRequest = async (method) => {
       if (method === "approval/request") return { outcome: "rejected" };
       throw new Error("Runtime native tool is not authorized.");
     };
+    let text = "";
+    let terminalReason = "";
     rpc.onNotification = (method, p) => {
-      if (method === "session.event") {
-        const e = p?.event;
-        if (e?.type === "assistant/message") {
-          const content = e.data?.message?.content ?? e.message?.content;
-          text = Array.isArray(content)
-            ? content.map((x: any) => x.text ?? "").join("")
-            : typeof content === "string"
-              ? content
-              : text;
-        }
-      }
+      if (method !== "session.event" || p?.sessionId !== r.runId) return;
+      if (p.event?.type === "turn/end")
+        terminalReason = p.event.data?.reason?.kind ?? "";
+      const content =
+        p.event?.type === "assistant/message"
+          ? p.event.data?.message?.content
+          : undefined;
+      if (Array.isArray(content))
+        text = content
+          .filter((x: any) => x.type === "text")
+          .map((x: any) => x.text ?? "")
+          .join("");
     };
     try {
       await rpc.request("initialize", {
         cwd: r.workdir,
-        approvalRequests: true,
+        provider: this.route.provider,
+        model,
+        maxTokens: 4096,
       });
       const sessionId = r.runId;
       await rpc.request("session/prompt", {
         sessionId,
-        content: [
+        contentBlocks: [
           {
             type: "text",
             text:
@@ -171,6 +206,8 @@ export class DshAdapter implements EngineAdapter {
       });
       await rpc.request("session/wait", { sessionId });
       r.signal.throwIfAborted();
+      if (terminalReason !== "completed")
+        throw new Error("DSH turn did not complete successfully.");
       if (!text)
         throw new Error(
           "DSH returned no supported structured output. Verify the pinned protocol version.",
@@ -199,6 +236,7 @@ export class HermesAdapter implements EngineAdapter {
     };
   }
   async execute(r: EngineRequest): Promise<EngineResult> {
+    r.signal.throwIfAborted();
     if (!this.command)
       throw new Error(
         "Hermes 尚未配置。请在服务端设置 HERMES_COMMAND 并验证运行时。",
@@ -206,27 +244,43 @@ export class HermesAdapter implements EngineAdapter {
     const rpc = new JsonRpcProcess(this.command, r.workdir, {
       HERMES_HOME: r.workdir,
     });
-    let text = "";
     const abort = () => {
-      void rpc.close();
+      void rpc.close().catch(() => {});
     };
     r.signal.addEventListener("abort", abort, { once: true });
     rpc.onRequest = async (method) => {
       if (method === "approval") return { choice: "deny" };
       throw new Error("Native runtime request is not authorized.");
     };
-    rpc.onNotification = (method, p) => {
-      if (method === "message.complete") text = p?.content ?? p?.text ?? text;
-    };
     try {
+      const ready = rpc.waitForNotification(
+        "event",
+        (p) => p?.type === "gateway.ready",
+        r.signal,
+        20000,
+      );
+      rpc.start();
+      await ready;
       await rpc.request("client.capabilities", { server_requests: true });
-      const session = await rpc.request("session.create", {});
+      const session = await rpc.request("session.create", {
+        cwd: r.workdir,
+        cwd_explicit: true,
+        close_on_disconnect: true,
+        idempotency_key: r.runId,
+      });
       const sessionId = session.session_id ?? session.id;
       if (!sessionId)
         throw new Error("Hermes session protocol did not return an ID.");
+      const completed = rpc.waitForNotification(
+        "event",
+        (p) => p?.type === "message.complete" && p?.session_id === sessionId,
+        r.signal,
+      );
+      // Attach a handler immediately, even if prompt admission fails before awaiting completion.
+      void completed.catch(() => {});
       const result = await rpc.request("prompt.submit", {
         session_id: sessionId,
-        prompt:
+        text:
           r.policy +
           "\n" +
           instruction +
@@ -235,7 +289,12 @@ export class HermesAdapter implements EngineAdapter {
           "\nTask:\n" +
           r.instruction,
       });
-      if (typeof result?.text === "string") text = result.text;
+      if (result.status !== "streaming")
+        throw new Error("Hermes did not admit a fresh isolated turn.");
+      const final = (await completed).payload;
+      if (final?.status !== "complete" || final?.error || final?.partial)
+        throw new Error("Hermes turn did not complete successfully.");
+      const text = final.text;
       r.signal.throwIfAborted();
       if (!text)
         throw new Error(

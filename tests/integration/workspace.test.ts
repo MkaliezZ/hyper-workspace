@@ -307,6 +307,99 @@ test("Cancelled queued runs perform no business action", async () => {
     0,
   );
 });
+test("Host rejects engine proposals outside the selected workflow", async () => {
+  const original = service.engines.get("dsh")!;
+  service.engines.set("dsh", {
+    id: "dsh",
+    describeCapabilities: () => ({
+      configured: true,
+      operations: ["follow_up"],
+      evidence: "test-only",
+    }),
+    execute: async () => ({
+      text: "unauthorized proposal",
+      actions: [
+        {
+          tool: "artifact.create",
+          args: { title: "Forbidden", content: "Must never be saved" },
+        },
+      ],
+      evidence: "runtime",
+    }),
+  });
+  try {
+    const run = await service.startRun(s, {
+      conversationId: conversation,
+      workflow: "follow_up",
+      engine: "dsh",
+      instruction: "Only check pending tasks.",
+      idempotencyKey: randomUUID(),
+    });
+    await processor.process(run.id);
+    assert.equal((await service.getRun(s, run.id)).state, "failed");
+    assert.equal(
+      (
+        await db.pool.query("SELECT id FROM cw_actions WHERE run_id=$1", [
+          run.id,
+        ])
+      ).rowCount,
+      0,
+    );
+  } finally {
+    service.engines.set("dsh", original);
+  }
+});
+test("An AI revision cannot overwrite a newer human artifact version", async () => {
+  const setup = await service.startRun(s, {
+    conversationId: conversation,
+    workflow: "discussion_to_minutes",
+    engine: "fixture",
+    instruction: "Create a versioned test artifact.",
+    idempotencyKey: randomUUID(),
+  });
+  await processor.process(setup.id);
+  const id = (await service.getRun(s, setup.id)).result.receipts[0].id;
+  const original = service.engines.get("dsh")!;
+  service.engines.set("dsh", {
+    id: "dsh",
+    describeCapabilities: () => ({
+      configured: true,
+      operations: ["revise_artifact"],
+      evidence: "test-only",
+    }),
+    execute: async () => {
+      await service.revise(s, id, {
+        expectedVersion: 1,
+        content: "Newer human edit",
+        feedback: "Human revision during model execution",
+      });
+      return {
+        text: "stale proposal",
+        actions: [
+          { tool: "artifact.revise", args: { content: "Stale AI edit" } },
+        ],
+        evidence: "runtime",
+      };
+    },
+  });
+  try {
+    const run = await service.startRun(s, {
+      conversationId: conversation,
+      workflow: "revise_artifact",
+      artifactId: id,
+      engine: "dsh",
+      instruction: "Revise version one.",
+      idempotencyKey: randomUUID(),
+    });
+    await processor.process(run.id);
+    assert.equal((await service.getRun(s, run.id)).state, "failed");
+    const artifact = await service.artifact(s, id);
+    assert.equal(artifact.current.version, 2);
+    assert.equal(artifact.current.content, "Newer human edit");
+  } finally {
+    service.engines.set("dsh", original);
+  }
+});
 test("Revoked membership invalidates an existing session", async () => {
   const person = randomUUID();
   await db.pool.query("INSERT INTO cw_users(id,name) VALUES($1,$2)", [

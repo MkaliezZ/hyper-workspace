@@ -43,6 +43,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:integration
+      - run: npm ci --prefix runtime/dsh
+      - run: npm run test:runtime:dsh
       - run: npm run build
       - run: npm run migrate && npm run seed
       - run: npx playwright install --with-deps chromium

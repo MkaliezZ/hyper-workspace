@@ -18,6 +18,7 @@ import type {
 import { Database } from "../db/database.js";
 import { assertMember, maskKey, stableDigest, Vault } from "./security.js";
 import { refreshArtifactIndex } from "./knowledge.js";
+import { ModelService } from "./models.js";
 
 export class WorkspaceService {
   constructor(
@@ -216,7 +217,7 @@ export class WorkspaceService {
     return { id, name: input.name, verifiedAt: null };
   }
   async startRun(s: Subject, input: RunInput) {
-    await this.conversation(s, input.conversationId);
+    const conversation = await this.conversation(s, input.conversationId);
     if (
       input.engine === "fixture" &&
       (!s.demo || process.env.DEMO_MODE !== "true")
@@ -227,15 +228,31 @@ export class WorkspaceService {
       throw new BadRequestException(
         input.engine + " 执行器尚未配置；不能将演示流程作为真实引擎。",
       );
+    let expectedVersion: number | null = null;
     if (input.workflow === "revise_artifact") {
       if (!input.artifactId)
         throw new BadRequestException("请指定要修改的成果。");
-      await this.artifact(s, input.artifactId);
+      const artifact = (
+        await this.db.pool.query(
+          "SELECT current_version FROM cw_artifacts WHERE id=$1 AND workspace_id=$2 AND project_id=$3",
+          [input.artifactId, s.workspaceId, conversation.project_id],
+        )
+      ).rows[0];
+      if (!artifact) throw new NotFoundException("成果不在当前项目中。");
+      expectedVersion = artifact.current_version;
     }
+    const model =
+      input.engine === "fixture"
+        ? undefined
+        : await new ModelService(this.db).resolve(
+            s,
+            "chat",
+            input.modelProfileId,
+          );
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -248,6 +265,8 @@ export class WorkspaceService {
         input.idempotencyKey,
         inputHash,
         s.demo,
+        model?.id ?? null,
+        expectedVersion,
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };
