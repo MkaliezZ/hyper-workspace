@@ -5,6 +5,9 @@ import { Database } from "../../apps/api/src/db/database.js";
 import { WorkspaceService } from "../../apps/api/src/core/workspace.js";
 import { RunProcessor } from "../../apps/api/src/core/processor.js";
 import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
+import { ModelService } from "../../apps/api/src/core/models.js";
+import { KnowledgeService } from "../../apps/api/src/core/knowledge.js";
+import { createServer } from "node:http";
 import {
   authenticate,
   issueSession,
@@ -85,6 +88,42 @@ test("Workspace isolation holds for direct object IDs", async () => {
   await assert.rejects(service.conversation(outside, conversation));
   await assert.rejects(service.view(outside, project));
 });
+test("Model profiles enforce personal priority, purpose and live workspace authorization", async () => {
+  process.env.CREDENTIAL_MASTER_KEY ??= "ab".repeat(32);
+  const models = new ModelService(db);
+  const input = {
+    name: "测试连接",
+    provider: "openai-compatible",
+    endpoint: "http://127.0.0.1:1/v1",
+    model: "test-model",
+    purpose: "chat",
+  };
+  const shared = await service.saveModel(s, {
+    ...input,
+    scope: "workspace",
+    apiKey: "shared-test-key",
+  });
+  const personal = await service.saveModel(s, {
+    ...input,
+    scope: "personal",
+    apiKey: "personal-test-key",
+  });
+  assert.equal((await models.resolve(s, "chat")).apiKey, "personal-test-key");
+  assert.equal((await models.resolve(peer, "chat")).id, shared.id);
+  await assert.rejects(models.resolve(peer, "chat", personal.id));
+  await assert.rejects(models.resolve(outside, "chat", shared.id));
+  await assert.rejects(models.resolve(s, "embedding", personal.id));
+  await assert.rejects(
+    service.saveModel(
+      { ...peer, role: "admin" },
+      { ...input, scope: "workspace" },
+    ),
+  );
+  assert.equal(
+    JSON.stringify(await service.models(s)).includes("personal-test-key"),
+    false,
+  );
+});
 test("Private knowledge is filtered before it reaches a model", async () => {
   const id = randomUUID();
   await db.pool.query(
@@ -100,6 +139,80 @@ test("Private knowledge is filtered before it reaches a model", async () => {
     id,
   ]);
   assert.equal((await service.search(s, "private-test-knowledge")).length, 0);
+});
+test("pgvector retrieval excludes private, revoked, stale and deleted assets across model spaces", async () => {
+  const server = createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw);
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        data: body.input.map((_: unknown, index: number) => ({
+          index,
+          embedding: [1, 0, 0],
+        })),
+      }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    const input = {
+      name: "向量契约测试",
+      provider: "openai-compatible",
+      endpoint: `http://127.0.0.1:${address.port}/v1`,
+      model: "test-embedding",
+      purpose: "embedding",
+      scope: "workspace",
+    };
+    const profile = await service.saveModel(s, input);
+    const otherProfile = await service.saveModel(s, input);
+    const a = randomUUID(),
+      privateId = randomUUID(),
+      stale = randomUUID();
+    for (const [id, visibility] of [
+      [a, "workspace"],
+      [privateId, "private"],
+      [stale, "workspace"],
+    ])
+      await db.pool.query(
+        "INSERT INTO cw_assets(id,workspace_id,owner_id,visibility,title,content,type,source_version) VALUES($1,$2,$3,$4,'中文资料','项目负责人与当前进度','text','1')",
+        [id, workspace, user, visibility],
+      );
+    const knowledge = new KnowledgeService(db);
+    assert.equal(
+      (await knowledge.index(s, [a, privateId, stale], profile.id)).indexed
+        .length,
+      3,
+    );
+    const matches = await knowledge.semantic(peer, "谁负责项目？", profile.id);
+    assert.deepEqual(new Set(matches.map((x) => x.id)), new Set([a, stale]));
+    await assert.rejects(knowledge.index(peer, [privateId], profile.id));
+    assert.equal(
+      (await knowledge.semantic(peer, "项目", otherProfile.id)).length,
+      0,
+    );
+    await db.pool.query("UPDATE cw_assets SET source_version='2' WHERE id=$1", [
+      stale,
+    ]);
+    assert.deepEqual(
+      (await knowledge.semantic(peer, "项目", profile.id)).map((x) => x.id),
+      [a],
+    );
+    await db.pool.query("UPDATE cw_assets SET deleted_at=now() WHERE id=$1", [
+      a,
+    ]);
+    assert.equal(
+      (await knowledge.semantic(peer, "项目", profile.id)).length,
+      0,
+    );
+    const revoked = { ...peer, workspaceId: otherWorkspace };
+    await assert.rejects(knowledge.semantic(revoked, "项目", profile.id));
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });
 test("Task changes persist and cross-workspace updates fail", async () => {
   const t = await service.createTask(s, conversation, {
@@ -154,6 +267,15 @@ test("Concurrent delivery creates one artifact and ordered events; revisions ret
   const updated = await service.artifact(s, receipts[0].id);
   assert.equal(updated.current.version, 2);
   assert.equal(updated.history.length, 2);
+  const asset = (
+    await db.pool.query(
+      "SELECT content,source_version,embedding FROM cw_assets WHERE source_ref=$1",
+      ["artifact:" + receipts[0].id],
+    )
+  ).rows[0];
+  assert.equal(asset.content, updated.current.content);
+  assert.equal(asset.source_version, "2");
+  assert.equal(asset.embedding, null);
   await assert.rejects(
     service.revise(s, receipts[0].id, {
       expectedVersion: 1,

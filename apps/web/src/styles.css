@@ -685,11 +685,21 @@ p {
 }
 .knowledge-search {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 24px 0;
 }
 .knowledge-search input {
-  flex: 1;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.knowledge-search select {
+  max-width: 100%;
+}
+.knowledge-result > button {
+  display: block;
+  margin-top: 12px;
+  color: var(--blue);
 }
 .knowledge-result {
   padding: 24px 0;

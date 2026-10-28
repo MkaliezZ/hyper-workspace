@@ -25,4 +25,6 @@ Browser plugin/skill was not available in this session, so project Playwright Ch
 
 Above-the-fold copy follows the selected concept, with authorized Hyper Workspace naming. Intentional differences: actual message timestamps and artifact versions reflect database state; a real task-add control and current-user initial support required workflow. Seed/test data are labelled demonstration data. No decorative marketing copy or invented business metrics added.
 
+Model settings and the knowledge panel were subsequently inspected in the running browser at 1504×1045 and 390×844. Forms retain the same palette and spacing; the knowledge controls wrap on narrow screens. Browser page errors: none; mobile horizontal overflow: false. Local review images remain in ignored .runtime; the README's main discussion screenshot remains the clean baseline capture.
+
 This comparison verifies the implemented first-stage UI surface. DSH/Hermes model execution and Nextcloud integration remain unverified and are not inferred from screenshots.

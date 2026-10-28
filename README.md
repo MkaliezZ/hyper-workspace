@@ -62,7 +62,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、6 项单元测试、8 项数据库集成测试与 3 项浏览器测试（桌面 1504×1045、移动端 390×844）。
+本地已通过类型检查、构建、7 项单元测试、10 项数据库集成测试与 4 项浏览器测试（桌面 1504×1045、移动端 390×844）。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
 GitHub Actions 使用 PostgreSQL/pgvector 服务执行类型、单元、数据库集成、构建和浏览器检查。绿色状态只证明工作流实际覆盖的测试，不代表原始 E01–E10 已全部完成。
 
@@ -73,6 +73,7 @@ GitHub Actions 使用 PostgreSQL/pgvector 服务执行类型、单元、数据�
 - [产品三层基线](docs/handoff-v1/AI-IM基线/README.md)
 - [技术与跨引擎契约](docs/handoff-v1/AI-IM基线/技术选型与模块契约-v1.0.md)
 - [产品命名决定](docs/NAMING.md)
+- [模型连接、向量索引与权限边界](docs/MODELS-AND-KNOWLEDGE.md)
 
 每项变更关联 P/C/A/E 编号；保留原始交接快照，按实际结果更新进度。
 

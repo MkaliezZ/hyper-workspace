@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Artifact, Task, Project, WorkspaceView } from "@hyper/contracts";
-import {
-  Plus,
-  FileText,
-  Search,
-  ArrowRight,
-  LoaderCircle,
-  X,
-} from "lucide-react";
+import { Plus, ArrowRight, LoaderCircle, X } from "lucide-react";
 import { api, mutation, ApiError } from "./api";
 import { Navigation, MainHeader, type Section } from "./components/Shell";
 import { Discussion } from "./components/Discussion";
@@ -17,6 +10,8 @@ import {
   ArtifactsPanel,
 } from "./components/WorkPanels";
 import { Dialog } from "./components/Dialog";
+import { ModelSettings } from "./components/ModelSettings";
+import { KnowledgePanel } from "./components/KnowledgePanel";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
@@ -47,15 +42,7 @@ export function App() {
     [engine, setEngine] = useState("dsh"),
     [run, setRun] = useState<any>(null);
   const [edit, setEdit] = useState(""),
-    [feedback, setFeedback] = useState(""),
-    [knowledge, setKnowledge] = useState<any[]>([]),
-    [knowledgeQuery, setKnowledgeQuery] = useState(""),
-    [models, setModels] = useState<any[]>([]);
-  const [modelName, setModelName] = useState(""),
-    [endpoint, setEndpoint] = useState(""),
-    [model, setModel] = useState(""),
-    [apiKey, setApiKey] = useState(""),
-    [scope, setScope] = useState("personal");
+    [feedback, setFeedback] = useState("");
   const load = useCallback(async (projectId?: string) => {
     try {
       const v = await api<WorkspaceView>(
@@ -74,12 +61,6 @@ export function App() {
       .then(setStatus)
       .catch(() => {});
   }, [load]);
-  useEffect(() => {
-    if (section === "settings" && view)
-      void api<any[]>("/models")
-        .then(setModels)
-        .catch((e) => setError(e.message));
-  }, [section, view?.user.id]);
   useEffect(() => {
     if (
       !run ||
@@ -342,157 +323,10 @@ export function App() {
           </>
         ) : null}
         {section === "knowledge" ? (
-          <div className="work-panel">
-            <h3>从企业资料中找到依据</h3>
-            <p className="muted">
-              当前提供按权限过滤的文字检索；未配置向量模型时不会模拟语义搜索。
-            </p>
-            <form
-              className="knowledge-search"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void act(async () =>
-                  setKnowledge(
-                    await api(
-                      "/knowledge?q=" + encodeURIComponent(knowledgeQuery),
-                    ),
-                  ),
-                );
-              }}
-            >
-              <input
-                aria-label="检索资料"
-                placeholder="输入关键词"
-                value={knowledgeQuery}
-                onChange={(e) => setKnowledgeQuery(e.target.value)}
-              />
-              <button className="primary" disabled={busy}>
-                <Search size={17} />
-                检索
-              </button>
-            </form>
-            {knowledge.map((a) => (
-              <article className="knowledge-result" key={a.id}>
-                <h4>
-                  <FileText size={20} />
-                  {a.title}
-                </h4>
-                <p>{a.content}</p>
-                <small>
-                  来源：{a.sourceRef ?? "产品资产"} · 版本 {a.sourceVersion}
-                </small>
-              </article>
-            ))}
-            {!knowledge.length ? (
-              <div className="empty-state">
-                输入关键词，查找有权限访问的资料。
-              </div>
-            ) : null}
-          </div>
+          <KnowledgePanel busy={busy} act={act} />
         ) : null}
         {section === "settings" ? (
-          <div className="work-panel settings-panel">
-            <h3>模型连接</h3>
-            <p className="muted">
-              支持自定义服务地址与个人 API Key，密钥仅在服务端加密保存。
-            </p>
-            {models.map((m) => (
-              <div className="model-row" key={m.id}>
-                <strong>{m.name}</strong>
-                <span>{m.model}</span>
-                <small>
-                  {m.keyHint ?? "未设置 Key"} ·{" "}
-                  {m.verifiedAt ? "已验证" : "尚未验证"}
-                </small>
-              </div>
-            ))}
-            <form
-              className="settings-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void act(async () => {
-                  await mutation("/models", {
-                    name: modelName,
-                    provider: "openai-compatible",
-                    endpoint,
-                    model,
-                    apiKey: apiKey || undefined,
-                    purpose: "chat",
-                    scope,
-                  });
-                  setApiKey("");
-                  setModels(await api("/models"));
-                });
-              }}
-            >
-              <label>
-                连接名称
-                <input
-                  required
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
-                  placeholder="例如：团队推理模型"
-                />
-              </label>
-              <label>
-                服务地址
-                <input
-                  required
-                  type="url"
-                  value={endpoint}
-                  onChange={(e) => setEndpoint(e.target.value)}
-                  placeholder="https://服务地址/v1"
-                />
-              </label>
-              <label>
-                模型名称
-                <input
-                  required
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="服务提供方的模型 ID"
-                />
-              </label>
-              <label>
-                API Key
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="在服务端加密保存"
-                />
-              </label>
-              <label>
-                使用范围
-                <select
-                  value={scope}
-                  onChange={(e) => setScope(e.target.value)}
-                >
-                  <option value="personal">仅个人</option>
-                  {view.user.role === "admin" ? (
-                    <option value="workspace">工作区</option>
-                  ) : null}
-                </select>
-              </label>
-              <button className="primary" disabled={busy}>
-                保存连接（未验证）
-              </button>
-            </form>
-            <h3 className="settings-section">执行服务</h3>
-            {Object.entries(view.engines)
-              .filter(([id]) => id !== "fixture")
-              .map(([id, e]) => (
-                <div className="model-row" key={id}>
-                  <strong>
-                    {id === "dsh" ? "DSH · 默认执行器" : "Hermes · 兼容执行器"}
-                  </strong>
-                  <span>
-                    {e.configured ? "已配置，真实能力待验证" : "尚未配置"}
-                  </span>
-                </div>
-              ))}
-          </div>
+          <ModelSettings view={view} busy={busy} act={act} />
         ) : null}
       </main>
       <ContextPanel

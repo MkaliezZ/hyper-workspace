@@ -17,6 +17,7 @@ import type {
 } from "@hyper/contracts";
 import { Database } from "../db/database.js";
 import { assertMember, maskKey, stableDigest, Vault } from "./security.js";
+import { refreshArtifactIndex } from "./knowledge.js";
 
 export class WorkspaceService {
   constructor(
@@ -159,6 +160,7 @@ export class WorkspaceService {
         "UPDATE cw_artifacts SET current_version=$2,status='draft' WHERE id=$1",
         [id, version],
       );
+      await refreshArtifactIndex(c, s.workspaceId, id, input.content, version);
       return { id, version };
     });
   }

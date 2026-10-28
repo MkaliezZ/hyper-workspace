@@ -52,6 +52,42 @@ test("mobile keeps conversation and composer accessible", async ({ page }) => {
   );
   expect(overflow).toBe(false);
 });
+test("model configuration and knowledge search stay usable on a narrow screen", async ({
+  page,
+}) => {
+  await page
+    .getByRole("navigation", { name: "工作区导航" })
+    .getByRole("button", { name: "设置", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "API 类型", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "模型用途", exact: true })
+    .selectOption("embedding");
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveAttribute(
+    "type",
+    "password",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "展开导航", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "工作区导航" })
+    .getByRole("button", { name: "知识库", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "检索资料", exact: true })
+    .fill("团队协作约定");
+  await page.getByRole("button", { name: "检索", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "建立语义索引", exact: true }).first(),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+});
 
 test("failed message delivery keeps the draft", async ({ page }) => {
   await page.route("**/api/conversations/*/messages", (route) =>

@@ -35,6 +35,8 @@ import { authenticate, issueSession, digest } from "./core/security.js";
 import { WorkspaceService } from "./core/workspace.js";
 import { RunProcessor } from "./core/processor.js";
 import { engineRegistry } from "./engines/adapters.js";
+import { ModelService } from "./core/models.js";
+import { KnowledgeService } from "./core/knowledge.js";
 const db = new Database();
 const service = new WorkspaceService(db, engineRegistry());
 const queue = new RunProcessor(service);
@@ -54,12 +56,10 @@ class ApiErrors implements ExceptionFilter {
   catch(e: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
     if (e instanceof ZodError)
-      return res
-        .status(400)
-        .json({
-          message: "输入格式有误。",
-          issues: e.issues.map((i) => ({ path: i.path, message: i.message })),
-        });
+      return res.status(400).json({
+        message: "输入格式有误。",
+        issues: e.issues.map((i) => ({ path: i.path, message: i.message })),
+      });
     if (e instanceof HttpException)
       return res.status(e.getStatus()).json({ message: e.message });
     console.error(
@@ -180,11 +180,51 @@ class ApiController {
   @Get("knowledge") async knowledge(@Req() req: Request, @Query("q") q = "") {
     return service.search(await subject(req), q.slice(0, 500));
   }
+  @Post("knowledge/index") async indexKnowledge(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = z
+      .object({
+        assetIds: z.array(z.uuid()).min(1).max(20),
+        modelProfileId: z.uuid().optional(),
+      })
+      .strict()
+      .parse(body);
+    return new KnowledgeService(db).index(
+      await subject(req),
+      input.assetIds,
+      input.modelProfileId,
+    );
+  }
+  @Post("knowledge/semantic") async semanticKnowledge(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = z
+      .object({
+        query: z.string().trim().min(1).max(500),
+        modelProfileId: z.uuid().optional(),
+      })
+      .strict()
+      .parse(body);
+    return new KnowledgeService(db).semantic(
+      await subject(req),
+      input.query,
+      input.modelProfileId,
+    );
+  }
   @Get("models") async models(@Req() req: Request) {
     return service.models(await subject(req));
   }
   @Post("models") async saveModel(@Req() req: Request, @Body() body: unknown) {
     return service.saveModel(await subject(req), ModelInput.parse(body));
+  }
+  @Post("models/:id/verify") async verifyModel(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new ModelService(db).verify(await subject(req), uuid(id));
   }
   @Post("runs") async run(@Req() req: Request, @Body() body: unknown) {
     const r = await service.startRun(await subject(req), RunInput.parse(body));

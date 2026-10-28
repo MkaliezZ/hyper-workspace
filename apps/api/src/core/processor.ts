@@ -11,6 +11,7 @@ import {
 import { Database } from "../db/database.js";
 import { WorkspaceService, appendEvent } from "./workspace.js";
 import { assertMember, stableDigest } from "./security.js";
+import { refreshArtifactIndex } from "./knowledge.js";
 export class RunProcessor {
   readonly boss: PgBoss;
   private sweep?: NodeJS.Timeout;
@@ -355,6 +356,7 @@ export class RunProcessor {
           "UPDATE cw_artifacts SET current_version=$2,status='draft' WHERE id=$1",
           [id, version],
         );
+        await refreshArtifactIndex(c, s.workspaceId, id, content, version);
         receipt = { tool: action.tool, id, version };
         await appendEvent(c, run.id, "artifact.updated", receipt);
       } else if (action.tool === "follow_up.check") {
