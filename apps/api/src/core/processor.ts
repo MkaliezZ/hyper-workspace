@@ -195,6 +195,25 @@ export class RunProcessor {
         onProgress: (text) => event("progress.updated", { text }),
       });
       abort.signal.throwIfAborted();
+      const allowed = toolsForWorkflow(run.workflow);
+      if (result.actions.some((action) => !allowed.includes(action.tool)))
+        throw new Error("本次工作类型未授权该业务动作。");
+      const required =
+        run.workflow === "discussion_to_minutes" ||
+        run.workflow === "project_report"
+          ? ["artifact.create", "project.report"]
+          : run.workflow === "revise_artifact"
+            ? ["artifact.revise"]
+            : run.workflow === "follow_up"
+              ? ["follow_up.check"]
+              : [];
+      if (
+        required.length &&
+        !result.actions.some((action) => required.includes(action.tool))
+      )
+        throw new Error("执行器没有提出本次工作要求的成果操作，不能报告完成。");
+      if (run.workflow === "revise_artifact" && result.actions.length !== 1)
+        throw new Error("一次修订必须对应一个明确的成果版本。");
       const receipts: Record<string, unknown>[] = [];
       for (const [index, action] of result.actions.entries()) {
         await assertMember(db, subject);

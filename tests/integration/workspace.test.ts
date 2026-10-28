@@ -349,6 +349,43 @@ test("Host rejects engine proposals outside the selected workflow", async () => 
     service.engines.set("dsh", original);
   }
 });
+test("Text-only engine output cannot complete an artifact workflow", async () => {
+  const original = service.engines.get("dsh")!;
+  service.engines.set("dsh", {
+    id: "dsh",
+    describeCapabilities: () => ({
+      configured: true,
+      operations: ["discussion_to_minutes"],
+      evidence: "test-only",
+    }),
+    execute: async () => ({
+      text: "I claim it is completed.",
+      actions: [],
+      evidence: "runtime",
+    }),
+  });
+  try {
+    const run = await service.startRun(s, {
+      conversationId: conversation,
+      workflow: "discussion_to_minutes",
+      engine: "dsh",
+      instruction: "Create meeting minutes.",
+      idempotencyKey: randomUUID(),
+    });
+    await processor.process(run.id);
+    assert.equal((await service.getRun(s, run.id)).state, "failed");
+    assert.equal(
+      (
+        await db.pool.query("SELECT id FROM cw_actions WHERE run_id=$1", [
+          run.id,
+        ])
+      ).rowCount,
+      0,
+    );
+  } finally {
+    service.engines.set("dsh", original);
+  }
+});
 test("An AI revision cannot overwrite a newer human artifact version", async () => {
   const setup = await service.startRun(s, {
     conversationId: conversation,
