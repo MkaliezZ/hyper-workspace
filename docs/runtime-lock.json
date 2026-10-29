@@ -141,14 +141,17 @@
     }
   },
   "artifactReviews": {
-    "status": "local-native-and-business-verified-ci-pending",
+    "status": "real-source-and-native-engines-ci-verified",
     "contract": "docs/ARTIFACT-REVIEWS.md",
     "migration": "db/migrations/014_artifact_reviews.sql",
     "engineCapability": "EngineAdapter 1.0 additive review_artifact / exactly one artifact.review with empty args",
     "scope": "Employee-confirmed decision on one exact artifact version and review revision; creator or scoped product admin; no model-generated quality verdict, automatic body dispatch, private file publication or external messages",
     "durability": "Version/review CAS, stable audit references and role snapshot; review/state/action transaction; new content version becomes draft and old acceptance history remains; immutable business API, not tamper-proof database audit",
     "localEvidence": "77 database, 27 browser, 16 unit/config and three native DSH/Hermes tests, typecheck/build and frozen handoff passed; deterministic model protocol and labelled demo data only",
-    "sourceEvidence": "Real Nextcloud and restricted container acceptance/persistence scenarios extended; pending exact-commit GitHub Actions, no local Docker",
+    "sourceEvidence": "Passed real Nextcloud synthetic employees with both native engines, body exclusion, outsider/source revocation rejection; restricted containers preserve acceptance over restart and demote new content versions to drafts; no local Docker",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40964224588",
+    "evidenceCommit": "e13b7758b8b4a48a5f4b10e3ae4ffb650ca64b03",
+    "evidenceScope": "137 passing checks across three jobs; typecheck/build, both npm audits and frozen handoff passed; version-bound employee decisions, historical states, concurrency, cancellation/role revocation, native engine switching and container persistence; synthetic model/source only",
     "limitations": "No real supplier model/company acceptance, full E01-E10, pending-review workflow, delegated/multiple reviewers, rich text collaboration or PDF/Office parsing"
   },
   "note": "Implemented dependency pins do not claim a fully validated production runtime combination.",
