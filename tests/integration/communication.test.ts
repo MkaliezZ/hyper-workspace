@@ -34,6 +34,7 @@ type Room = {
 };
 const rooms = new Map<string, Room>();
 let nextId = 100;
+let directRoomQueries = 0;
 function room(members = ["alice", "bob"]) {
   const id = randomUUID().replaceAll("-", "").slice(0, 16),
     r: Room = {
@@ -109,6 +110,7 @@ const server = createServer(async (req, res) => {
     json([...rooms.values()].filter((r) => r.members.has(uid)).map(metadata));
     return;
   }
+  if (parsed.pathname.includes("/v4/room/")) directRoomQueries++;
   const id = parsed.pathname.split("/").at(-1)!,
     r = rooms.get(id);
   if (!r || !r.members.has(uid)) {
@@ -246,6 +248,11 @@ test("Talk source membership controls room listing, direct IDs and read-only sen
   );
   assert.equal(r.posts, 0);
   await assert.rejects(service.rooms({ ...s(), demo: true }), /企业账号/);
+  assert.equal(
+    directRoomQueries,
+    0,
+    "Revoked/guessed room tokens must be rejected from the live membership list without probing the protected token endpoint",
+  );
 });
 test("Read-through messages preserve IDs, render rich names once and mask deleted/expired content", async () => {
   const r = room();

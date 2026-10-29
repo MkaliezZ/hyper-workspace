@@ -107,7 +107,7 @@ export class ProjectAccess {
     } catch (error) {
       if (
         (error instanceof SourceRejected &&
-          [403, 404].includes(error.getStatus())) ||
+          [403, 404, 429].includes(error.getStatus())) ||
         error instanceof ServiceUnavailableException
       )
         return local;

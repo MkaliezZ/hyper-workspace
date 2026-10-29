@@ -154,7 +154,7 @@ export class NextcloudTalkProvider implements CommunicationProvider {
   }
   async listRooms() {
     const { data } = await this.ocs(
-      "v4/room?format=json&noStatusUpdate=1&includeStatus=false",
+      "v4/room?format=json&noStatusUpdate=1&includeStatus=0&includeLastMessage=0",
     );
     if (!Array.isArray(data))
       throw new ServiceUnavailableException("企业会话列表格式不受支持。");
@@ -174,9 +174,11 @@ export class NextcloudTalkProvider implements CommunicationProvider {
   }
   async room(id: string) {
     TalkToken.parse(id);
-    return this.parseRoom(
-      (await this.ocs("v4/room/" + id + "?format=json&noStatusUpdate=1")).data,
-    );
+    // Resolve only through the current employee's membership list. Repeated direct
+    // lookups of revoked/guessed tokens trigger upstream IP brute-force throttling.
+    const room = (await this.listRooms()).find((room) => room.id === id);
+    if (!room) throw new SourceRejected(404);
+    return room;
   }
   private async read(
     id: string,
