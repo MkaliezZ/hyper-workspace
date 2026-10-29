@@ -9,6 +9,7 @@ import {
   FollowUpScheduleService,
   assertScheduledRun,
 } from "./follow-up-schedules.js";
+import { ArtifactReviewService } from "./artifact-reviews.js";
 export async function assertRunScope(
   service: WorkspaceService,
   s: Subject,
@@ -82,6 +83,27 @@ export async function loadRunContext(
     };
   }
   const conversation = await service.conversation(subject, run.conversation_id);
+  if (run.workflow === "review_artifact") {
+    await new ArtifactReviewService(service.db).prepare(
+      subject,
+      run.artifact_id,
+      run.artifact_review_plan,
+      conversation.project_id,
+    );
+    return {
+      context:
+        "Host-bound artifact review decision. The employee has explicitly confirmed this exact version, review revision and decision. Propose exactly one artifact.review with empty args; the host rechecks ownership, permissions and versions. Do not assess quality, change the decision or claim the model verified the artifact. No artifact body or project discussion is included.\n" +
+        JSON.stringify({
+          artifactId: run.artifact_id,
+          ...run.artifact_review_plan,
+        }),
+      sourceIds: [],
+      contextRefs: [
+        "artifact:" + run.artifact_id + "@" + run.expected_artifact_version,
+      ],
+      live: !!(await service.access.binding(subject, conversation.project_id)),
+    };
+  }
   if (run.workflow === "configure_follow_up") {
     const configuration = await new FollowUpScheduleService(service).prepare(
       subject,

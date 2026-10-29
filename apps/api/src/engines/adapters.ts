@@ -17,6 +17,7 @@ const resultSchema = z.object({
         tool: z.enum([
           "artifact.create",
           "artifact.revise",
+          "artifact.review",
           "task.create",
           "project.report",
           "follow_up.check",
@@ -30,7 +31,7 @@ const resultSchema = z.object({
     .max(30),
 });
 const instruction =
-  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|task.create|project.report|follow_up.check|follow_up.configure|communication.draft|file.reading.save","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Use empty args for exactly one follow_up.configure when given a Host-bound follow-up plan; settings are fixed by the employee and enforced by the host. Use empty args for exactly one follow_up.check; only the host compares current project tasks and decides whether to post one factual project message. Use only content for communication.draft (max 20000 characters); it saves a personal draft for review, never sends a message. Use only content for file.reading.save (max 20000 characters); it saves one personal file reading bound by the host to the selected file and version. Never choose a file, recipient or room. Never invent project facts. No native shell or business tools are needed.';
+  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|artifact.review|task.create|project.report|follow_up.check|follow_up.configure|communication.draft|file.reading.save","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use empty args for exactly one artifact.review when given a Host-bound artifact review decision; the employee has chosen the decision and the host enforces it. Never claim the model verified artifact quality. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Use empty args for exactly one follow_up.configure when given a Host-bound follow-up plan; settings are fixed by the employee and enforced by the host. Use empty args for exactly one follow_up.check; only the host compares current project tasks and decides whether to post one factual project message. Use only content for communication.draft (max 20000 characters); it saves a personal draft for review, never sends a message. Use only content for file.reading.save (max 20000 characters); it saves one personal file reading bound by the host to the selected file and version. Never choose a file, recipient or room. Never invent project facts. No native shell or business tools are needed.';
 function parseResult(text: string): EngineResult {
   const clean = text
     .trim()
@@ -84,6 +85,7 @@ export class FixtureAdapter implements EngineAdapter {
         "discussion_to_minutes",
         "project_report",
         "revise_artifact",
+        "review_artifact",
         "follow_up",
         "configure_follow_up",
         "chat",
@@ -110,6 +112,12 @@ export class FixtureAdapter implements EngineAdapter {
       return {
         text: "演示跟进配置。",
         actions: [{ tool: "follow_up.configure", args: {} }],
+        evidence: "fixture",
+      };
+    if (r.workflow === "review_artifact")
+      return {
+        text: "演示验收代执行。",
+        actions: [{ tool: "artifact.review", args: {} }],
         evidence: "fixture",
       };
     if (r.workflow === "chat")
@@ -168,6 +176,7 @@ export class DshAdapter implements EngineAdapter {
         "discussion_to_minutes",
         "project_report",
         "revise_artifact",
+        "review_artifact",
         "follow_up",
         "chat",
         "draft_reply",
@@ -276,6 +285,7 @@ export class HermesAdapter implements EngineAdapter {
         "discussion_to_minutes",
         "project_report",
         "revise_artifact",
+        "review_artifact",
         "follow_up",
         "chat",
         "draft_reply",

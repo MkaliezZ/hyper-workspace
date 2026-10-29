@@ -42,23 +42,27 @@ createServer(async (req, res) => {
   const followUp = input.includes(
     "Check only this authorized project's current product tasks.",
   );
+  const review = input.includes("Host-bound artifact review decision.");
+  if (review && /synthetic-container-version/.test(input)) violations++;
   const text = JSON.stringify({
     text: "Synthetic container model result.",
     actions: [
-      followUp
-        ? { tool: "follow_up.check", args: {} }
-        : revision
-          ? {
-              tool: "artifact.revise",
-              args: { content: "synthetic-container-version-two" },
-            }
-          : {
-              tool: "artifact.create",
-              args: {
-                title: "Container native artifact",
-                content: "synthetic-container-version-one",
+      review
+        ? { tool: "artifact.review", args: {} }
+        : followUp
+          ? { tool: "follow_up.check", args: {} }
+          : revision
+            ? {
+                tool: "artifact.revise",
+                args: { content: "synthetic-container-version-two" },
+              }
+            : {
+                tool: "artifact.create",
+                args: {
+                  title: "Container native artifact",
+                  content: "synthetic-container-version-one",
+                },
               },
-            },
     ],
   });
   if (body.stream) {

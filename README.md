@@ -117,6 +117,16 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 [移动端个人解读](docs/images/file-reading-mobile.png)
 
 
+## 文本成果与验收
+
+项目成果已支持纯文本/Markdown 编辑、AI 生成和反馈修订、历史版本。新增针对确切已保存版本的员工验收：接受、要求修改、重开，可直接记录或让 DSH/Hermes 代执行员工已确认的决定。新内容版本重新作为草稿，旧版意见保留；AI 不自行判断是否合格，也不自动把成果正文发送给模型。[验收契约、权限、迁移与证据](docs/ARTIFACT-REVIEWS.md)。
+
+当前仅为基础文本成果和短文本资料阅读，尚无富文本、多人实时协作、批注评论、PDF/Office 解析或 Word/Excel/PPT 编辑。个人文件解读与项目成果分别保留权限范围。
+
+![员工对确切版本的验收（演示资料）](docs/images/artifact-review-desktop.png)
+
+[移动端验收](docs/images/artifact-review-mobile.png)
+
 ## 待办跟进
 
 “发起任务 → 检查待办进展”比较产品当前待办与项目共用基线。首次和无变化时只返回检查状态；变化合并为一条项目消息，保留前后字段、来源 Run 与实际消息回执。DSH/Hermes 及不同员工共用基线，模型不能自行决定通知或伪造完成。[单次检查、迁移、原子性、费用与证据](docs/FOLLOW-UP.md)。真实 Nextcloud 中的双引擎检查/撤权与容器回归已通过既有 CI，使用合成员工和确定性模型协议服务。
@@ -141,7 +151,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、16 项单元/Provider/部署配置、70 项数据库、24 项浏览器和 3 项双执行器原生运行时测试。本轮定时跟进新增 7 项数据库及 3 项界面用例。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过类型检查、构建、16 项单元/Provider/部署配置、77 项数据库、27 项浏览器和 3 项双执行器原生运行时测试。本轮成果验收新增 7 项数据库及 3 项界面用例；当前代码的真实来源/容器扩展须以对应 Actions 结果为准。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
 定时跟进与输入范围提示修正 `e73e025` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40957686291) 三个 job 全部成功，共 127 项测试：16 单元/Provider/配置、3 Python 下载回归、70 数据库、24 UI、3 原生执行器、8 真实来源、3 容器；另含类型、构建、两个 npm 审计和冻结包校验。覆盖 DSH/Hermes AI 配置与派发、来源设备绑定/撤权、容器重启后配置/计数保留、恢复检查与次数耗尽。初始实现 `c9f8c28` 的 [首轮 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40956417646) 同样全部成功；不代表真实模型质量或完整 E01–E10/生产验收。
 

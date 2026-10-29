@@ -15,7 +15,8 @@ import { Database } from "../db/database.js";
 import { WorkspaceService, appendEvent } from "./workspace.js";
 import { assertMember } from "./security.js";
 import { stableDigest } from "./credentials.js";
-import { reviseArtifactVersion } from "./artifacts.js";
+import { reviseArtifactVersion, lockArtifact } from "./artifacts.js";
+import { ArtifactReviewService } from "./artifact-reviews.js";
 import { ModelService } from "./models.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
 import { FollowUpService } from "./follow-up.js";
@@ -258,15 +259,17 @@ export class RunProcessor {
           ? ["artifact.create", "project.report"]
           : run.workflow === "revise_artifact"
             ? ["artifact.revise"]
-            : run.workflow === "follow_up"
-              ? ["follow_up.check"]
-              : run.workflow === "configure_follow_up"
-                ? ["follow_up.configure"]
-                : run.workflow === "draft_reply"
-                  ? ["communication.draft"]
-                  : isFileWorkflow(run.workflow)
-                    ? ["file.reading.save"]
-                    : [];
+            : run.workflow === "review_artifact"
+              ? ["artifact.review"]
+              : run.workflow === "follow_up"
+                ? ["follow_up.check"]
+                : run.workflow === "configure_follow_up"
+                  ? ["follow_up.configure"]
+                  : run.workflow === "draft_reply"
+                    ? ["communication.draft"]
+                    : isFileWorkflow(run.workflow)
+                      ? ["file.reading.save"]
+                      : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -274,6 +277,8 @@ export class RunProcessor {
         throw new Error("执行器没有提出本次工作要求的成果操作，不能报告完成。");
       if (run.workflow === "revise_artifact" && result.actions.length !== 1)
         throw new Error("一次修订必须对应一个明确的成果版本。");
+      if (run.workflow === "review_artifact" && result.actions.length !== 1)
+        throw new Error("一次验收必须只记录一个明确决定。");
       if (isFileWorkflow(run.workflow) && result.actions.length !== 1)
         throw new Error("一次文件阅读必须只保存一条个人解读。");
       if (run.workflow === "draft_reply" && result.actions.length !== 1)
@@ -324,6 +329,7 @@ export class RunProcessor {
           run.workflow !== "draft_reply" &&
           run.workflow !== "follow_up" &&
           run.workflow !== "configure_follow_up" &&
+          run.workflow !== "review_artifact" &&
           !isFileWorkflow(run.workflow)
         )
           await c.query(
@@ -348,9 +354,11 @@ export class RunProcessor {
                     ? receipts[0]!.summary
                     : run.workflow === "configure_follow_up"
                       ? "定时跟进配置已保存。"
-                      : isFileWorkflow(run.workflow)
-                        ? "个人文件解读已保存。"
-                        : result.text,
+                      : run.workflow === "review_artifact"
+                        ? "已记录员工对指定成果版本的验收决定。"
+                        : isFileWorkflow(run.workflow)
+                          ? "个人文件解读已保存。"
+                          : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -422,6 +430,16 @@ export class RunProcessor {
       // Match scheduled checks: target schedule before Run/member locks.
       if (configuration)
         await FollowUpScheduleService.lockTarget(c, s, configuration);
+      if (["revise_artifact", "review_artifact"].includes(run.workflow)) {
+        const scope = (
+          await c.query(
+            "SELECT project_id FROM cw_conversations WHERE id=$1 AND workspace_id=$2",
+            [run.conversation_id, s.workspaceId],
+          )
+        ).rows[0];
+        if (!scope) throw new Error("成果项目范围不可用。");
+        await lockArtifact(c, s, run.artifact_id, scope.project_id);
+      }
       if (isFileWorkflow(run.workflow))
         await FileReadingService.lockSource(
           c,
@@ -522,6 +540,24 @@ export class RunProcessor {
         );
         receipt = { tool: action.tool, id, title, version: 1 };
         await appendEvent(c, run.id, "artifact.updated", receipt);
+      } else if (action.tool === "artifact.review") {
+        z.object({}).strict().parse(action.args);
+        receipt = await ArtifactReviewService.apply(
+          c,
+          s,
+          run.artifact_id,
+          run.artifact_review_plan,
+          conv.project_id,
+          "review:" + run.id,
+          run.id,
+        );
+        await appendEvent(c, run.id, "artifact.updated", {
+          id: run.artifact_id,
+          version: receipt.version,
+          status: receipt.status,
+          reviewId: receipt.id,
+          reviewRevision: receipt.reviewRevision,
+        });
       } else if (action.tool === "artifact.revise") {
         const id = run.artifact_id;
         if (!id) throw new Error("No artifact was authorized for revision.");

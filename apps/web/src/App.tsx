@@ -22,6 +22,8 @@ import { EnterpriseMessages } from "./components/EnterpriseMessages";
 import { Login } from "./components/Login";
 import { KnowledgePanel } from "./components/KnowledgePanel";
 import { FollowUpPanel } from "./components/FollowUpPanel";
+import { ArtifactReviewPanel } from "./components/ArtifactReviewPanel";
+import { artifactStatusLabel } from "@hyper/contracts";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
@@ -852,7 +854,11 @@ export function App() {
             }}
           >
             <div className="artifact-version-label">
-              草稿 · v{selectedArtifact.version} · 修改将保留历史版本
+              {artifactStatusLabel(selectedArtifact.status)} · v
+              {selectedArtifact.version}（已保存） ·{" "}
+              {edit !== selectedArtifact.content
+                ? "当前编辑尚未保存"
+                : "修改将保留历史版本"}
             </div>
             <label>
               成果内容
@@ -891,6 +897,51 @@ export function App() {
               </button>
             </div>
           </form>
+          <ArtifactReviewPanel
+            key={selectedArtifact.id + ":" + selectedArtifact.version}
+            artifact={selectedArtifact}
+            dirty={edit !== selectedArtifact.content}
+            view={view}
+            run={run}
+            onRun={(value) => {
+              if (loadedProject.current === view.project.id) setRun(value);
+            }}
+            onMetadata={(value) => {
+              setSelectedArtifact((current) =>
+                current?.id === value.id && current.version === value.version
+                  ? {
+                      ...current,
+                      status: value.status,
+                      reviewRevision: value.reviewRevision,
+                      acceptedVersion: value.acceptedVersion,
+                    }
+                  : current,
+              );
+              setView((current) =>
+                current
+                  ? {
+                      ...current,
+                      artifacts: current.artifacts.map((item) =>
+                        item.id === value.id && item.version === value.version
+                          ? {
+                              ...item,
+                              status: value.status,
+                              reviewRevision: value.reviewRevision,
+                              acceptedVersion: value.acceptedVersion,
+                            }
+                          : item,
+                      ),
+                    }
+                  : current,
+              );
+            }}
+            onReload={(value) => {
+              if (loadedProject.current !== view.project.id) return;
+              setSelectedArtifact(value);
+              setEdit(value.content);
+              setFeedback("");
+            }}
+          />
         </Dialog>
       ) : null}
     </div>

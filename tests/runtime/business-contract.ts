@@ -92,42 +92,56 @@ export function modelFixture(
     const configureFollowUp = JSON.stringify(body.messages).includes(
       "Host-bound follow-up plan.",
     );
+    const artifactReview = JSON.stringify(body.messages).includes(
+      "Host-bound artifact review decision.",
+    );
+    if (
+      artifactReview &&
+      /protocol-fixture-model-result|protocol-fixture-revision/.test(
+        JSON.stringify(body.messages),
+      )
+    )
+      violations.push("Review dispatch included artifact content");
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        configureFollowUp
-          ? { tool: "follow_up.configure", args: {} }
-          : followUp
-            ? { tool: "follow_up.check", args: {} }
-            : fileReading
-              ? {
-                  tool: "file.reading.save",
-                  args: {
-                    content:
-                      (fileReadingRevision
-                        ? "private-native-file-revision-"
-                        : "private-native-file-reading-") + employee,
-                  },
-                }
-              : draftReply
+        artifactReview
+          ? { tool: "artifact.review", args: {} }
+          : configureFollowUp
+            ? { tool: "follow_up.configure", args: {} }
+            : followUp
+              ? { tool: "follow_up.check", args: {} }
+              : fileReading
                 ? {
-                    tool: "communication.draft",
-                    args: { content: "private-native-reply-draft-" + employee },
+                    tool: "file.reading.save",
+                    args: {
+                      content:
+                        (fileReadingRevision
+                          ? "private-native-file-revision-"
+                          : "private-native-file-reading-") + employee,
+                    },
                   }
-                : revision
+                : draftReply
                   ? {
-                      tool: "artifact.revise",
+                      tool: "communication.draft",
                       args: {
-                        content: "protocol-fixture-revision " + revision,
+                        content: "private-native-reply-draft-" + employee,
                       },
                     }
-                  : {
-                      tool: "artifact.create",
-                      args: {
-                        title: "Native runtime test " + employee,
-                        content: "protocol-fixture-model-result " + employee,
+                  : revision
+                    ? {
+                        tool: "artifact.revise",
+                        args: {
+                          content: "protocol-fixture-revision " + revision,
+                        },
+                      }
+                    : {
+                        tool: "artifact.create",
+                        args: {
+                          title: "Native runtime test " + employee,
+                          content: "protocol-fixture-model-result " + employee,
+                        },
                       },
-                    },
       ],
     });
     if (body.stream) {
@@ -316,6 +330,66 @@ async function inspectHomes(path: string, keys: string[]): Promise<void> {
         );
     }
   }
+}
+
+async function verifyArtifactReview(
+  service: WorkspaceService,
+  processor: RunProcessor,
+  employee: Employee,
+  engines: NativeEngine[],
+) {
+  const id = employee.artifactId!,
+    runs: string[] = [];
+  const before = await service.artifact(employee.subject, id);
+  for (const [index, engine] of engines.entries()) {
+    const plan = {
+      expectedVersion: before.current.version,
+      expectedReviewRevision: index,
+      decision:
+        index === 0 ? ("accept" as const) : ("request_changes" as const),
+      feedback: "Synthetic employee-confirmed review " + index,
+      confirmed: true as const,
+    };
+    const run = await service.startRun(employee.subject, {
+      conversationId: employee.conversation,
+      engine,
+      workflow: "review_artifact",
+      artifactId: id,
+      artifactReviewPlan: plan,
+      instruction: "Record only this confirmed employee decision.",
+      modelProfileId: employee.modelId,
+      idempotencyKey: randomUUID(),
+    });
+    runs.push(run.id);
+    await processor.process(run.id);
+    const result = await service.getRun(employee.subject, run.id);
+    assert.equal(result.state, "succeeded", result.error ?? "review failed");
+    const saved = result.result.receipts[0];
+    assert.equal(saved.tool, "artifact.review");
+    assert.equal(saved.artifactId, id);
+    assert.equal(saved.version, plan.expectedVersion);
+    assert.equal(saved.reviewRevision, index + 1);
+    assert.equal(saved.channel, "ai_assisted");
+    assert.equal(saved.sourceRunId, run.id);
+    const detail = await service.artifact(employee.subject, id);
+    assert.equal(detail.current.content, before.current.content);
+    assert.equal(
+      detail.current.status,
+      index === 0 ? "accepted" : "changes_requested",
+    );
+  }
+  await service.revise(employee.subject, id, {
+    content: before.current.content + "\nSynthetic manual update after review.",
+    feedback: "Preserve acceptance history while creating a fresh draft.",
+    expectedVersion: before.current.version,
+  });
+  const next = await service.artifact(employee.subject, id);
+  assert.equal(next.current.status, "draft");
+  assert.equal(next.current.version, before.current.version + 1);
+  assert.equal(next.current.acceptedVersion, null);
+  assert.equal(next.reviews.length, 2);
+  assert.equal(next.versions[1].status, "changes_requested");
+  return runs;
 }
 
 async function verifyFollowUp(
@@ -529,6 +603,12 @@ export async function exerciseNativeBusiness(
         employees[0]!,
         engine,
       )),
+    );
+    allRuns.push(
+      ...(await verifyArtifactReview(service, processor, employees[0]!, [
+        engine,
+        switchThrough ?? engine,
+      ])),
     );
     for (const id of allRuns) {
       const events = JSON.stringify(

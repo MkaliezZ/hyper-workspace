@@ -32,6 +32,7 @@ export const Workflow = z.enum([
   "discussion_to_minutes",
   "project_report",
   "revise_artifact",
+  "review_artifact",
   "follow_up",
   "configure_follow_up",
   "chat",
@@ -68,6 +69,31 @@ export const FollowUpConfiguration = z
     idempotencyKey: z.uuid(),
   })
   .strict();
+export const ArtifactReviewPlan = z
+  .object({
+    expectedVersion: z.number().int().positive(),
+    expectedReviewRevision: z.number().int().min(0),
+    decision: z.enum(["accept", "request_changes", "reopen"]),
+    feedback: z.string().trim().min(1).max(4000),
+    confirmed: z.literal(true),
+  })
+  .strict();
+export type ArtifactReviewPlan = z.infer<typeof ArtifactReviewPlan>;
+export const ArtifactReviewInput = ArtifactReviewPlan.extend({
+  idempotencyKey: z.uuid(),
+}).strict();
+export type ArtifactReviewInput = z.infer<typeof ArtifactReviewInput>;
+export function artifactStatusLabel(status: string) {
+  return (
+    (
+      {
+        draft: "草稿",
+        changes_requested: "待修改",
+        accepted: "已验收",
+      } as Record<string, string>
+    )[status] ?? "状态未知"
+  );
+}
 export const RunInput = z
   .object({
     conversationId: z.uuid(),
@@ -77,6 +103,7 @@ export const RunInput = z
     artifactId: z.uuid().optional(),
     modelProfileId: z.uuid().optional(),
     followUpPlan: FollowUpPlan.optional(),
+    artifactReviewPlan: ArtifactReviewPlan.optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
   .strict();
@@ -175,6 +202,7 @@ export interface PlannedAction {
   tool:
     | "artifact.create"
     | "artifact.revise"
+    | "artifact.review"
     | "task.create"
     | "project.report"
     | "follow_up.check"
@@ -212,6 +240,8 @@ export function toolsForWorkflow(
       return ["artifact.create", "project.report"];
     case "revise_artifact":
       return ["artifact.revise"];
+    case "review_artifact":
+      return ["artifact.review"];
     case "follow_up":
       return ["follow_up.check"];
     case "configure_follow_up":
@@ -263,6 +293,8 @@ export interface Artifact {
   version: number;
   content: string;
   status: string;
+  reviewRevision?: number;
+  acceptedVersion?: number | null;
   createdAt: string;
 }
 export interface Project {

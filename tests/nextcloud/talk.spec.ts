@@ -236,6 +236,10 @@ test("Source project scope survives both real engines and blocks results after r
     const text = JSON.stringify(body.messages);
     if (text.includes("native-follow-up-fixture"))
       expect(text).not.toContain(sentinel);
+    if (text.includes("Host-bound artifact review decision.")) {
+      expect(text).not.toContain(sentinel);
+      expect(text).not.toContain("protocol-fixture-model-result");
+    }
     if (text.includes(sentinel) && /talk:nextcloud:/.test(text))
       seen.add(currentEngine);
     if (revoke) {
@@ -363,6 +367,7 @@ test("Source project scope survives both real engines and blocks results after r
       expect(response.status()).toBe(201);
       return response.json();
     };
+    let reviewedArtifactId = "";
     for (const engine of ["dsh", "hermes"]) {
       currentEngine = engine;
       const run = await start(engine);
@@ -401,6 +406,66 @@ test("Source project scope survives both real engines and blocks results after r
       expect(artifact.current.sourceMessageIds).toEqual(
         expect.arrayContaining(result.contextRefs),
       );
+      const reviewData = {
+        expectedVersion: 1,
+        expectedReviewRevision: 0,
+        decision: "accept",
+        feedback: "Synthetic employee checked the authorized source version.",
+        confirmed: true,
+      };
+      expect(
+        (
+          await outside.context.request.post(
+            origin + "/api/artifacts/" + artifactId + "/reviews",
+            {
+              headers: { Origin: origin },
+              data: { ...reviewData, idempotencyKey: randomUUID() },
+            },
+          )
+        ).status(),
+      ).toBe(404);
+      const accepted = await actor.context.request.post(origin + "/api/runs", {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          engine,
+          workflow: "review_artifact",
+          artifactId,
+          artifactReviewPlan: reviewData,
+          instruction: "Record the employee's confirmed decision.",
+          modelProfileId: profile.id,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(accepted.status()).toBe(201);
+      const reviewRun = await accepted.json();
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await actor.context.request.get(
+                  origin + "/api/runs/" + reviewRun.id,
+                )
+              ).json()
+            ).state,
+          { timeout: 60000, intervals: [700] },
+        )
+        .toBe("succeeded");
+      const reviewed = await (
+        await actor.context.request.get(origin + "/api/artifacts/" + artifactId)
+      ).json();
+      expect(reviewed.current).toMatchObject({
+        status: "accepted",
+        acceptedVersion: 1,
+        reviewRevision: 1,
+      });
+      expect(reviewed.reviews[0]).toMatchObject({
+        channel: "ai_assisted",
+        reviewerAuthority: "creator",
+        version: 1,
+      });
+      reviewedArtifactId = artifactId;
     }
     expect([...seen].sort()).toEqual(["dsh", "hermes"]);
     expect(fixture.violations).toEqual([]);
@@ -596,6 +661,32 @@ test("Source project scope survives both real engines and blocks results after r
         await actor.context.request.get(origin + "/api/runs/" + interrupted.id)
       ).status(),
     ).toBe(404);
+    expect(
+      (
+        await actor.context.request.post(
+          origin + "/api/artifacts/" + reviewedArtifactId + "/reviews",
+          {
+            headers: { Origin: origin },
+            data: {
+              expectedVersion: 1,
+              expectedReviewRevision: 1,
+              decision: "reopen",
+              confirmed: true,
+              feedback: "Revoked source cannot change review state.",
+              idempotencyKey: randomUUID(),
+            },
+          },
+        )
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT status,review_revision FROM cw_artifacts WHERE id=$1",
+          [reviewedArtifactId],
+        )
+      ).rows[0],
+    ).toEqual({ status: "accepted", review_revision: 1 });
     await expect(
       actor.page.getByRole("heading", { name: "团队讨论", exact: true }),
     ).toBeVisible({ timeout: 20000 });

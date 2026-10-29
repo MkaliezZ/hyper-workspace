@@ -7,6 +7,7 @@ import {
   Check,
 } from "lucide-react";
 import type { Artifact, Task, WorkspaceView } from "@hyper/contracts";
+import { artifactStatusLabel } from "@hyper/contracts";
 export function ContextPanel({
   view,
   onTask,
@@ -78,7 +79,9 @@ export function ContextPanel({
             <FileText size={27} />
             <span>
               <strong>{a.title}</strong>
-              <small>草稿 · v{a.version}</small>
+              <small>
+                {artifactStatusLabel(a.status)} · v{a.version}
+              </small>
             </span>
             <ChevronRight size={18} />
           </button>
@@ -173,7 +176,9 @@ export function ArtifactsPanel({
               <FileText size={29} />
               <span>
                 <strong>{a.title}</strong>
-                <small>草稿 · v{a.version}</small>
+                <small>
+                  {artifactStatusLabel(a.status)} · v{a.version}
+                </small>
               </span>
               <ChevronRight size={20} />
             </button>

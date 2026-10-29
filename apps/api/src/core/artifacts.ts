@@ -6,6 +6,21 @@ import {
 import type { PoolClient } from "pg";
 import { ArtifactRevision, type Subject } from "@hyper/contracts";
 import { refreshArtifactIndex } from "./knowledge.js";
+export async function lockArtifact(
+  c: PoolClient,
+  subject: Subject,
+  id: string,
+  projectId?: string,
+) {
+  const artifact = (
+    await c.query(
+      "SELECT id,project_id,created_by,current_version,status,review_revision,accepted_version FROM cw_artifacts WHERE id=$1 AND workspace_id=$2 AND ($3::uuid IS NULL OR project_id=$3) FOR UPDATE",
+      [id, subject.workspaceId, projectId ?? null],
+    )
+  ).rows[0];
+  if (!artifact) throw new NotFoundException("成果不存在或不在本次授权项目。");
+  return artifact;
+}
 
 /** One transaction path for human and AI revisions, including provenance. */
 export async function reviseArtifactVersion(
@@ -17,18 +32,12 @@ export async function reviseArtifactVersion(
   additionalSourceIds: string[] = [],
 ) {
   const input = ArtifactRevision.parse(raw);
+  const artifact = await lockArtifact(c, subject, id, projectId);
   const member = await c.query(
     "SELECT 1 FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
     [subject.workspaceId, subject.id],
   );
   if (!member.rowCount) throw new ForbiddenException("工作区权限已撤销。");
-  const artifact = (
-    await c.query(
-      "SELECT current_version FROM cw_artifacts WHERE id=$1 AND workspace_id=$2 AND ($3::uuid IS NULL OR project_id=$3) FOR UPDATE",
-      [id, subject.workspaceId, projectId ?? null],
-    )
-  ).rows[0];
-  if (!artifact) throw new NotFoundException("成果不存在或不在本次授权项目。");
   if (artifact.current_version !== input.expectedVersion)
     throw new ConflictException("成果已更新，请刷新后再修改。");
   const previous = (
@@ -57,7 +66,7 @@ export async function reviseArtifactVersion(
     ],
   );
   await c.query(
-    "UPDATE cw_artifacts SET current_version=$2,status='draft' WHERE id=$1",
+    "UPDATE cw_artifacts SET current_version=$2,status='draft',accepted_version=NULL,review_revision=0 WHERE id=$1",
     [id, version],
   );
   await refreshArtifactIndex(

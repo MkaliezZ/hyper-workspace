@@ -159,6 +159,7 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       workflow: string,
       instruction: string,
       artifactId?: string,
+      artifactReviewPlan?: any,
     ) => {
       const r = await context.request.post(origin + "/api/runs", {
         headers: { Origin: origin },
@@ -168,6 +169,7 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
           workflow,
           instruction,
           artifactId,
+          artifactReviewPlan,
           modelProfileId: modelId,
           idempotencyKey: randomUUID(),
         },
@@ -188,6 +190,28 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     expect(hermes.result.receipts[0]).toMatchObject({
       id: artifactId,
       version: 2,
+    });
+    const reviewed = await completed(
+      context.request,
+      await start(
+        "dsh",
+        "review_artifact",
+        "Record the confirmed employee review.",
+        artifactId,
+        {
+          expectedVersion: 2,
+          expectedReviewRevision: 0,
+          decision: "accept",
+          feedback: "Synthetic employee acceptance before restart.",
+          confirmed: true,
+        },
+      ),
+    );
+    expect(reviewed.result.receipts[0]).toMatchObject({
+      artifactId,
+      version: 2,
+      status: "accepted",
+      channel: "ai_assisted",
     });
     const schedulePath =
       origin +
@@ -257,6 +281,38 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     ).json();
     expect(saved.current.version).toBe(2);
     expect(saved.versions).toHaveLength(2);
+    expect(saved.current).toMatchObject({
+      status: "accepted",
+      acceptedVersion: 2,
+      reviewRevision: 1,
+    });
+    expect(saved.reviews).toHaveLength(1);
+    expect(saved.reviews[0].sourceRunId).toBe(reviewed.id);
+    expect(
+      (
+        await context.request.post(
+          origin + "/api/artifacts/" + artifactId + "/revisions",
+          {
+            headers: { Origin: origin },
+            data: {
+              expectedVersion: 2,
+              content: "synthetic-container-version-three",
+              feedback: "New draft after accepted version",
+            },
+          },
+        )
+      ).status(),
+    ).toBe(201);
+    const revised = await (
+      await context.request.get(origin + "/api/artifacts/" + artifactId)
+    ).json();
+    expect(revised.current).toMatchObject({
+      version: 3,
+      status: "draft",
+      acceptedVersion: null,
+      reviewRevision: 0,
+    });
+    expect(revised.reviews[0].version).toBe(2);
     const persisted = await scheduled();
     expect(persisted).toMatchObject({
       state: "paused",
@@ -315,7 +371,7 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         `process.stdout.write(await(await fetch('http://model-fixture:8100/stats')).text())`,
       ),
     );
-    expect(stats.calls).toBe(4);
+    expect(stats.calls).toBe(5);
     expect(stats.violations).toBe(0);
   } finally {
     await context.close();

@@ -27,6 +27,7 @@ import { SourceFileService } from "./source-files.js";
 import { FileReadingService } from "./file-readings.js";
 import { ModelService } from "./models.js";
 import { FollowUpScheduleService } from "./follow-up-schedules.js";
+import { ArtifactReviewService } from "./artifact-reviews.js";
 
 export class WorkspaceService {
   constructor(
@@ -64,7 +65,7 @@ export class WorkspaceService {
         [project.id, s.workspaceId],
       ),
       this.db.pool.query(
-        'SELECT a.id,a.title,a.current_version AS version,a.status,v.content,v.created_at AS "createdAt" FROM cw_artifacts a JOIN cw_artifact_versions v ON v.artifact_id=a.id AND v.version=a.current_version WHERE a.project_id=$1 AND a.workspace_id=$2 ORDER BY a.created_at DESC',
+        'SELECT a.id,a.title,a.current_version AS version,a.status,a.review_revision AS "reviewRevision",a.accepted_version AS "acceptedVersion",v.content,v.created_at AS "createdAt" FROM cw_artifacts a JOIN cw_artifact_versions v ON v.artifact_id=a.id AND v.version=a.current_version WHERE a.project_id=$1 AND a.workspace_id=$2 ORDER BY a.created_at DESC',
         [project.id, s.workspaceId],
       ),
     ]);
@@ -203,17 +204,36 @@ export class WorkspaceService {
     return r.rows[0];
   }
   async artifact(s: Subject, id: string) {
-    await assertMember(this.db, s);
-    await this.artifactProject(s, id);
+    const role = await assertMember(this.db, s);
+    const projectId = await this.artifactProject(s, id);
     const r = await this.db.pool.query(
-      'SELECT a.id,a.title,v.version AS version,a.status,v.content,v.feedback,v.source_message_ids AS "sourceMessageIds",v.created_at AS "createdAt" FROM cw_artifacts a JOIN cw_artifact_versions v ON v.artifact_id=a.id WHERE a.id=$1 AND a.workspace_id=$2 ORDER BY v.version DESC',
+      `SELECT a.id,a.title,v.version,a.created_by,
+      CASE WHEN v.version=a.current_version THEN a.status ELSE coalesce(r.status_after,'draft') END AS status,
+      CASE WHEN v.version=a.current_version THEN a.review_revision ELSE coalesce(r.review_revision,0) END AS "reviewRevision",
+      CASE WHEN v.version=a.current_version THEN a.accepted_version WHEN r.status_after='accepted' THEN v.version END AS "acceptedVersion",
+      v.content,v.feedback,v.source_message_ids AS "sourceMessageIds",v.created_at AS "createdAt"
+      FROM cw_artifacts a JOIN cw_artifact_versions v ON v.artifact_id=a.id
+      LEFT JOIN LATERAL(SELECT status_after,review_revision FROM cw_artifact_reviews
+        WHERE artifact_id=a.id AND artifact_version=v.version ORDER BY review_revision DESC LIMIT 1) r ON true
+      WHERE a.id=$1 AND a.workspace_id=$2 ORDER BY v.version DESC`,
       [id, s.workspaceId],
     );
     if (!r.rowCount) throw new NotFoundException("成果不存在。");
+    const reviews = await this.db.pool.query(
+      `SELECT r.id,r.artifact_version AS version,r.review_revision AS "reviewRevision",
+      r.reviewer_id AS "reviewerId",u.name AS "reviewerName",r.reviewer_authority AS "reviewerAuthority",r.policy_version AS "policyVersion",r.decision,r.status_before AS "statusBefore",r.status_after AS status,
+      r.feedback,r.confirmed,r.channel,r.source_run_id AS "sourceRunId",r.created_at AS "createdAt"
+      FROM cw_artifact_reviews r JOIN cw_users u ON u.id=r.reviewer_id WHERE r.artifact_id=$1 AND r.workspace_id=$2
+      ORDER BY r.artifact_version DESC,r.review_revision DESC LIMIT 50`,
+      [id, s.workspaceId],
+    );
+    await this.access.assert(s, projectId);
     return {
       current: r.rows[0],
       versions: r.rows,
       history: r.rows,
+      canReview: role === "admin" || r.rows[0].created_by === s.id,
+      reviews: reviews.rows,
     };
   }
   async revise(s: Subject, id: string, input: ArtifactRevision) {
@@ -499,6 +519,39 @@ export class WorkspaceService {
     )
       throw new BadRequestException("请先从企业会话创建关联项目，再起草回复。");
     let expectedVersion: number | null = null;
+    if (input.workflow === "review_artifact") {
+      if (!input.artifactId || !input.artifactReviewPlan)
+        throw new BadRequestException("请指定成果、版本和明确验收决定。");
+      const old = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (old) {
+        if (
+          old.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: old.id, state: old.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("review_artifact")
+      )
+        throw new BadRequestException("所选执行器未声明验收代执行能力。");
+      await new ArtifactReviewService(this.db).prepare(
+        s,
+        input.artifactId,
+        input.artifactReviewPlan,
+        conversation.project_id,
+      );
+      expectedVersion = input.artifactReviewPlan.expectedVersion;
+    } else if (input.artifactReviewPlan)
+      throw new BadRequestException("此工作类型不接受验收决定。");
     if (input.workflow === "revise_artifact") {
       if (!input.artifactId)
         throw new BadRequestException("请指定要修改的成果。");
@@ -515,7 +568,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -532,6 +585,7 @@ export class WorkspaceService {
         expectedVersion,
         s.identityCredentialId ?? null,
         input.followUpPlan ?? null,
+        input.artifactReviewPlan ?? null,
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };
@@ -564,7 +618,7 @@ export class WorkspaceService {
       );
     else await this.conversation(s, target.conversation_id);
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");

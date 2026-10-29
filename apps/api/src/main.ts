@@ -35,6 +35,7 @@ import {
   ModelInput,
   CommunicationSendInput,
   FollowUpConfiguration,
+  ArtifactReviewInput,
 } from "@hyper/contracts";
 import { Database, DEMO } from "./db/database.js";
 import { authenticate, issueSession } from "./core/security.js";
@@ -55,6 +56,7 @@ import {
 } from "@hyper/contracts";
 import { FileReadingService } from "./core/file-readings.js";
 import { FollowUpScheduleService } from "./core/follow-up-schedules.js";
+import { ArtifactReviewService } from "./core/artifact-reviews.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
@@ -311,6 +313,17 @@ class ApiController {
     @Param("id") id: string,
   ) {
     return service.artifact(await subject(req), uuid(id));
+  }
+  @Post("artifacts/:id/reviews") async reviewArtifact(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    return new ArtifactReviewService(db).record(
+      await subject(req),
+      uuid(id),
+      ArtifactReviewInput.parse(body),
+    );
   }
   @Post("artifacts/:id/revisions") async revise(
     @Req() req: Request,
