@@ -34,6 +34,7 @@ import {
   ArtifactRevision,
   ModelInput,
   CommunicationSendInput,
+  FollowUpConfiguration,
 } from "@hyper/contracts";
 import { Database, DEMO } from "./db/database.js";
 import { authenticate, issueSession } from "./core/security.js";
@@ -53,6 +54,7 @@ import {
   FileReadingRevisionInput,
 } from "@hyper/contracts";
 import { FileReadingService } from "./core/file-readings.js";
+import { FollowUpScheduleService } from "./core/follow-up-schedules.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
@@ -62,6 +64,7 @@ const service = new WorkspaceService(db, engineRegistry());
 const queue = new RunProcessor(service);
 const identity = new IdentityService(db);
 const communication = new CommunicationService(db);
+const followUpSchedules = new FollowUpScheduleService(service);
 const sessionCookie = {
   httpOnly: true,
   sameSite: "strict" as const,
@@ -273,6 +276,23 @@ class ApiController {
       await subject(req),
       uuid(id),
       TaskInput.parse(body),
+    );
+  }
+  @Get("conversations/:id/follow-ups") async scheduledFollowUps(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return followUpSchedules.list(await subject(req), uuid(id));
+  }
+  @Post("conversations/:id/follow-ups") async configureFollowUp(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    return followUpSchedules.configure(
+      await subject(req),
+      uuid(id),
+      FollowUpConfiguration.parse(body),
     );
   }
   @Patch("tasks/:id") async patchTask(

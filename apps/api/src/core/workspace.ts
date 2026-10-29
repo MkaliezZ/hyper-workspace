@@ -26,6 +26,7 @@ import { ProjectAccess } from "./project-access.js";
 import { SourceFileService } from "./source-files.js";
 import { FileReadingService } from "./file-readings.js";
 import { ModelService } from "./models.js";
+import { FollowUpScheduleService } from "./follow-up-schedules.js";
 
 export class WorkspaceService {
   constructor(
@@ -303,11 +304,7 @@ export class WorkspaceService {
     );
     return { id, name: input.name, verifiedAt: null };
   }
-  private async runModel(
-    s: Subject,
-    engineId: EngineId,
-    modelProfileId?: string,
-  ) {
+  async runModel(s: Subject, engineId: EngineId, modelProfileId?: string) {
     if (engineId === "fixture" && (!s.demo || process.env.DEMO_MODE !== "true"))
       throw new ForbiddenException("演示执行仅用于演示会话。");
     const engine = this.engines.get(engineId);
@@ -461,6 +458,39 @@ export class WorkspaceService {
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
+    if (input.workflow === "configure_follow_up") {
+      if (!input.followUpPlan || input.artifactId)
+        throw new BadRequestException("请明确指定跟进配置与范围。");
+      const old = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (old) {
+        if (
+          old.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: old.id, state: old.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("configure_follow_up")
+      )
+        throw new BadRequestException("所选执行器未声明跟进配置能力。");
+      await new FollowUpScheduleService(this).prepare(
+        s,
+        input.conversationId,
+        input.followUpPlan,
+        input.engine,
+        input.modelProfileId,
+      );
+    } else if (input.followUpPlan)
+      throw new BadRequestException("此工作类型不接受跟进配置。");
     if (input.workflow === "follow_up" && input.artifactId)
       throw new BadRequestException("待办检查不接受成果目标。");
     if (
@@ -485,7 +515,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -501,6 +531,7 @@ export class WorkspaceService {
         model?.id ?? null,
         expectedVersion,
         s.identityCredentialId ?? null,
+        input.followUpPlan ?? null,
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };

@@ -20,6 +20,11 @@ import { ModelService } from "./models.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
 import { FollowUpService } from "./follow-up.js";
 import {
+  FollowUpScheduleService,
+  assertScheduledRun,
+  type PreparedFollowUp,
+} from "./follow-up-schedules.js";
+import {
   FileReadingService,
   ReadingVersionConflict,
   ReadingInputLimit,
@@ -37,6 +42,8 @@ async function purgeFileRuntime(db: Database, id: string) {
 export class RunProcessor {
   readonly boss: PgBoss;
   private sweep?: NodeJS.Timeout;
+  private consumeSchedules = false;
+  private scheduling = false;
   constructor(readonly service: WorkspaceService) {
     this.boss = new PgBoss({
       connectionString: process.env.DATABASE_URL!,
@@ -51,6 +58,7 @@ export class RunProcessor {
     await this.boss.start();
     await this.boss.createQueue("hyper-run", { retryLimit: 0 });
     if (consume) {
+      this.consumeSchedules = true;
       await this.boss.work<{ runId: string }>(
         "hyper-run",
         { pollingIntervalSeconds: 1, localConcurrency: 2 },
@@ -69,6 +77,7 @@ export class RunProcessor {
     await this.boss.send("hyper-run", { runId }, { singletonKey: runId });
   }
   async stop() {
+    this.consumeSchedules = false;
     if (this.sweep) clearInterval(this.sweep);
     await this.boss.stop({ graceful: true, timeout: 3000 });
   }
@@ -95,6 +104,26 @@ export class RunProcessor {
       )
     ).rows)
       await purgeFileRuntime(db, r.id);
+    // Source validation must not delay queue recovery or worker health startup.
+    void this.dispatchSchedules().catch(() =>
+      console.error(
+        "Scheduled follow-up dispatch failed; inspect database and worker health.",
+      ),
+    );
+  }
+  private async dispatchSchedules() {
+    if (!this.consumeSchedules || this.scheduling) return;
+    this.scheduling = true;
+    try {
+      for (const id of await new FollowUpScheduleService(
+        this.service,
+      ).dispatchDue()) {
+        if (!this.consumeSchedules) return;
+        await this.enqueue(id);
+      }
+    } finally {
+      this.scheduling = false;
+    }
   }
   async process(runId: string) {
     const db = this.service.db,
@@ -231,11 +260,13 @@ export class RunProcessor {
             ? ["artifact.revise"]
             : run.workflow === "follow_up"
               ? ["follow_up.check"]
-              : run.workflow === "draft_reply"
-                ? ["communication.draft"]
-                : isFileWorkflow(run.workflow)
-                  ? ["file.reading.save"]
-                  : [];
+              : run.workflow === "configure_follow_up"
+                ? ["follow_up.configure"]
+                : run.workflow === "draft_reply"
+                  ? ["communication.draft"]
+                  : isFileWorkflow(run.workflow)
+                    ? ["file.reading.save"]
+                    : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -249,6 +280,8 @@ export class RunProcessor {
         throw new Error("一次起草必须只准备一条会话回复。");
       if (run.workflow === "follow_up" && result.actions.length !== 1)
         throw new Error("一次待办检查必须只执行一次状态比较。");
+      if (run.workflow === "configure_follow_up" && result.actions.length !== 1)
+        throw new Error("一次跟进配置必须只执行一个明确操作。");
       const receipts: Record<string, unknown>[] = [];
       for (const [index, action] of result.actions.entries()) {
         await assertRunScope(this.service, subject, run);
@@ -262,11 +295,13 @@ export class RunProcessor {
             index,
             sourceIds,
             result.evidence,
+            "configuration" in scope ? scope.configuration : undefined,
           ),
         );
       }
       await assertRunScope(this.service, subject, run);
       await db.tx(async (c) => {
+        await assertScheduledRun(c, run, true);
         const member = await c.query(
           "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
           [subject.workspaceId, subject.id],
@@ -288,6 +323,7 @@ export class RunProcessor {
         if (
           run.workflow !== "draft_reply" &&
           run.workflow !== "follow_up" &&
+          run.workflow !== "configure_follow_up" &&
           !isFileWorkflow(run.workflow)
         )
           await c.query(
@@ -310,9 +346,11 @@ export class RunProcessor {
                   ? "回复草稿已保存，尚未发送。"
                   : run.workflow === "follow_up"
                     ? receipts[0]!.summary
-                    : isFileWorkflow(run.workflow)
-                      ? "个人文件解读已保存。"
-                      : result.text,
+                    : run.workflow === "configure_follow_up"
+                      ? "定时跟进配置已保存。"
+                      : isFileWorkflow(run.workflow)
+                        ? "个人文件解读已保存。"
+                        : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -375,10 +413,15 @@ export class RunProcessor {
     index: number,
     sourceIds: string[],
     evidence: "fixture" | "runtime",
+    configuration?: PreparedFollowUp,
   ) {
     if (!toolsForWorkflow(run.workflow).includes(action.tool))
       throw new Error("本次工作类型未授权该业务动作。");
     return this.service.db.tx(async (c) => {
+      await assertScheduledRun(c, run, true);
+      // Match scheduled checks: target schedule before Run/member locks.
+      if (configuration)
+        await FollowUpScheduleService.lockTarget(c, s, configuration);
       if (isFileWorkflow(run.workflow))
         await FileReadingService.lockSource(
           c,
@@ -539,6 +582,17 @@ export class RunProcessor {
           roomId: scope.conversation_ref,
           state: "draft",
         };
+      } else if (action.tool === "follow_up.configure") {
+        z.object({}).strict().parse(action.args);
+        if (!configuration) throw new Error("跟进配置范围缺失。");
+        receipt = await FollowUpScheduleService.apply(
+          c,
+          s,
+          configuration,
+          "configure:" + run.id,
+          stableDigest(configuration),
+          run.id,
+        );
       } else if (action.tool === "follow_up.check") {
         z.object({}).strict().parse(action.args);
         receipt = {

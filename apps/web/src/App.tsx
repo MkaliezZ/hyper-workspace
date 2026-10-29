@@ -21,6 +21,7 @@ import { ModelSettings, type ModelSummary } from "./components/ModelSettings";
 import { EnterpriseMessages } from "./components/EnterpriseMessages";
 import { Login } from "./components/Login";
 import { KnowledgePanel } from "./components/KnowledgePanel";
+import { FollowUpPanel } from "./components/FollowUpPanel";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
@@ -496,21 +497,32 @@ export function App() {
                 }
               />
             ) : tab === "tasks" ? (
-              <TasksPanel
-                tasks={view.tasks}
-                query={query}
-                onNew={() => openTask()}
-                onToggle={(t) =>
-                  void act(async () => {
-                    await mutation(
-                      "/tasks/" + t.id,
-                      { status: t.status === "done" ? "open" : "done" },
-                      "PATCH",
-                    );
-                    await refresh();
-                  })
-                }
-              />
+              <div className="task-workspace">
+                <TasksPanel
+                  tasks={view.tasks}
+                  query={query}
+                  onNew={() => openTask()}
+                  onToggle={(t) =>
+                    void act(async () => {
+                      await mutation(
+                        "/tasks/" + t.id,
+                        { status: t.status === "done" ? "open" : "done" },
+                        "PATCH",
+                      );
+                      await refresh();
+                    })
+                  }
+                />
+                <FollowUpPanel
+                  key={view.project.conversationId}
+                  view={view}
+                  run={run}
+                  onRun={(value) => {
+                    if (loadedProject.current === view.project.id)
+                      setRun(value);
+                  }}
+                />
+              </div>
             ) : (
               <ArtifactsPanel
                 artifacts={view.artifacts}

@@ -189,6 +189,46 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       id: artifactId,
       version: 2,
     });
+    const schedulePath =
+      origin +
+      "/api/conversations/" +
+      workspace.project.conversationId +
+      "/follow-ups";
+    const configure = async (plan: any) => {
+      const response = await context.request.post(schedulePath, {
+        headers: { Origin: origin },
+        data: {
+          plan,
+          engine: "dsh",
+          modelProfileId: modelId,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(response.status()).toBe(201);
+      return response.json();
+    };
+    const schedule = await configure({
+      operation: "create",
+      intervalMinutes: 15,
+      maxChecks: 2,
+    });
+    const scheduled = async () =>
+      (await (await context.request.get(schedulePath)).json()).find(
+        (row: any) => row.id === schedule.id,
+      );
+    await expect
+      .poll(async () => !!(await scheduled()).lastRunId, { timeout: 45000 })
+      .toBe(true);
+    const initial = await scheduled();
+    expect(
+      (await completed(context.request, initial.lastRunId)).result.receipts[0]
+        .notify,
+    ).toBe(false);
+    const paused = await configure({
+      operation: "pause",
+      scheduleId: schedule.id,
+      expectedVersion: initial.version,
+    });
     compose("stop", "api", "worker", "db");
     compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120");
     await expect
@@ -217,6 +257,46 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     ).json();
     expect(saved.current.version).toBe(2);
     expect(saved.versions).toHaveLength(2);
+    const persisted = await scheduled();
+    expect(persisted).toMatchObject({
+      state: "paused",
+      checksStarted: 1,
+      lastRunId: initial.lastRunId,
+      version: paused.version,
+      modelProfileId: modelId,
+    });
+    expect(
+      (
+        await context.request.post(
+          origin +
+            "/api/conversations/" +
+            workspace.project.conversationId +
+            "/tasks",
+          {
+            headers: { Origin: origin },
+            data: {
+              title: "Container scheduled task after restart",
+              assignee: "Synthetic employee",
+              dueDate: null,
+            },
+          },
+        )
+      ).status(),
+    ).toBe(201);
+    await configure({
+      operation: "resume",
+      scheduleId: schedule.id,
+      expectedVersion: persisted.version,
+    });
+    await expect
+      .poll(async () => (await scheduled()).checksStarted, { timeout: 45000 })
+      .toBe(2);
+    const final = await scheduled();
+    expect(final.state).toBe("completed");
+    expect(
+      (await completed(context.request, final.lastRunId)).result.receipts[0]
+        .notify,
+    ).toBe(true);
     expect(errors).toEqual([]);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(
@@ -235,7 +315,7 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         `process.stdout.write(await(await fetch('http://model-fixture:8100/stats')).text())`,
       ),
     );
-    expect(stats.calls).toBe(2);
+    expect(stats.calls).toBe(4);
     expect(stats.violations).toBe(0);
   } finally {
     await context.close();

@@ -215,7 +215,7 @@ test("Real one-to-one Talk messages are available without importing them into pr
 test("Source project scope survives both real engines and blocks results after real room revocation", async ({
   browser,
 }) => {
-  test.setTimeout(240000);
+  test.setTimeout(300000);
   const room = await talk("talk-alice", "v4/room", "POST", {
     roomType: "2",
     roomName: "Hyper AI Scoped Room",
@@ -466,6 +466,52 @@ test("Source project scope survives both real engines and blocks results after r
       ).toBe(index === 1 ? 1 : 0);
       baselineRunId = run.id;
     }
+    const scheduled = await actor.context.request.post(
+      origin +
+        "/api/conversations/" +
+        workspace.project.conversationId +
+        "/follow-ups",
+      {
+        headers: { Origin: origin },
+        data: {
+          plan: { operation: "create", intervalMinutes: 15, maxChecks: 2 },
+          engine: "hermes",
+          modelProfileId: profile.id,
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(scheduled.status()).toBe(201);
+    const schedule = await scheduled.json();
+    await expect
+      .poll(
+        async () => {
+          const row = (
+            await db.pool.query(
+              "SELECT last_run_id FROM cw_follow_up_schedules WHERE id=$1",
+              [schedule.id],
+            )
+          ).rows[0];
+          if (!row.last_run_id) return "waiting";
+          return (
+            await (
+              await actor.context.request.get(
+                origin + "/api/runs/" + row.last_run_id,
+              )
+            ).json()
+          ).state;
+        },
+        { timeout: 75000, intervals: [700] },
+      )
+      .toBe("succeeded");
+    const savedSchedule = (
+      await db.pool.query("SELECT * FROM cw_follow_up_schedules WHERE id=$1", [
+        schedule.id,
+      ])
+    ).rows[0];
+    expect(savedSchedule.identity_credential_id).toBeTruthy();
+    expect(savedSchedule.checks_started).toBe(1);
+    baselineRunId = savedSchedule.last_run_id;
     expect(
       (
         await talk(
@@ -504,6 +550,32 @@ test("Source project scope survives both real engines and blocks results after r
         { timeout: 60000, intervals: [700] },
       )
       .toBe("failed");
+    await db.pool.query(
+      "UPDATE cw_follow_up_schedules SET next_check_at=clock_timestamp() WHERE id=$1",
+      [schedule.id],
+    );
+    await expect
+      .poll(
+        async () =>
+          (
+            await db.pool.query(
+              "SELECT state FROM cw_follow_up_schedules WHERE id=$1",
+              [schedule.id],
+            )
+          ).rows[0].state,
+        { timeout: 30000, intervals: [700] },
+      )
+      .toBe("paused");
+    const revokedSchedule = (
+      await db.pool.query(
+        "SELECT checks_started,last_run_id FROM cw_follow_up_schedules WHERE id=$1",
+        [schedule.id],
+      )
+    ).rows[0];
+    expect(revokedSchedule).toEqual({
+      checks_started: 1,
+      last_run_id: savedSchedule.last_run_id,
+    });
     expect(
       (
         await db.pool.query(

@@ -33,6 +33,7 @@ export const Workflow = z.enum([
   "project_report",
   "revise_artifact",
   "follow_up",
+  "configure_follow_up",
   "chat",
   "draft_reply",
   "read_file",
@@ -42,6 +43,31 @@ export type Workflow = z.infer<typeof Workflow>;
 export function isFileWorkflow(workflow: string) {
   return workflow === "read_file" || workflow === "revise_file_reading";
 }
+export const FollowUpPlan = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("create"),
+      intervalMinutes: z.number().int().min(15).max(1440),
+      maxChecks: z.number().int().min(1).max(96),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.enum(["pause", "resume", "cancel"]),
+      scheduleId: z.uuid(),
+      expectedVersion: z.number().int().positive(),
+    })
+    .strict(),
+]);
+export type FollowUpPlan = z.infer<typeof FollowUpPlan>;
+export const FollowUpConfiguration = z
+  .object({
+    plan: FollowUpPlan,
+    engine: EngineId.default("dsh"),
+    modelProfileId: z.uuid().optional(),
+    idempotencyKey: z.uuid(),
+  })
+  .strict();
 export const RunInput = z
   .object({
     conversationId: z.uuid(),
@@ -50,6 +76,7 @@ export const RunInput = z
     instruction: z.string().trim().min(1).max(20000),
     artifactId: z.uuid().optional(),
     modelProfileId: z.uuid().optional(),
+    followUpPlan: FollowUpPlan.optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
   .strict();
@@ -151,6 +178,7 @@ export interface PlannedAction {
     | "task.create"
     | "project.report"
     | "follow_up.check"
+    | "follow_up.configure"
     | "communication.draft"
     | "file.reading.save";
   args: Record<string, unknown>;
@@ -186,6 +214,8 @@ export function toolsForWorkflow(
       return ["artifact.revise"];
     case "follow_up":
       return ["follow_up.check"];
+    case "configure_follow_up":
+      return ["follow_up.configure"];
     case "chat":
       return [];
     case "draft_reply":

@@ -9,6 +9,7 @@ import { WorkspaceService } from "../../apps/api/src/core/workspace.js";
 import { RunProcessor } from "../../apps/api/src/core/processor.js";
 import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
 import type { Subject } from "@hyper/contracts";
+import { FollowUpScheduleService } from "../../apps/api/src/core/follow-up-schedules.js";
 
 type NativeEngine = "dsh" | "hermes";
 interface Employee {
@@ -84,41 +85,49 @@ export function modelFixture(
     const fileReadingRevision = JSON.stringify(body.messages).includes(
       "native-file-revision-fixture",
     );
-    const followUp = JSON.stringify(body.messages).includes(
-      "native-follow-up-fixture",
+    const followUp =
+      /native-follow-up-fixture|Check only this authorized project's current product tasks\./.test(
+        JSON.stringify(body.messages),
+      );
+    const configureFollowUp = JSON.stringify(body.messages).includes(
+      "Host-bound follow-up plan.",
     );
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        followUp
-          ? { tool: "follow_up.check", args: {} }
-          : fileReading
-            ? {
-                tool: "file.reading.save",
-                args: {
-                  content:
-                    (fileReadingRevision
-                      ? "private-native-file-revision-"
-                      : "private-native-file-reading-") + employee,
-                },
-              }
-            : draftReply
+        configureFollowUp
+          ? { tool: "follow_up.configure", args: {} }
+          : followUp
+            ? { tool: "follow_up.check", args: {} }
+            : fileReading
               ? {
-                  tool: "communication.draft",
-                  args: { content: "private-native-reply-draft-" + employee },
-                }
-              : revision
-                ? {
-                    tool: "artifact.revise",
-                    args: { content: "protocol-fixture-revision " + revision },
-                  }
-                : {
-                    tool: "artifact.create",
-                    args: {
-                      title: "Native runtime test " + employee,
-                      content: "protocol-fixture-model-result " + employee,
-                    },
+                  tool: "file.reading.save",
+                  args: {
+                    content:
+                      (fileReadingRevision
+                        ? "private-native-file-revision-"
+                        : "private-native-file-reading-") + employee,
                   },
+                }
+              : draftReply
+                ? {
+                    tool: "communication.draft",
+                    args: { content: "private-native-reply-draft-" + employee },
+                  }
+                : revision
+                  ? {
+                      tool: "artifact.revise",
+                      args: {
+                        content: "protocol-fixture-revision " + revision,
+                      },
+                    }
+                  : {
+                      tool: "artifact.create",
+                      args: {
+                        title: "Native runtime test " + employee,
+                        content: "protocol-fixture-model-result " + employee,
+                      },
+                    },
       ],
     });
     if (body.stream) {
@@ -360,6 +369,66 @@ async function verifyFollowUp(
   return runs;
 }
 
+async function verifyScheduledFollowUp(
+  db: Database,
+  service: WorkspaceService,
+  processor: RunProcessor,
+  employee: Employee,
+  engine: NativeEngine,
+) {
+  const configuration = await service.startRun(employee.subject, {
+    conversationId: employee.conversation,
+    engine,
+    workflow: "configure_follow_up",
+    instruction: "Create the explicitly selected finite follow-up schedule.",
+    modelProfileId: employee.modelId,
+    followUpPlan: { operation: "create", intervalMinutes: 15, maxChecks: 2 },
+    idempotencyKey: randomUUID(),
+  });
+  await processor.process(configuration.id);
+  const saved = await service.getRun(employee.subject, configuration.id);
+  assert.equal(saved.state, "succeeded", saved.error);
+  const schedule = saved.result.receipts[0];
+  assert.equal(schedule.modelProfileId, employee.modelId);
+  assert.equal(schedule.engine, engine);
+  const scheduler = new FollowUpScheduleService(service);
+  const runs = await scheduler.dispatchDue();
+  assert.equal(runs.length, 1);
+  await processor.process(runs[0]!);
+  assert.equal(
+    (await service.getRun(employee.subject, runs[0]!)).state,
+    "succeeded",
+  );
+  const current = (
+    await scheduler.list(employee.subject, employee.conversation)
+  ).find((row) => row.id === schedule.id)!;
+  const cancel = await service.startRun(employee.subject, {
+    conversationId: employee.conversation,
+    engine,
+    workflow: "configure_follow_up",
+    instruction: "Cancel this selected follow-up.",
+    modelProfileId: employee.modelId,
+    followUpPlan: {
+      operation: "cancel",
+      scheduleId: schedule.id,
+      expectedVersion: current.version,
+    },
+    idempotencyKey: randomUUID(),
+  });
+  await processor.process(cancel.id);
+  assert.equal(
+    (await service.getRun(employee.subject, cancel.id)).state,
+    "succeeded",
+  );
+  assert.equal(
+    (await scheduler.list(employee.subject, employee.conversation)).find(
+      (row) => row.id === schedule.id,
+    )!.state,
+    "cancelled",
+  );
+  return [configuration.id, ...runs, cancel.id];
+}
+
 export async function exerciseNativeBusiness(
   engine: NativeEngine,
   switchThrough?: NativeEngine,
@@ -452,6 +521,15 @@ export async function exerciseNativeBusiness(
       );
     }
     assert.deepEqual(fixture.violations, []);
+    allRuns.push(
+      ...(await verifyScheduledFollowUp(
+        db,
+        service,
+        processor,
+        employees[0]!,
+        engine,
+      )),
+    );
     for (const id of allRuns) {
       const events = JSON.stringify(
         (

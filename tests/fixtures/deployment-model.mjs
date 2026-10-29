@@ -39,21 +39,26 @@ createServer(async (req, res) => {
     if (res.destroyed) return;
   }
   const revision = input.includes("compose-revise");
+  const followUp = input.includes(
+    "Check only this authorized project's current product tasks.",
+  );
   const text = JSON.stringify({
     text: "Synthetic container model result.",
     actions: [
-      revision
-        ? {
-            tool: "artifact.revise",
-            args: { content: "synthetic-container-version-two" },
-          }
-        : {
-            tool: "artifact.create",
-            args: {
-              title: "Container native artifact",
-              content: "synthetic-container-version-one",
+      followUp
+        ? { tool: "follow_up.check", args: {} }
+        : revision
+          ? {
+              tool: "artifact.revise",
+              args: { content: "synthetic-container-version-two" },
+            }
+          : {
+              tool: "artifact.create",
+              args: {
+                title: "Container native artifact",
+                content: "synthetic-container-version-one",
+              },
             },
-          },
     ],
   });
   if (body.stream) {

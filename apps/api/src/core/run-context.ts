@@ -5,11 +5,16 @@ import { SourceFileService } from "./source-files.js";
 import { FileReadingService, ReadingVersionConflict } from "./file-readings.js";
 import { FollowUpService } from "./follow-up.js";
 import { stableDigest } from "./credentials.js";
+import {
+  FollowUpScheduleService,
+  assertScheduledRun,
+} from "./follow-up-schedules.js";
 export async function assertRunScope(
   service: WorkspaceService,
   s: Subject,
   run: any,
 ) {
+  await assertScheduledRun(service.db.pool, run);
   if (isFileWorkflow(run.workflow))
     return new SourceFileService(service.db).assertVersion(
       s,
@@ -77,6 +82,24 @@ export async function loadRunContext(
     };
   }
   const conversation = await service.conversation(subject, run.conversation_id);
+  if (run.workflow === "configure_follow_up") {
+    const configuration = await new FollowUpScheduleService(service).prepare(
+      subject,
+      run.conversation_id,
+      run.follow_up_plan,
+      run.engine,
+      run.model_profile_id ?? undefined,
+    );
+    return {
+      context:
+        "Host-bound follow-up plan. Propose exactly one follow_up.configure with empty args. The host enforces the employee-selected operation, target/version, interval and finite check budget. Do not change settings, recipients or authorization. This does not send enterprise messages.\n" +
+        JSON.stringify(configuration),
+      sourceIds: [],
+      contextRefs: [],
+      live: !!(await service.access.binding(subject, conversation.project_id)),
+      configuration,
+    };
+  }
   if (run.workflow === "follow_up") {
     const tasks = await FollowUpService.tasks(
       service.db.pool,
