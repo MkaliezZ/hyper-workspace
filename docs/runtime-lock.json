@@ -227,11 +227,14 @@
     "evidenceCommit": "9678126da33fdee3c833b5f5cccb63c85a1e32b6"
   },
   "taskRevisions": {
-    "status": "local-verified-source-container-ci-pending",
+    "status": "native-engines-real-source-container-and-ui-ci-verified",
     "contract": "docs/TASK-REVISIONS.md",
     "migration": "db/migrations/016_task_versions.sql",
     "scope": "Single selected task human/AI edits share a strict versioned service; four fields only, server-bound target/version, honest legacy snapshots, atomic history/actions, no-op receipts, manual takeover and late response guards; assignee is a label, not employee UID",
-    "localEvidence": "87 database, 19 unit, 3 native runtime, full 32 UI, typecheck/build and frozen baseline passed; new source/container CI pending",
-    "mapping": "P02/P04/P07/P08 C03/C05/C07 A01/A02/A06/A10 E01/E02/E04/E07/E09/E10 subsets"
+    "localEvidence": "87 database, 19 unit, 3 native runtime, full 32 UI, typecheck/build and frozen baseline passed",
+    "mapping": "P02/P04/P07/P08 C03/C05/C07 A01/A02/A06/A10 E01/E02/E04/E07/E09/E10 subsets",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40974156265",
+    "evidenceCommit": "9376aa9d73e6f76a381622d4857b4d025b93931a",
+    "evidenceScope": "165 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 87 database, 3 native runtime, 32 UI, 9 real source, 4 container; real Nextcloud DSH edit/Hermes no-op receipts and source revocation, restricted container Hermes edit/history survival after DB/API/Worker restart; synthetic sources/models only"
   }
 }
