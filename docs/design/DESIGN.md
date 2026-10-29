@@ -29,7 +29,7 @@ Model settings and the knowledge panel were subsequently inspected in the runnin
 
 The engine/model selector and a real missing-model response were also inspected in the native task dialog at both widths. The error is visible inside the modal, its heading provides the accessible dialog name, the draft remains, and controls fit the mobile viewport. Page errors: none; horizontal overflow: false. Review captures are .runtime/engine-desktop-review.png and .runtime/engine-mobile-review.png.
 
-This comparison verifies the implemented first-stage UI surface. DSH/Hermes model execution and Nextcloud integration remain unverified and are not inferred from screenshots.
+This initial comparison verifies only the first-stage UI surface. Native engine and Nextcloud evidence is recorded separately in IMPLEMENTATION.md; screenshots do not verify runtime execution.
 
 ### 企业身份登录增量
 

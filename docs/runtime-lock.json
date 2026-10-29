@@ -27,15 +27,15 @@
     }
   },
   "nextcloud": {
-    "status": "identity-real-service-ci-verified",
+    "status": "identity-talk-and-source-project-real-service-ci-verified",
     "runtimeVersion": "33.0.10",
     "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
     "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
-    "scope": "Identity and Talk text read-through/send foundation verified against pinned services; source-bound projects and AI read-only context implemented, combined source/native-engine CI pending; AI Talk writes and Files/Calendar pending",
+    "scope": "Identity, Talk text messaging, source-bound project permissions and AI read-only context verified against pinned services and native DSH/Hermes; AI Talk writes and Files/Calendar pending",
     "companySourceConnected": false,
-    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40797427984",
-    "evidenceCommit": "abf6a0cab3c3eaa9d3d674deaaca18e958676b1a",
-    "evidenceScope": "Three real Nextcloud service/browser tests using synthetic accounts; no company SSO/MFA or production claim",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40826947341",
+    "evidenceCommit": "dc1869edebc898f99222605ca258a1f9a953638d",
+    "evidenceScope": "Six real Nextcloud/Talk service tests with synthetic employees; native DSH/Hermes use a local model protocol service; no company SSO/MFA, real model quality or production claim",
     "talk": {
       "version": "23.0.12",
       "lock": "runtime/nextcloud/talk.lock.json",
@@ -45,10 +45,12 @@
       "evidenceCommit": "811fbf02203eeb57d39330f5bab8d94d96858446",
       "evidenceScope": "Two Talk tests: native group and one-to-one text messaging, readback, idempotency and source member removal; synthetic accounts only",
       "projectScope": {
-        "status": "implemented-combined-ci-pending",
+        "status": "real-source-and-native-engines-ci-verified",
         "migration": "db/migrations/007_project_sources.sql",
         "contract": "docs/PROJECT-SOURCE-SCOPE.md",
-        "modelEvidence": "local deterministic protocol service; native engines; no company data"
+        "modelEvidence": "local deterministic protocol service; native engines; no company data",
+        "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40826947341",
+        "evidenceCommit": "dc1869edebc898f99222605ca258a1f9a953638d"
       }
     }
   },
