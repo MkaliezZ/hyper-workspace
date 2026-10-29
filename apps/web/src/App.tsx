@@ -91,6 +91,9 @@ export function App() {
         !(error instanceof ApiError && [401, 403].includes(error.status))
       ) {
         clearPrivateDrafts();
+        loadedProject.current = undefined;
+        setView(null);
+        setLogin(false);
         try {
           const fallback = await api<WorkspaceView>("/workspace");
           if (version !== loadVersion.current) return;
@@ -114,6 +117,7 @@ export function App() {
         [401, 403, 404, 503].includes(error.status)
       ) {
         clearPrivateDrafts();
+        loadedProject.current = undefined;
         setView(null);
         setLogin(true);
         setError(error.status === 401 ? "" : error.message);
@@ -364,7 +368,16 @@ export function App() {
               <button
                 onClick={() =>
                   void act(async () => {
-                    setRun(await mutation("/runs/" + run.id + "/cancel", {}));
+                    const id = run.id;
+                    const receipt = await mutation(
+                      "/runs/" + id + "/cancel",
+                      {},
+                    );
+                    setRun((current: any) =>
+                      current?.id === id
+                        ? { ...current, state: receipt.state }
+                        : current,
+                    );
                   })
                 }
               >
@@ -622,21 +635,22 @@ export function App() {
             onSubmit={(e) => {
               e.preventDefault();
               void act(async () => {
-                setRun(
-                  await mutation("/runs", {
-                    conversationId: view.project.conversationId,
-                    workflow,
-                    engine,
-                    instruction,
-                    ...(engine !== "fixture" && modelProfileId
-                      ? { modelProfileId }
-                      : {}),
-                    idempotencyKey: crypto.randomUUID(),
-                    ...(workflow === "revise_artifact" && selectedArtifact
-                      ? { artifactId: selectedArtifact.id }
-                      : {}),
-                  }),
-                );
+                const projectId = view.project.id;
+                const started = await mutation("/runs", {
+                  conversationId: view.project.conversationId,
+                  workflow,
+                  engine,
+                  instruction,
+                  ...(engine !== "fixture" && modelProfileId
+                    ? { modelProfileId }
+                    : {}),
+                  idempotencyKey: crypto.randomUUID(),
+                  ...(workflow === "revise_artifact" && selectedArtifact
+                    ? { artifactId: selectedArtifact.id }
+                    : {}),
+                });
+                if (loadedProject.current !== projectId) return;
+                setRun({ ...started, engine });
                 setDialog(null);
               });
             }}
