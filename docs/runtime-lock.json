@@ -115,14 +115,17 @@
     }
   },
   "followUp": {
-    "status": "implemented-native-source-ci-pending",
+    "status": "real-source-and-native-engines-ci-verified",
     "contract": "docs/FOLLOW-UP.md",
     "migration": "db/migrations/012_follow_up_baselines.sql",
     "workflow": "follow_up / exactly one follow_up.check with empty args",
     "scope": "One authorized project's current product tasks; shared project baseline; no source discussion, external sends, schedules, urgency inference or notification preferences",
     "durability": "Baseline, factual change message and action receipt share one product transaction; unchanged checks create no project message; interrupted committed actions retain their notification and require reconciliation",
     "localEvidence": "16 unit/config, 63 database, 21 browser, three native runtime checks, typecheck/build and frozen handoff pass; native DSH to Hermes to DSH; desktop/mobile rendered checks; deterministic model protocol service",
-    "sourceEvidence": "Pending this CI: shared source project baseline, manual change, merged notice, quiet recheck and real room revocation before the next check action"
+    "sourceEvidence": "Passed real Nextcloud synthetic-user fixture: shared project baseline, manual change, merged notice, quiet recheck and real room revocation before the next check action; no Talk sends",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40950231488",
+    "evidenceCommit": "0eccf7d65f75f5a2dc240698b465823967d9fd4b",
+    "evidenceScope": "117 passing checks across three jobs; typecheck/build, both npm audits and frozen handoff pass; current task differences, atomic message/action/baseline, concurrent employees, cancellation, source revocation and container permissions/persistence/recovery; deterministic model protocol service, not real model quality or production acceptance"
   },
   "note": "Implemented dependency pins do not claim a fully validated production runtime combination.",
   "dependencyRemediation": {
