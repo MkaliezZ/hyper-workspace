@@ -466,6 +466,14 @@ test("Real PDF and Office shares produce versioned private readings through both
   const actor = await login(browser, "talk-bob");
   const headers = { Origin: origin };
   try {
+    // Source consent completes before the product's login poll sets its cookie.
+    // Wait for the authenticated workspace instead of racing a protected write.
+    await expect(
+      actor.page.getByRole("navigation", { name: "工作区导航" }),
+    ).toBeVisible();
+    expect(
+      (await actor.context.request.get(origin + "/api/workspace")).status(),
+    ).toBe(200);
     const profileResponse = await actor.context.request.post(
       origin + "/api/models",
       {
