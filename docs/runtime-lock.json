@@ -196,7 +196,7 @@
     }
   },
   "documentExtraction": {
-    "status": "product-integrated-local-verified-ci-pending",
+    "status": "real-source-and-native-engines-ci-verified-ui-fix-pending",
     "contract": "docs/DOCUMENT-INGESTION.md",
     "migration": "db/migrations/015_document_extraction.sql",
     "python": "3.14.6",
@@ -208,6 +208,18 @@
     "componentEvidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563",
     "componentEvidenceCommit": "5cdb970b9e33428d3c0e0839533d1c72df77b604",
     "componentEvidenceScope": "145 tests across three successful jobs for isolated helper only; product integration requires its own CI",
-    "sourceEvidence": "New real Nextcloud four-format share/native-engine/revocation scenario and compiled container four-format scenario pending exact integration commit CI; no local Docker"
+    "sourceEvidence": "Nine real Nextcloud scenarios and four container scenarios passed; includes all four selected shared formats, alternating DSH/Hermes reading and revocation cleanup; no local Docker",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40968561013",
+    "evidenceCommit": "1896d27f7b1c7e5f6f089ef63a3bb9b04a3f6a0f",
+    "evidenceScope": "153 unique checks across three successful jobs; 19 unit, 3 downloader, 8 Python extraction, 79 database, 3 native runtime, 9 real source, 4 container; UI 27 passed first attempt and one passed on retry. Artifact save refresh race fixed afterward; final clean CI pending. Synthetic sources/models only",
+    "initialFailureRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40967488131",
+    "initialFailure": "New source test wrote before product cookie exchange completed; eight source tests passed and one returned 401. Fixed by authenticated UI/API wait, without retrying writes or weakening authentication."
+  },
+  "taskCreation": {
+    "status": "shared-service-local-verified-ci-pending",
+    "service": "apps/api/src/core/tasks.ts",
+    "scope": "Human and AI creation share strict validation, current transaction membership/project checks and canonical database readback; no AI task editing or employee UID assignment claimed",
+    "localEvidence": "80 database, 19 unit, typecheck/build; new actual-service case covers canonical human/AI receipts, repeated dispatch and membership removal after preflight before transaction",
+    "mapping": "P04/P07 C03/C05 A01/A02/A10 E01/E04/E07/E09/E10 subsets"
   }
 }

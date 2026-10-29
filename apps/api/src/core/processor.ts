@@ -17,6 +17,7 @@ import { assertMember } from "./security.js";
 import { stableDigest } from "./credentials.js";
 import { reviseArtifactVersion, lockArtifact } from "./artifacts.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
+import { createProjectTask } from "./tasks.js";
 import { ModelService } from "./models.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
 import { FollowUpService } from "./follow-up.js";
@@ -490,21 +491,10 @@ export class RunProcessor {
         receipt = await FileReadingService.save(c, s, run, input.content);
       } else if (action.tool === "task.create") {
         const input = TaskInput.parse(action.args);
-        const id = randomUUID();
-        await c.query(
-          "INSERT INTO cw_tasks(id,workspace_id,project_id,title,assignee,due_date,created_by,source_run_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-          [
-            id,
-            s.workspaceId,
-            conv.project_id,
-            input.title,
-            input.assignee,
-            input.dueDate,
-            s.id,
-            run.id,
-          ],
-        );
-        receipt = { tool: action.tool, id, ...input };
+        receipt = {
+          tool: action.tool,
+          ...(await createProjectTask(c, s, conv.project_id, input, run.id)),
+        };
       } else if (
         action.tool === "artifact.create" ||
         action.tool === "project.report"

@@ -170,7 +170,24 @@ test("Version-bound human and AI acceptance preserve manual edits, display revie
       .evaluate((el) => el.scrollWidth > el.clientWidth),
   ).toBe(false);
   await page.screenshot({ path: "/tmp/hyper-artifact-review-mobile.png" });
+  let refreshing!: () => void, releaseRefresh!: () => void;
+  const refreshStarted = new Promise<void>((r) => (refreshing = r)),
+    refreshGate = new Promise<void>((r) => (releaseRefresh = r));
+  await page.route("**/api/workspace?*", async (route) => {
+    const response = await route.fetch();
+    refreshing();
+    await refreshGate;
+    await route.fulfill({ response });
+  });
   await page.getByRole("button", { name: "保存新版本", exact: true }).click();
+  await refreshStarted;
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(editor).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "保存新版本", exact: true }),
+  ).toBeDisabled();
+  releaseRefresh();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.locator(".artifact-list-row").first().click();
   await expect(panel.locator(".artifact-review-current")).toContainText(
     "v2 · 草稿 · 验收修订 0",
@@ -181,75 +198,90 @@ test("Version-bound human and AI acceptance preserve manual edits, display revie
     await page.request.get("/api/artifacts/" + artifactId)
   ).json();
   expect(saved.current.acceptedVersion).toBeNull();
+  expect(saved.current.content).toBe(unsaved);
   expect(saved.reviews.map((r: any) => r.version)).toEqual([1, 1]);
   expect(errors).toEqual([]);
 });
 
-test("Late AI review admission cannot restore a closed artifact editor or the prior project's Run", async ({
-  page,
-}) => {
-  const { project, panel } = await seed(page);
-  const next = await (
-    await page.request.post("/api/projects", {
-      headers,
-      data: {
-        name: "验收隔离 " + randomUUID().slice(0, 6),
-        goal: "不恢复旧项目内容",
-      },
-    })
-  ).json();
-  // Refresh the project list without changing the open dialog's object scope.
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await page.reload();
-  await page
-    .locator(".project-list")
-    .getByRole("button", { name: project.name, exact: true })
-    .click();
-  await page.getByRole("tab", { name: "成果", exact: true }).click();
-  await page.locator(".artifact-list-row").first().click();
-  await panel
-    .getByRole("combobox", { name: "验收记录方式", exact: true })
-    .selectOption("ai");
-  await panel
-    .getByRole("combobox", { name: "验收执行器", exact: true })
-    .selectOption("fixture");
-  await panel
-    .getByRole("textbox", { name: "验收意见", exact: true })
-    .fill("员工明确确认的旧项目决定");
-  await panel.getByRole("checkbox").check();
-  let entered!: () => void, release!: () => void;
-  const pending = new Promise<void>((r) => (entered = r)),
-    gate = new Promise<void>((r) => (release = r));
-  await page.route("**/api/runs", async (route) => {
-    entered();
-    await gate;
-    await route.fulfill({
-      status: 201,
-      json: { id: randomUUID(), state: "queued" },
+for (const mode of ["AI review", "artifact save"])
+  test(`Late ${mode} responses cannot restore a closed artifact editor or the prior project`, async ({
+    page,
+  }) => {
+    const { project, panel, artifactId } = await seed(page);
+    const next = await (
+      await page.request.post("/api/projects", {
+        headers,
+        data: {
+          name: "验收隔离 " + randomUUID().slice(0, 6),
+          goal: "不恢复旧项目内容",
+        },
+      })
+    ).json();
+    // Refresh the project list without changing the open dialog's object scope.
+    await page.getByRole("button", { name: "关闭", exact: true }).click();
+    await page.reload();
+    await page
+      .locator(".project-list")
+      .getByRole("button", { name: project.name, exact: true })
+      .click();
+    await page.getByRole("tab", { name: "成果", exact: true }).click();
+    await page.locator(".artifact-list-row").first().click();
+    if (mode === "AI review") {
+      await panel
+        .getByRole("combobox", { name: "验收记录方式", exact: true })
+        .selectOption("ai");
+      await panel
+        .getByRole("combobox", { name: "验收执行器", exact: true })
+        .selectOption("fixture");
+      await panel
+        .getByRole("textbox", { name: "验收意见", exact: true })
+        .fill("员工明确确认的旧项目决定");
+      await panel.getByRole("checkbox").check();
+    } else {
+      await page
+        .getByRole("textbox", { name: "成果内容", exact: true })
+        .fill("保存请求关闭后不恢复旧项目");
+    }
+    let entered!: () => void, release!: () => void;
+    const pending = new Promise<void>((r) => (entered = r)),
+      gate = new Promise<void>((r) => (release = r));
+    const endpoint =
+      mode === "AI review"
+        ? "/api/runs"
+        : "/api/artifacts/" + artifactId + "/revisions";
+    await page.route("**" + endpoint, async (route) => {
+      entered();
+      await gate;
+      await route.fulfill({
+        status: 201,
+        json: { id: randomUUID(), state: "queued" },
+      });
     });
+    await page
+      .getByRole("button", {
+        name: mode === "AI review" ? "让 AI 记录决定" : "保存新版本",
+        exact: true,
+      })
+      .click();
+    await pending;
+    await page.getByRole("button", { name: "关闭", exact: true }).click();
+    await page
+      .locator(".project-list")
+      .getByRole("button", { name: next.name, exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: next.name, exact: true }),
+    ).toBeVisible();
+    const completed = page.waitForResponse(
+      (r) => r.url().endsWith(endpoint) && r.request().method() === "POST",
+    );
+    release();
+    await completed;
+    await page.getByRole("tab", { name: "成果", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator(".run-strip")).toHaveCount(0);
+    await expect(page.locator(".artifact-list-row")).toHaveCount(0);
   });
-  await panel
-    .getByRole("button", { name: "让 AI 记录决定", exact: true })
-    .click();
-  await pending;
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await page
-    .locator(".project-list")
-    .getByRole("button", { name: next.name, exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: next.name, exact: true }),
-  ).toBeVisible();
-  const completed = page.waitForResponse(
-    (r) => r.url().endsWith("/api/runs") && r.request().method() === "POST",
-  );
-  release();
-  await completed;
-  await page.getByRole("tab", { name: "成果", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".run-strip")).toHaveCount(0);
-  await expect(page.locator(".artifact-list-row")).toHaveCount(0);
-});
 
 test("Concurrent saved versions require an explicit reload; unavailable review authority removes decision controls", async ({
   page,

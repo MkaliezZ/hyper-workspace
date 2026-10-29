@@ -507,3 +507,96 @@ test("Revoked membership invalidates an existing session", async () => {
   );
   await assert.rejects(authenticate(db, token));
 });
+
+test("Human and AI task creation share canonical readback and reject membership revoked after scope validation", async () => {
+  const person = randomUUID(),
+    actor: Subject = { ...peer, id: person, name: "共享待办服务测试" };
+  await db.pool.query("INSERT INTO cw_users(id,name) VALUES($1,$2)", [
+    person,
+    actor.name,
+  ]);
+  await db.pool.query(
+    "INSERT INTO cw_members(workspace_id,user_id,role) VALUES($1,$2,'member')",
+    [workspace, person],
+  );
+  const input = {
+    title: "  Shared task creation  ",
+    assignee: "Synthetic employee",
+    dueDate: "2026-11-10",
+  };
+  const manual = await service.createTask(actor, conversation, input);
+  assert.equal(manual.title, "Shared task creation");
+  assert.equal(manual.dueDate, input.dueDate);
+  assert.equal(manual.status, "open");
+  const registry = engineRegistry();
+  registry.get("fixture")!.execute = async () => ({
+    evidence: "fixture",
+    text: "Not a receipt",
+    actions: [
+      {
+        tool: "artifact.create",
+        args: {
+          title: "Synthetic minutes",
+          content: "Synthetic discussion result",
+        },
+      },
+      { tool: "task.create", args: input },
+    ],
+  });
+  const work = new WorkspaceService(db, registry),
+    runner = new RunProcessor(work);
+  const started = await work.startRun(actor, {
+    conversationId: conversation,
+    workflow: "discussion_to_minutes",
+    engine: "fixture",
+    instruction: "Create minutes and the explicitly requested task.",
+    idempotencyKey: randomUUID(),
+  });
+  await runner.process(started.id);
+  await runner.process(started.id);
+  const result = await work.getRun(actor, started.id);
+  assert.equal(result.state, "succeeded", result.error);
+  const task = result.result.receipts.find(
+    (r: any) => r.tool === "task.create",
+  );
+  assert.equal(task.title, manual.title);
+  assert.equal(task.dueDate, manual.dueDate);
+  assert.equal(task.status, "open");
+  const stored = await db.pool.query(
+    "SELECT id,created_by FROM cw_tasks WHERE source_run_id=$1",
+    [started.id],
+  );
+  assert.equal(stored.rowCount, 1);
+  assert.equal(stored.rows[0].id, task.id);
+  assert.equal(stored.rows[0].created_by, actor.id);
+  const racingDb = new Database(url),
+    originalTx = racingDb.tx.bind(racingDb);
+  racingDb.tx = async (callback) => {
+    await db.pool.query(
+      "DELETE FROM cw_members WHERE workspace_id=$1 AND user_id=$2",
+      [workspace, person],
+    );
+    return originalTx(callback);
+  };
+  try {
+    const race = new WorkspaceService(racingDb, engineRegistry());
+    await assert.rejects(
+      race.createTask(actor, conversation, {
+        ...input,
+        title: "Must not write after role removal",
+      }),
+      /权限已撤销/,
+    );
+    assert.equal(
+      (
+        await db.pool.query(
+          "SELECT id FROM cw_tasks WHERE created_by=$1 AND title=$2",
+          [person, "Must not write after role removal"],
+        )
+      ).rowCount,
+      0,
+    );
+  } finally {
+    await racingDb.close();
+  }
+});

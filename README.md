@@ -25,6 +25,8 @@
 
 企业资料与产品状态独立于执行器；引擎切换保持业务接口稳定，不承诺私有检查点热迁移。
 
+人工添加与 AI 生成待办共用产品业务服务，事务中核验当前成员及项目并回读保存结果；AI 待办编辑入口和完整协作流程仍在补齐。
+
 ## 本地开发
 
 需要 Node.js 24 与可用的 PostgreSQL（安装 pgvector）。容器运行包见下方自部署章节。
@@ -96,7 +98,7 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 ## 企业文件与个人资料
 
-Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。文本/Markdown 的真实来源联合用例已通过既有 CI；本轮新增 PDF/DOCX/XLSX/PPTX 受控文本提取，当前完整接入 CI 待核验。长文分块、共享发布和 Calendar 仍待完成。[文件契约](docs/NEXTCLOUD-FILES.md) · [文档提取、限额与部署](docs/DOCUMENT-INGESTION.md)。
+Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。文本/Markdown 与 PDF/DOCX/XLSX/PPTX 受控文本提取的真实来源/容器场景已通过 CI，另有成果保存界面竞态修复等待最终 CI。长文分块、共享发布和 Calendar 仍待完成。[文件契约](docs/NEXTCLOUD-FILES.md) · [文档提取、限额与部署](docs/DOCUMENT-INGESTION.md)。
 
 下图使用明确 UI 协议测试资料，非真实公司文件。
 
@@ -123,7 +125,7 @@ Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可
 
 当前支持基础文本成果和个人文档提取阅读，尚无富文本、多人实时协作、批注评论或 Word/Excel/PPT 原件编辑。个人文件解读与项目成果分别保留权限范围。
 
-“企业文件”新增 PDF/DOCX/XLSX/PPTX（最多 8 MiB、提取文本含位置最多 18000 字符），支持个人预览、AI 阅读/续改与索引。扫描件不执行 OCR；公式明确标记未计算，不承诺版式复现。解析器独立于 DSH/Hermes，安装方法、限制和证据见 [文档接入](docs/DOCUMENT-INGESTION.md)。完整接入的本机业务/界面测试已通过，真实 Nextcloud 与容器新增场景等待本轮 CI。独立组件 `5cdb970` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563) 三个 job 全部成功，共 145 项测试，仅证明该组件阶段，不能替代后续业务接入验证。
+“企业文件”新增 PDF/DOCX/XLSX/PPTX（最多 8 MiB、提取文本含位置最多 18000 字符），支持个人预览、AI 阅读/续改与索引。扫描件不执行 OCR；公式明确标记未计算，不承诺版式复现。解析器独立于 DSH/Hermes，安装方法、限制和证据见 [文档接入](docs/DOCUMENT-INGESTION.md)。修复 `1896d27` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40968561013) 来源 9 项与容器 4 项通过；主验证 UI 有 1 项重试后通过，已定位并修复保存后刷新竞态，最终无重试证据待新提交核验。首轮来源 401 及修复记录保留在文档中。独立组件 `5cdb970` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563) 曾三个 job 成功、145 项通过，不能替代后续业务接入验证。
 
 ![文档提取位置与限制说明（UI 协议测试资料）](docs/images/document-preview-desktop.png)
 
@@ -157,7 +159,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、16 项单元/Provider/部署配置、77 项数据库、27 项浏览器和 3 项双执行器原生运行时测试。本轮成果验收新增 7 项数据库及 3 项界面用例。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过 19 项单元/Provider/部署配置、80 项数据库、29 项浏览器、8 项 Python 文档解析，以及类型/构建。保存界面最后修订后 4 项成果 UI 复测通过；3 项双执行器原生运行时已有本机及前述 CI 证据。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
 成果验收实现 `e13b775` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40964224588) 三个 job 全部成功，共 137 项测试：16 单元/Provider/配置、3 Python 下载回归、77 数据库、27 UI、3 原生执行器、8 真实来源、3 容器；另含类型、构建、两个 npm 审计和冻结包校验。验证双执行器记录员工确认的决定、真实来源权限、容器重启保留、历史版本状态及新版草稿。不代表真实模型质量、完整文档产品或 E01–E10/生产验收。
 

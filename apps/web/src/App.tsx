@@ -57,6 +57,7 @@ export function App() {
   const [initialReplyDraft, setInitialReplyDraft] = useState<ReplyDraft>();
   const loadVersion = useRef(0);
   const loadedProject = useRef<string | undefined>(undefined);
+  const artifactScope = useRef(0);
   const [instruction, setInstruction] = useState(
       "请把当前讨论整理成纪要，保留明确分工与时间。",
     ),
@@ -70,6 +71,7 @@ export function App() {
   const load = useCallback(async (projectId?: string) => {
     const version = ++loadVersion.current;
     const clearPrivateDrafts = () => {
+      artifactScope.current++;
       setDialog(null);
       setSelectedArtifact(null);
       setEdit("");
@@ -91,13 +93,14 @@ export function App() {
       const value = await api<WorkspaceView>(
         "/workspace" + (projectId ? "?projectId=" + projectId : ""),
       );
-      if (version !== loadVersion.current) return;
+      if (version !== loadVersion.current) return value;
       if (loadedProject.current && loadedProject.current !== value.project.id)
         clearPrivateDrafts();
       loadedProject.current = value.project.id;
       setView(value);
       setLogin(false);
       setError("");
+      return value;
     } catch (error) {
       if (version !== loadVersion.current) return;
       if (
@@ -229,6 +232,7 @@ export function App() {
     setDialog("task");
   }
   function openArtifact(a: Artifact) {
+    artifactScope.current++;
     setError("");
     setSelectedArtifact(a);
     setEdit(a.content);
@@ -277,7 +281,9 @@ export function App() {
         ready={login}
         status={status}
         error={error}
-        onAuthenticated={() => load()}
+        onAuthenticated={async () => {
+          await load();
+        }}
       />
     );
   const projectTitle =
@@ -833,13 +839,18 @@ export function App() {
           title={selectedArtifact.title}
           error={error}
           wide
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            artifactScope.current++;
+            setDialog(null);
+          }}
         >
           <form
             className="dialog-form"
             onSubmit={(e) => {
               e.preventDefault();
               void act(async () => {
+                const scope = artifactScope.current,
+                  projectId = view.project.id;
                 await mutation(
                   "/artifacts/" + selectedArtifact.id + "/revisions",
                   {
@@ -848,8 +859,37 @@ export function App() {
                     expectedVersion: selectedArtifact.version,
                   },
                 );
-                setDialog(null);
-                await refresh();
+                if (
+                  scope !== artifactScope.current ||
+                  loadedProject.current !== projectId
+                )
+                  return;
+                const refreshed = await load(projectId);
+                const saved = refreshed?.artifacts.find(
+                  (a) => a.id === selectedArtifact.id,
+                );
+                if (
+                  scope === artifactScope.current &&
+                  loadedProject.current === projectId &&
+                  saved
+                ) {
+                  // A newer background refresh may have superseded this read.
+                  // Publish at least the saved version before allowing reopening,
+                  // while preserving any newer artifact or unrelated project data.
+                  setView((current) =>
+                    current?.project.id === projectId
+                      ? {
+                          ...current,
+                          artifacts: current.artifacts.map((item) =>
+                            item.id === saved.id && item.version < saved.version
+                              ? saved
+                              : item,
+                          ),
+                        }
+                      : current,
+                  );
+                  setDialog(null);
+                }
               });
             }}
           >
@@ -865,6 +905,7 @@ export function App() {
               <textarea
                 className="artifact-editor"
                 aria-label="成果内容"
+                disabled={busy}
                 value={edit}
                 onChange={(e) => setEdit(e.target.value)}
               />
@@ -872,6 +913,7 @@ export function App() {
             <label>
               修改说明
               <input
+                disabled={busy}
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 placeholder="记录这次修改的原因"
@@ -881,7 +923,9 @@ export function App() {
               <button
                 type="button"
                 className="secondary"
+                disabled={busy}
                 onClick={() => {
+                  artifactScope.current++;
                   setError("");
                   setWorkflow("revise_artifact");
                   setInstruction(

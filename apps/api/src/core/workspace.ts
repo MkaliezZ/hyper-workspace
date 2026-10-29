@@ -28,6 +28,7 @@ import { FileReadingService } from "./file-readings.js";
 import { ModelService } from "./models.js";
 import { FollowUpScheduleService } from "./follow-up-schedules.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
+import { createProjectTask } from "./tasks.js";
 
 export class WorkspaceService {
   constructor(
@@ -166,21 +167,10 @@ export class WorkspaceService {
     return { id };
   }
   async createTask(s: Subject, conversationId: string, input: TaskInput) {
-    const c = await this.conversation(s, conversationId);
-    const id = randomUUID();
-    await this.db.pool.query(
-      "INSERT INTO cw_tasks(id,workspace_id,project_id,title,assignee,due_date,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
-      [
-        id,
-        s.workspaceId,
-        c.project_id,
-        input.title,
-        input.assignee,
-        input.dueDate,
-        s.id,
-      ],
+    const conversation = await this.conversation(s, conversationId);
+    return this.db.tx((c) =>
+      createProjectTask(c, s, conversation.project_id, input),
     );
-    return { id, ...input, status: "open" };
   }
   async patchTask(
     s: Subject,
