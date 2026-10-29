@@ -686,6 +686,12 @@ p {
   white-space: nowrap;
   text-decoration: underline;
 }
+.follow-up-status {
+  display: block;
+  margin-top: 5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 .knowledge-search {
   display: flex;
   flex-wrap: wrap;

@@ -117,6 +117,14 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 [移动端个人解读](docs/images/file-reading-mobile.png)
 
 
+## 待办跟进
+
+“发起任务 → 检查待办进展”现在比较产品当前待办与项目共用基线。首次和无变化时只返回检查状态；变化合并为一条项目消息，保留前后字段、来源 Run 与实际消息回执。DSH/Hermes 及不同员工共用基线，模型不能自行决定通知或伪造完成。本次是单次检查，定时调度、重要程度与通知偏好仍待实现。[范围、迁移、原子性与证据](docs/FOLLOW-UP.md)。完整来源/容器 CI 待本轮验证。
+
+下图为明确的演示资料：上方显示本次检查静默，讨论区保留此前两项变化的一条消息。
+
+![待办变化合并与再次静默](docs/images/follow-up-quiet.png)
+
 ## 检查与验证
 
 ```bash
@@ -129,7 +137,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、16 项单元/Provider/部署配置测试、57 项数据库集成测试、20 项浏览器和 3 项双执行器原生运行时测试。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过类型检查、构建、16 项单元/Provider/部署配置、63 项数据库、21 项浏览器和 3 项双执行器原生运行时测试。本轮静默跟进新增 6 项数据库及 1 项界面用例，完整来源/容器结果待本轮 CI。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
 个人解读 AI 续改提交 `0d381f5` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40924328792) 三个 job 均成功，共 110 项测试：16 单元/Provider/部署配置、3 Python 下载回归、57 数据库、20 UI、3 原生执行器、8 真实 Nextcloud/Talk/Files、3 容器部署与权限/恢复。另含类型、构建、两个 npm 审计和冻结包校验。真实来源联合用例覆盖 DSH→Hermes 同对象续改、源更新清理、Hermes→人工→DSH 续改及分享撤回；未代表真实模型质量或原始 E01–E10 全部完成。
 

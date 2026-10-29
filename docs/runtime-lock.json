@@ -114,6 +114,16 @@
       }
     }
   },
+  "followUp": {
+    "status": "implemented-native-source-ci-pending",
+    "contract": "docs/FOLLOW-UP.md",
+    "migration": "db/migrations/012_follow_up_baselines.sql",
+    "workflow": "follow_up / exactly one follow_up.check with empty args",
+    "scope": "One authorized project's current product tasks; shared project baseline; no source discussion, external sends, schedules, urgency inference or notification preferences",
+    "durability": "Baseline, factual change message and action receipt share one product transaction; unchanged checks create no project message; interrupted committed actions retain their notification and require reconciliation",
+    "localEvidence": "16 unit/config, 63 database, 21 browser, three native runtime checks, typecheck/build and frozen handoff pass; native DSH to Hermes to DSH; desktop/mobile rendered checks; deterministic model protocol service",
+    "sourceEvidence": "Pending this CI: shared source project baseline, manual change, merged notice, quiet recheck and real room revocation before the next check action"
+  },
   "note": "Implemented dependency pins do not claim a fully validated production runtime combination.",
   "dependencyRemediation": {
     "date": "2026-10-29",

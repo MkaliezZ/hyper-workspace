@@ -84,36 +84,41 @@ export function modelFixture(
     const fileReadingRevision = JSON.stringify(body.messages).includes(
       "native-file-revision-fixture",
     );
+    const followUp = JSON.stringify(body.messages).includes(
+      "native-follow-up-fixture",
+    );
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        fileReading
-          ? {
-              tool: "file.reading.save",
-              args: {
-                content:
-                  (fileReadingRevision
-                    ? "private-native-file-revision-"
-                    : "private-native-file-reading-") + employee,
-              },
-            }
-          : draftReply
+        followUp
+          ? { tool: "follow_up.check", args: {} }
+          : fileReading
             ? {
-                tool: "communication.draft",
-                args: { content: "private-native-reply-draft-" + employee },
-              }
-            : revision
-              ? {
-                  tool: "artifact.revise",
-                  args: { content: "protocol-fixture-revision " + revision },
-                }
-              : {
-                  tool: "artifact.create",
-                  args: {
-                    title: "Native runtime test " + employee,
-                    content: "protocol-fixture-model-result " + employee,
-                  },
+                tool: "file.reading.save",
+                args: {
+                  content:
+                    (fileReadingRevision
+                      ? "private-native-file-revision-"
+                      : "private-native-file-reading-") + employee,
                 },
+              }
+            : draftReply
+              ? {
+                  tool: "communication.draft",
+                  args: { content: "private-native-reply-draft-" + employee },
+                }
+              : revision
+                ? {
+                    tool: "artifact.revise",
+                    args: { content: "protocol-fixture-revision " + revision },
+                  }
+                : {
+                    tool: "artifact.create",
+                    args: {
+                      title: "Native runtime test " + employee,
+                      content: "protocol-fixture-model-result " + employee,
+                    },
+                  },
       ],
     });
     if (body.stream) {
@@ -304,6 +309,57 @@ async function inspectHomes(path: string, keys: string[]): Promise<void> {
   }
 }
 
+async function verifyFollowUp(
+  db: Database,
+  service: WorkspaceService,
+  processor: RunProcessor,
+  employee: Employee,
+  engines: NativeEngine[],
+) {
+  const task = await service.createTask(
+    employee.subject,
+    employee.conversation,
+    {
+      title: "Native follow-up synthetic task",
+      assignee: "Runtime test",
+      dueDate: null,
+    },
+  );
+  const runs: string[] = [];
+  for (const [index, engine] of engines.entries()) {
+    if (index === 1)
+      await service.patchTask(employee.subject, task.id, { status: "done" });
+    const run = await service.startRun(employee.subject, {
+      conversationId: employee.conversation,
+      engine,
+      workflow: "follow_up",
+      instruction: "native-follow-up-fixture: compare only current tasks.",
+      modelProfileId: employee.modelId,
+      idempotencyKey: randomUUID(),
+    });
+    runs.push(run.id);
+    await processor.process(run.id);
+    const result = await service.getRun(employee.subject, run.id);
+    assert.equal(result.state, "succeeded", result.error);
+    const receipt = result.result.receipts[0];
+    assert.equal(receipt.notify, index === 1);
+    assert.equal(receipt.reason, ["baseline", "changed", "unchanged"][index]);
+    assert.ok(
+      result.contextRefs.every((ref: string) => ref.startsWith("task:")),
+    );
+    assert.equal(
+      (
+        await db.pool.query(
+          "SELECT id FROM cw_messages WHERE metadata->>'runId'=$1",
+          [run.id],
+        )
+      ).rowCount,
+      index === 1 ? 1 : 0,
+    );
+  }
+  return runs;
+}
+
 export async function exerciseNativeBusiness(
   engine: NativeEngine,
   switchThrough?: NativeEngine,
@@ -386,6 +442,13 @@ export async function exerciseNativeBusiness(
         (await service.getRun(employees[0]!.subject, employees[0]!.runId))
           .engine,
         engine,
+      );
+      allRuns.push(
+        ...(await verifyFollowUp(db, service, processor, employees[0]!, [
+          engine,
+          switchThrough,
+          engine,
+        ])),
       );
     }
     assert.deepEqual(fixture.violations, []);

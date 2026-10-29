@@ -396,6 +396,13 @@ export function App() {
                 } as any
               )[run.state] ?? run.state}
               {run.error ? "：" + run.error : ""}
+              {run.workflow === "follow_up" && run.result?.receipts?.[0] ? (
+                <small className="follow-up-status" role="status">
+                  {run.result.receipts[0].notify
+                    ? "待办变化已合并为一条项目消息。"
+                    : run.result.receipts[0].summary}
+                </small>
+              ) : null}
             </span>
             {replyReceipt ? (
               <button
@@ -683,6 +690,12 @@ export function App() {
                 ? "回复草稿仅你可见，检查后可放入企业会话发送框。"
                 : "成果保存在当前项目。"}
               不会自动发布到企业会话。
+            </p>
+          ) : null}
+          {workflow === "follow_up" ? (
+            <p className="source-scope-note">
+              只检查当前项目待办。首次建立基线，无变化时不发消息；有变化时合并为一条项目消息。
+              本次为单次检查，尚未设置定时跟进。
             </p>
           ) : null}
           <form

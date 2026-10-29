@@ -18,6 +18,7 @@ import { stableDigest } from "./credentials.js";
 import { reviseArtifactVersion } from "./artifacts.js";
 import { ModelService } from "./models.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
+import { FollowUpService } from "./follow-up.js";
 import {
   FileReadingService,
   ReadingVersionConflict,
@@ -246,12 +247,22 @@ export class RunProcessor {
         throw new Error("一次文件阅读必须只保存一条个人解读。");
       if (run.workflow === "draft_reply" && result.actions.length !== 1)
         throw new Error("一次起草必须只准备一条会话回复。");
+      if (run.workflow === "follow_up" && result.actions.length !== 1)
+        throw new Error("一次待办检查必须只执行一次状态比较。");
       const receipts: Record<string, unknown>[] = [];
       for (const [index, action] of result.actions.entries()) {
         await assertRunScope(this.service, subject, run);
         abort.signal.throwIfAborted();
         receipts.push(
-          await this.applyAction(subject, run, lease, action, index, sourceIds),
+          await this.applyAction(
+            subject,
+            run,
+            lease,
+            action,
+            index,
+            sourceIds,
+            result.evidence,
+          ),
         );
       }
       await assertRunScope(this.service, subject, run);
@@ -274,7 +285,11 @@ export class RunProcessor {
           [runId, lease],
         );
         if (current.rows[0]?.state !== "running") return;
-        if (run.workflow !== "draft_reply" && !isFileWorkflow(run.workflow))
+        if (
+          run.workflow !== "draft_reply" &&
+          run.workflow !== "follow_up" &&
+          !isFileWorkflow(run.workflow)
+        )
           await c.query(
             "INSERT INTO cw_messages(id,workspace_id,conversation_id,author,role,content,metadata) VALUES($1,$2,$3,'协作助手','assistant',$4,$5)",
             [
@@ -293,9 +308,11 @@ export class RunProcessor {
               text:
                 run.workflow === "draft_reply"
                   ? "回复草稿已保存，尚未发送。"
-                  : isFileWorkflow(run.workflow)
-                    ? "个人文件解读已保存。"
-                    : result.text,
+                  : run.workflow === "follow_up"
+                    ? receipts[0]!.summary
+                    : isFileWorkflow(run.workflow)
+                      ? "个人文件解读已保存。"
+                      : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -357,6 +374,7 @@ export class RunProcessor {
     action: PlannedAction,
     index: number,
     sourceIds: string[],
+    evidence: "fixture" | "runtime",
   ) {
     if (!toolsForWorkflow(run.workflow).includes(action.tool))
       throw new Error("本次工作类型未授权该业务动作。");
@@ -377,7 +395,7 @@ export class RunProcessor {
       if (current?.state !== "running" || current.lease_owner !== lease)
         throw new Error("Task stopped.");
       const member = await c.query(
-        "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2",
+        "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
         [s.workspaceId, s.id],
       );
       if (!member.rowCount) throw new Error("Workspace access revoked.");
@@ -522,13 +540,16 @@ export class RunProcessor {
           state: "draft",
         };
       } else if (action.tool === "follow_up.check") {
-        const pending = (
-          await c.query(
-            "SELECT id,title,status FROM cw_tasks WHERE project_id=$1 AND workspace_id=$2 AND status='open'",
-            [conv.project_id, s.workspaceId],
-          )
-        ).rows;
-        receipt = { tool: action.tool, pending };
+        z.object({}).strict().parse(action.args);
+        receipt = {
+          ...(await FollowUpService.check(
+            c,
+            s,
+            run,
+            conv.project_id,
+            evidence,
+          )),
+        };
       } else throw new Error("Tool is not allowed.");
       await c.query(
         "INSERT INTO cw_actions(id,workspace_id,actor_id,run_id,tool,params_hash,idempotency_key,state,result) VALUES($1,$2,$3,$4,$5,$6,$7,'completed',$8)",

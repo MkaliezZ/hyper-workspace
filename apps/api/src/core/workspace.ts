@@ -461,6 +461,8 @@ export class WorkspaceService {
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
+    if (input.workflow === "follow_up" && input.artifactId)
+      throw new BadRequestException("待办检查不接受成果目标。");
     if (
       input.workflow === "draft_reply" &&
       !(await this.access.binding(s, conversation.project_id))

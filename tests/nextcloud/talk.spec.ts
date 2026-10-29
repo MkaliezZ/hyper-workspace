@@ -234,6 +234,8 @@ test("Source project scope survives both real engines and blocks results after r
   const seen = new Set<string>();
   const fixture = modelFixture(["synthetic-source-model-key"], async (body) => {
     const text = JSON.stringify(body.messages);
+    if (text.includes("native-follow-up-fixture"))
+      expect(text).not.toContain(sentinel);
     if (text.includes(sentinel) && /talk:nextcloud:/.test(text))
       seen.add(currentEngine);
     if (revoke) {
@@ -340,15 +342,20 @@ test("Source project scope survives both real engines and blocks results after r
     );
     expect(profileResponse.status()).toBe(201);
     const profile = await profileResponse.json();
-    const start = async (engine: string) => {
+    const start = async (
+      engine: string,
+      workflow = "discussion_to_minutes",
+    ) => {
       const response = await actor.context.request.post(origin + "/api/runs", {
         headers: { Origin: origin },
         data: {
           conversationId: workspace.project.conversationId,
           engine,
-          workflow: "discussion_to_minutes",
+          workflow,
           instruction:
-            "Use authorized source messages to prepare a draft artifact.",
+            workflow === "follow_up"
+              ? "native-follow-up-fixture: check only current product tasks."
+              : "Use authorized source messages to prepare a draft artifact.",
           modelProfileId: profile.id,
           idempotencyKey: randomUUID(),
         },
@@ -397,6 +404,78 @@ test("Source project scope survives both real engines and blocks results after r
     }
     expect([...seen].sort()).toEqual(["dsh", "hermes"]);
     expect(fixture.violations).toEqual([]);
+    const taskResponse = await actor.context.request.post(
+      origin +
+        "/api/conversations/" +
+        workspace.project.conversationId +
+        "/tasks",
+      {
+        headers: { Origin: origin },
+        data: {
+          title: "Synthetic source-scoped follow-up task",
+          assignee: "talk-bob",
+          dueDate: null,
+        },
+      },
+    );
+    expect(taskResponse.status()).toBe(201);
+    const task = await taskResponse.json();
+    let baselineRunId = "";
+    for (const [index, engine] of ["dsh", "hermes", "dsh"].entries()) {
+      if (index === 1)
+        expect(
+          (
+            await actor.context.request.patch(
+              origin + "/api/tasks/" + task.id,
+              {
+                headers: { Origin: origin },
+                data: { status: "done" },
+              },
+            )
+          ).status(),
+        ).toBe(200);
+      const run = await start(engine, "follow_up");
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await actor.context.request.get(origin + "/api/runs/" + run.id)
+              ).json()
+            ).state,
+          { timeout: 60000, intervals: [700] },
+        )
+        .toBe("succeeded");
+      const result = await (
+        await actor.context.request.get(origin + "/api/runs/" + run.id)
+      ).json();
+      expect(result.result.receipts[0].notify).toBe(index === 1);
+      expect(result.result.receipts[0].reason).toBe(
+        ["baseline", "changed", "unchanged"][index],
+      );
+      expect(
+        result.contextRefs.every((ref: string) => ref.startsWith("task:")),
+      ).toBe(true);
+      expect(
+        (
+          await db.pool.query(
+            "SELECT id FROM cw_messages WHERE metadata->>'runId'=$1",
+            [run.id],
+          )
+        ).rowCount,
+      ).toBe(index === 1 ? 1 : 0);
+      baselineRunId = run.id;
+    }
+    expect(
+      (
+        await talk(
+          "talk-alice",
+          "v1/chat/" +
+            room.token +
+            "?lookIntoFuture=0&setReadMarker=0&limit=100",
+        )
+      ).some((message: any) => message.message?.startsWith("待办有")),
+    ).toBe(false);
     expect(
       (
         await outside.context.request.get(
@@ -413,7 +492,7 @@ test("Source project scope survives both real engines and blocks results after r
     ).toHaveLength(0);
     currentEngine = "revoked";
     revoke = true;
-    const interrupted = await start("dsh");
+    const interrupted = await start("dsh", "follow_up");
     await expect
       .poll(
         async () =>
@@ -425,6 +504,14 @@ test("Source project scope survives both real engines and blocks results after r
         { timeout: 60000, intervals: [700] },
       )
       .toBe("failed");
+    expect(
+      (
+        await db.pool.query(
+          "SELECT last_run_id FROM cw_follow_up_baselines WHERE project_id=$1",
+          [workspace.project.id],
+        )
+      ).rows[0].last_run_id,
+    ).toBe(baselineRunId);
     expect(
       (
         await db.pool.query("SELECT id FROM cw_actions WHERE run_id=$1", [
