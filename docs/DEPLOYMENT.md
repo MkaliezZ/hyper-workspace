@@ -22,7 +22,7 @@ API/Worker 使用 UID/GID 10001、只读根文件系统、去除 Linux capabilit
 
 ## 准备与首次启动
 
-准备有 Docker Engine 和 Compose v2 的 Linux 主机。本机开发仍可按 README 的 Node/PostgreSQL 方式运行；容器支持范围先按 CI 的 Linux amd64 验证，不从基础镜像的多架构清单推导出 ARM/Windows 已验收。
+准备有 Docker Engine、BuildKit 和 Compose 2.17+ 的 Linux 主机，构建使用 `additional_contexts`。本机开发仍可按 README 的 Node/PostgreSQL 方式运行；容器支持范围先按 CI 的 Linux amd64 验证，不从基础镜像的多架构清单推导出 ARM/Windows 已验收。
 
 ```bash
 git clone https://github.com/MkaliezZ/hyper-workspace.git
@@ -88,10 +88,12 @@ API 与 Worker/数据库重启后，业务对象与历史保存在 PostgreSQL。
 
 上述摘要于 2026-10-29 通过 Docker Registry v2 manifest 响应核对。系统 apt 依赖随发行仓库安全更新，镜像内记录 `runtime/image-packages.txt`，镜像标记源码 revision；这不是位级可重复构建或所有 OS/Python 包安全审计。
 
-首次容器 [CI 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 的三个 job 均停在固定 Hermes 源码下载 HTTP 429，尚未运行容器业务断言。下载器已增加有界重试、缓存摘要复核，CI 仅缓存公开源码归档并通过只读 BuildKit secret 复用；不上传 `.runtime` 内的其他数据，也不改变原提交、源码 SHA-256 或上游依赖锁。缓存损坏直接失败，3 项下载回归已在本地通过；修复后的完整容器结果待 CI。
+首次容器 [CI 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 的三个 job 均停在固定 Hermes 源码下载 HTTP 429，尚未运行容器业务断言。下载器已增加有界重试、缓存摘要复核，CI 仅缓存公开源码归档并通过只读独立构建上下文复用；不上传 `.runtime` 内的其他数据，也不改变原提交、源码 SHA-256 或上游依赖锁。缓存损坏直接失败，3 项下载回归已在本地通过；修复后的完整容器结果待 CI。
+
+第二轮 [CI 40904981867](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40904981867) 下载已成功，容器构建在启动前因 BuildKit secret 的 500 KiB 上限拒绝 89 MB 公开归档。构建输入现改为只包含这份归档的命名上下文，经只读 bind mount 读取并重新校验；主构建上下文继续排除 `.runtime` 和 `.env`。默认 Compose 的该上下文只有说明文件，未准备归档时仍从固定 URL 下载。直接 `docker build` 时须提供 `--build-context hermes_source=runtime/hermes/build-context`，日常部署使用上方 Compose 命令即可。
 
 本地通过类型/构建、15 单元/Provider/部署配置、49 数据库、18 UI 回归；编译后的 API 在独立本地端口直接提供网页，验证正常登录、HttpOnly cookie、私有路径拒绝、桌面/手机无溢出。首次复用测试库时，其最后一项撤权测试让演示成员失效，静态登录验证失败；仅对隔离测试库重新 seed 后复测，未放宽鉴权。
 
 独立 `deployment` CI 将从干净镜像构建启动 Compose，检查构建网页、双原生执行器、同一成果跨引擎修订、数据库/API/Worker 停启持久化，以及中断 Worker 的租约隔离与不重放；模型为网络内的合成协议服务。该容器结果本轮待运行。本机无 Docker，不把本地静态 HTTP 测试写成容器已通过；真实公司部署、真实模型质量及完整 E01–E10 仍未验收。
 
-依据：[Compose 启动依赖](https://docs.docker.com/compose/how-tos/startup-order/)、[多阶段构建](https://docs.docker.com/build/building/multi-stage/)、[官方 Python 镜像构建定义](https://github.com/docker-library/python/blob/master/3.14/slim-bookworm/Dockerfile)。文档分支只作说明，实际版本以摘要与 CI 为准。
+依据：[Compose 启动依赖](https://docs.docker.com/compose/how-tos/startup-order/)、[独立构建上下文](https://docs.docker.com/reference/compose-file/build/#additional_contexts)、[多阶段构建](https://docs.docker.com/build/building/multi-stage/)、[官方 Python 镜像构建定义](https://github.com/docker-library/python/blob/master/3.14/slim-bookworm/Dockerfile)。文档分支只作说明，实际版本以摘要与 CI 为准。

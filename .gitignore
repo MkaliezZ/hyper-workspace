@@ -10,3 +10,4 @@ playwright-report/
 test-results/
 .runtime/
 .data/
+__pycache__/

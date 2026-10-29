@@ -27,8 +27,8 @@ WORKDIR /app
 COPY runtime/dsh/package.json runtime/dsh/package-lock.json runtime/dsh/
 RUN npm ci --prefix runtime/dsh --registry=https://registry.npmjs.org
 COPY runtime/hermes runtime/hermes
-RUN --mount=type=secret,id=hermes_source,required=false \
-    if [ -f /run/secrets/hermes_source ]; then HERMES_SOURCE_ARCHIVE=/run/secrets/hermes_source python3 runtime/hermes/install.py; else python3 runtime/hermes/install.py; fi && rm -f .runtime/hermes-*.tar.gz
+RUN --mount=type=bind,from=hermes_source,target=/source-cache,ro \
+    if [ -f /source-cache/hermes-source.tar.gz ]; then HERMES_SOURCE_ARCHIVE=/source-cache/hermes-source.tar.gz python3 runtime/hermes/install.py; else python3 runtime/hermes/install.py; fi && rm -f .runtime/hermes-*.tar.gz
 
 FROM ${PYTHON_IMAGE} AS application
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libstdc++6 libatomic1 && rm -rf /var/lib/apt/lists/* && groupadd --gid 10001 hyper && useradd --uid 10001 --gid 10001 --no-create-home hyper

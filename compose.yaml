@@ -20,6 +20,8 @@ x-application: &application
   image: hyper-workspace:${HYPER_IMAGE_TAG:-local}
   build:
     context: .
+    additional_contexts:
+      hermes_source: ./runtime/hermes/build-context
     args:
       VCS_REF: ${HYPER_REVISION:-unrecorded}
   init: true

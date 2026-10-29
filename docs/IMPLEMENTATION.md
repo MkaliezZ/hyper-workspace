@@ -98,7 +98,9 @@
 - 配置生成器以 0600 创建独立密钥并拒绝覆盖；API 默认 loopback，容器显式绑定，公开生产 origin 要求 HTTPS；Cookie 安全属性按规范 origin，演示登录仍要求实际 socket 为 loopback。Worker 健康文件需数据库探测成功，运行卷仅挂 Worker。
 - 新增 3 项部署配置/保护用例，本地共 15 单元、49 数据库、18 UI 与编译网页 HTTP/手机验证通过。独立容器 CI 增加 2 项组合用例，真实镜像启动、双引擎、数据持久化及中断租约恢复待当前 CI。源码映射、来源、备份、迁移与未验证项见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 - 本机缺 Docker，未声称容器本地通过；公司 HTTPS/SSO、数据库权限分离、镜像全面审计、备份恢复、容量与生产加固仍待完成。冻结包不改。
-- 首轮提交 `08ddfe8` 的 [run 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 三个 job 均因固定 Hermes 源码下载 HTTP 429 失败，容器断言尚未运行。增加有界重试、每次复核摘要的公开源码缓存和只读构建 secret，保留原锁；3 项下载器回归通过，完整 CI 待复测。缓存不含 Run 数据或凭据，来源诊断仅在容器已创建时读取日志。
+- 首轮提交 `08ddfe8` 的 [run 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 三个 job 均因固定 Hermes 源码下载 HTTP 429 失败，容器断言尚未运行。增加有界重试、每次复核摘要的公开源码缓存和只读独立构建上下文，保留原锁；3 项下载器回归通过，完整 CI 待复测。缓存不含 Run 数据或凭据，来源诊断仅在容器已创建时读取日志。
+
+- 第二轮 [run 40904981867](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40904981867) 已成功下载固定归档，构建复用因 secret 500 KiB 上限失败；已改为只含公开归档的命名上下文与只读挂载，安装器再次校验摘要。容器行为待后续 CI。
 
 ## 本地环境证据
 

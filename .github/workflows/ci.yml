@@ -134,7 +134,8 @@ jobs:
       - run: npm ci
       - run: python3 runtime/hermes/download.py
       - run: |
-          mkdir -p .runtime
+          mkdir -p .runtime/hermes-build-source
+          cp .runtime/hermes-source.tar.gz .runtime/hermes-build-source/hermes-source.tar.gz
           node scripts/deploy-init.mjs .runtime/compose-ci.env
           docker compose version
           docker compose --project-name hyper-deployment-ci --env-file .runtime/compose-ci.env -f compose.yaml -f deploy/compose.ci.yaml config --quiet
