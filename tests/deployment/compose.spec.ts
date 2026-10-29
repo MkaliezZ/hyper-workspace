@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 const origin = "http://127.0.0.1:8080";
 const args = [
   "compose",
@@ -43,6 +44,33 @@ async function session(context: any) {
     },
   ]);
 }
+
+test("Compiled restricted containers extract all four document formats without engine credentials", async () => {
+  const fixture = readFileSync("tests/fixtures/document-source.py", "utf8");
+  const script = `
+    import {execFileSync} from 'node:child_process';
+    import {DocumentExtractor} from './dist/core/document-extraction.js';
+    const generator=${JSON.stringify(fixture)};
+    const host=new DocumentExtractor();
+    const result=[];
+    for(const format of ['pdf','docx','xlsx','pptx']) {
+      const token='synthetic-container-document-'+format;
+      const bytes=execFileSync('/app/.runtime/documents/bin/python',['-c',generator,format,token]);
+      const parsed=await host.extract(bytes,format);
+      if(!parsed.text.includes(token)||!parsed.sections.length) throw Error('Missing extraction result');
+      result.push({format,parserVersion:parsed.parserVersion});
+    }
+    process.stdout.write(JSON.stringify(result));`;
+  const result = JSON.parse(
+    compose("exec", "-T", "api", "node", "--input-type=module", "-e", script),
+  );
+  expect(result).toEqual(
+    ["pdf", "docx", "xlsx", "pptx"].map((format) => ({
+      format,
+      parserVersion: "document-text-v1",
+    })),
+  );
+});
 async function completed(request: any, id: string) {
   await expect
     .poll(

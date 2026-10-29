@@ -6,13 +6,39 @@ import {
 } from "@nestjs/common";
 import { FilePath, type SourceFile } from "@hyper/contracts";
 import { XMLParser } from "fast-xml-parser";
-import type { StorageProvider } from "./storage.js";
+import type { StorageProvider, ExtractedFile } from "./storage.js";
+import {
+  DocumentExtractor,
+  DOCUMENT_PARSER_VERSION,
+  MAX_DOCUMENT_BYTES,
+  type DocumentFormat,
+} from "../core/document-extraction.js";
 import type { NextcloudConfig, SourceCredentials } from "./nextcloud.js";
 
 const DAV = "DAV:",
   OC = "http://owncloud.org/ns";
 export const MAX_FILE_BYTES = 65536,
   MAX_FILE_TEXT = 18000;
+const DOCUMENT_MIMES: Record<string, string> = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+function documentFormat(
+  name: string,
+  mime: string,
+): DocumentFormat | undefined {
+  const extension = name.toLowerCase().split(".").at(-1)!;
+  return DOCUMENT_MIMES[extension] === mime
+    ? (extension as DocumentFormat)
+    : undefined;
+}
+export function fileParserVersion(file: Pick<SourceFile, "name" | "mime">) {
+  return documentFormat(file.name, file.mime)
+    ? DOCUMENT_PARSER_VERSION
+    : "utf8-text-v1";
+}
 const REQUEST =
   '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/><d:getetag/><d:getcontentlength/><d:getcontenttype/><d:resourcetype/></d:prop></d:propfind>';
 type Element = { value: any; ns: Record<string, string> };
@@ -246,9 +272,12 @@ export class NextcloudFilesProvider implements StorageProvider {
           mime,
           importable:
             kind === "file" &&
-            size <= MAX_FILE_BYTES &&
-            /\.(?:txt|md|markdown)$/i.test(name) &&
-            ["text/plain", "text/markdown", "text/x-markdown"].includes(mime),
+            ((size <= MAX_FILE_BYTES &&
+              /\.(?:txt|md|markdown)$/i.test(name) &&
+              ["text/plain", "text/markdown", "text/x-markdown"].includes(
+                mime,
+              )) ||
+              (size <= MAX_DOCUMENT_BYTES && !!documentFormat(name, mime))),
         });
         paths.add(JSON.stringify(selectedPath));
       }
@@ -281,9 +310,12 @@ export class NextcloudFilesProvider implements StorageProvider {
     )!;
   }
   async read(file: SourceFile) {
+    return (await this.extract(file)).text;
+  }
+  async extract(file: SourceFile): Promise<ExtractedFile> {
     if (!file.importable)
       throw new BadRequestException(
-        "当前只导入 64 KiB 内的 UTF-8 文本或 Markdown 文件。",
+        "当前支持 64 KiB 内的短文本/Markdown，以及 8 MiB 内的 PDF/DOCX/XLSX/PPTX。",
       );
     const response = await this.request(file.path, "GET", {
       "If-Match": file.etag,
@@ -292,9 +324,15 @@ export class NextcloudFilesProvider implements StorageProvider {
       await response.body?.cancel();
       throw new ConflictException("文件已变化，请重新选择。");
     }
-    const bytes = await bounded(response, MAX_FILE_BYTES);
+    const format = documentFormat(file.name, file.mime);
+    const bytes = await bounded(
+      response,
+      format ? MAX_DOCUMENT_BYTES : MAX_FILE_BYTES,
+    );
     if (bytes.length !== file.size)
       throw new ServiceUnavailableException("文件内容长度与来源信息不符。");
+    if (format)
+      return new DocumentExtractor().extract(Buffer.from(bytes), format);
     let text: string;
     try {
       text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -309,7 +347,13 @@ export class NextcloudFilesProvider implements StorageProvider {
       throw new BadRequestException(
         "文本为空、包含二进制控制内容或超过 18000 字符。",
       );
-    return text;
+    return {
+      text,
+      parserVersion: "utf8-text-v1",
+      format: "text",
+      sections: [],
+      warnings: [],
+    };
   }
   async assertReadable(file: SourceFile) {
     const response = await this.request(file.path, "GET", {

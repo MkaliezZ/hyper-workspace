@@ -36,9 +36,14 @@ def check_package(data, kind):
                 if (member.file_size > 8 * 1024 * 1024 or total > 32 * 1024 * 1024
                         or member.file_size > max(member.compress_size, 1) * 200):
                     raise ExtractionError("Office 文件解压后超过解析限额。")
-                if name.endswith((".xml", ".rels")):
-                    raw = archive.read(member)
-                    if re.search(br"<!\s*(?:DOCTYPE|ENTITY)", raw, re.I) or b"\x00" in raw:
+                raw = archive.read(member)
+                # XML relationships can target another extension. Binary printer
+                # settings may embed a plist, but are never parsed as XML here.
+                is_xml = (name.lower().endswith((".xml", ".rels"))
+                          or raw.lstrip(b" \t\r\n\xef\xbb\xbf").startswith(b"<")
+                          or raw.startswith((b"\xff\xfe", b"\xfe\xff")))
+                if is_xml:
+                    if re.search(br"<!\s*(?:DOCTYPE|ENTITY)", raw, re.I) or b"\x00" in raw or raw.startswith((b"\xff\xfe", b"\xfe\xff")):
                         raise ExtractionError("Office XML 包含不支持的声明或编码。")
                     if kind == "docx" and name == "word/document.xml":
                         if re.search(br"<(?:\w+:)?(?:ins|del)(?:\s|>)", raw):

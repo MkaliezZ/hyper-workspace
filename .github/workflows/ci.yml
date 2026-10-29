@@ -111,6 +111,7 @@ jobs:
       - run: python3 runtime/hermes/download.py
       - run: python3 runtime/hermes/install.py
       - run: bash scripts/ci/nextcloud-setup.sh
+      - run: python3 -m venv .runtime/documents && .runtime/documents/bin/python -m pip install --require-hashes -r runtime/documents/requirements.lock --index-url https://pypi.org/simple
       - run: npm run migrate && npm run workspace:init
       - run: npx playwright install --with-deps chromium
       - run: npm run test:nextcloud

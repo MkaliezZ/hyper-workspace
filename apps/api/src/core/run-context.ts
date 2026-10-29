@@ -64,6 +64,11 @@ export async function loadRunContext(
         JSON.stringify({
           title: file.title,
           content: file.content,
+          extraction: {
+            parserVersion: file.parserVersion,
+            format: file.extraction?.format,
+            warnings: file.extraction?.warnings ?? [],
+          },
           sourceRef: ref,
           ...(reading
             ? {

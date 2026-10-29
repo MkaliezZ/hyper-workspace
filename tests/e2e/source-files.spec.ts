@@ -38,6 +38,103 @@ async function start(page: any, request: any) {
     .click();
   await page.getByRole("tab", { name: "企业文件", exact: true }).click();
 }
+
+test("Document extraction preview shows source locations and limitations, stays usable on mobile and clears after lost access", async ({
+  page,
+  request,
+}) => {
+  const documentTitle = "UI测试资料.pdf",
+    extracted = "[第 1 页]\n明确标记的解析界面测试资料";
+  let imported = false,
+    allowed = true;
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => {
+    if (["error", "warning"].includes(m.type())) errors.push(m.text());
+  });
+  await page.route("**/api/files/list", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "98",
+          path: [documentTitle],
+          name: documentTitle,
+          kind: "file",
+          size: 1200,
+          mime: "application/pdf",
+          etag: '"doc-v1"',
+          importable: true,
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/files/import", (route) => {
+    imported = true;
+    return route.fulfill({
+      json: { id, title: documentTitle, sourceVersion: "doc-v1" },
+    });
+  });
+  await page.route("**/api/files/imports", (route) =>
+    route.fulfill({
+      json:
+        imported && allowed
+          ? [
+              {
+                id,
+                title: documentTitle,
+                sourceVersion: "doc-v1",
+                state: "ready",
+              },
+            ]
+          : [],
+    }),
+  );
+  await page.route("**/api/files/imports/" + id, (route) =>
+    route.fulfill({
+      json: {
+        id,
+        title: documentTitle,
+        sourceVersion: "doc-v1",
+        content: extracted,
+        parserVersion: "document-text-v1",
+        extraction: {
+          format: "pdf",
+          warnings: ["第 2 页没有可提取文本，未执行 OCR。"],
+        },
+      },
+    }),
+  );
+  await page.route("**/api/files/imports/" + id + "/readings", (route) =>
+    route.fulfill({ json: { readings: [] } }),
+  );
+  await start(page, request);
+  await page.getByRole("button", { name: "导入个人资料", exact: true }).click();
+  await page.getByRole("button", { name: "查看文本", exact: true }).click();
+  const preview = page.getByRole("region", { name: "文件文本预览" });
+  await expect(preview).toContainText("不是原文件版式或在线编辑器");
+  await expect(preview).toContainText("未执行 OCR");
+  await expect(preview).toContainText("[第 1 页]");
+  await expect(page).toHaveTitle(/Hyper Workspace/);
+  expect(page.url()).toBe("http://127.0.0.1:5173/");
+  await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+  await preview.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/hyper-document-preview-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await preview.scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/hyper-document-preview-mobile.png" });
+  allowed = false;
+  await page.getByRole("button", { name: "刷新文件权限", exact: true }).click();
+  await expect(preview).toHaveCount(0);
+  await expect(
+    page.getByText("第 2 页没有可提取文本，未执行 OCR。", { exact: true }),
+  ).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
 test("Explicit file selection imports only the selected source version and builds an index after a separate action", async ({
   page,
   request,

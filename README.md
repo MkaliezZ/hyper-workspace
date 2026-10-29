@@ -96,7 +96,7 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 ## 企业文件与个人资料
 
-新增 Nextcloud Files/WebDAV 浏览与显式导入，在“知识库 → 企业文件”选择短文本/Markdown，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。真实来源分享、更新、刷新与撤权联合用例已通过 CI。PDF/Office、长文分块、文件到共享项目成果的权限传播和 Calendar 仍待完成。[配置、数据契约与回退](docs/NEXTCLOUD-FILES.md)。
+Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。文本/Markdown 的真实来源联合用例已通过既有 CI；本轮新增 PDF/DOCX/XLSX/PPTX 受控文本提取，当前完整接入 CI 待核验。长文分块、共享发布和 Calendar 仍待完成。[文件契约](docs/NEXTCLOUD-FILES.md) · [文档提取、限额与部署](docs/DOCUMENT-INGESTION.md)。
 
 下图使用明确 UI 协议测试资料，非真实公司文件。
 
@@ -121,9 +121,13 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 项目成果已支持纯文本/Markdown 编辑、AI 生成和反馈修订、历史版本。新增针对确切已保存版本的员工验收：接受、要求修改、重开，可直接记录或让 DSH/Hermes 代执行员工已确认的决定。新内容版本重新作为草稿，旧版意见保留；AI 不自行判断是否合格，也不自动把成果正文发送给模型。[验收契约、权限、迁移与证据](docs/ARTIFACT-REVIEWS.md)。
 
-当前仅为基础文本成果和短文本资料阅读，尚无富文本、多人实时协作、批注评论、PDF/Office 解析或 Word/Excel/PPT 编辑。个人文件解读与项目成果分别保留权限范围。
+当前支持基础文本成果和个人文档提取阅读，尚无富文本、多人实时协作、批注评论或 Word/Excel/PPT 原件编辑。个人文件解读与项目成果分别保留权限范围。
 
-PDF/Office 接入开发中：[独立解析组件](runtime/documents/README.md) 已通过首轮 8 项本地解析测试，依赖按版本与哈希锁定；产品导入、预览、AI 阅读和容器尚未接入，当前界面仍只开放文本/Markdown。
+“企业文件”新增 PDF/DOCX/XLSX/PPTX（最多 8 MiB、提取文本含位置最多 18000 字符），支持个人预览、AI 阅读/续改与索引。扫描件不执行 OCR；公式明确标记未计算，不承诺版式复现。解析器独立于 DSH/Hermes，安装方法、限制和证据见 [文档接入](docs/DOCUMENT-INGESTION.md)。完整接入的本机业务/界面测试已通过，真实 Nextcloud 与容器新增场景等待本轮 CI。独立组件 `5cdb970` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563) 三个 job 全部成功，共 145 项测试，仅证明该组件阶段，不能替代后续业务接入验证。
+
+![文档提取位置与限制说明（UI 协议测试资料）](docs/images/document-preview-desktop.png)
+
+[移动端文档预览](docs/images/document-preview-mobile.png)
 
 ![员工对确切版本的验收（演示资料）](docs/images/artifact-review-desktop.png)
 

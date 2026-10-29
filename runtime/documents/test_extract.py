@@ -100,6 +100,8 @@ class ExtractionTests(unittest.TestCase):
 
     def test_package_guards_do_not_trust_xml_paths_or_compression(self):
         for name, content in [("../word/document.xml", b"x"),
+                              ("word/alternate.XML", b"<!DOCTYPE d><d/>"),
+                              ("word/custom.data", b"<!DOCTYPE d><d/>"),
                               ("word/document.xml", b"<!DOCTYPE d [<!ENTITY e 'x'>]><d/>"),
                               ("word/document.xml", b"<w:ins xmlns:w='x'>text</w:ins>"),
                               ("word/document.xml", b"x" * (9 * 1024 * 1024)),

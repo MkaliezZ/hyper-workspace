@@ -18,6 +18,7 @@ import { DavFixture } from "../fixtures/dav.js";
 import { FileReadingService } from "../../apps/api/src/core/file-readings.js";
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 const url = process.env.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.endsWith("_test"))
   throw new Error("Use an isolated TEST_DATABASE_URL ending in _test.");
@@ -1197,6 +1198,150 @@ test("A torn file read never becomes an active asset", async () => {
       )
     ).rowCount,
     0,
+  );
+});
+
+test("PDF and Office source imports preserve extraction provenance, private AI scope and revoke all derived text", async () => {
+  const formats = {
+    pdf: "application/pdf",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  };
+  const files = new SourceFileService(db);
+  const documentEmbedding = await fileEmbedding(
+    new WorkspaceService(db, engineRegistry()),
+  );
+  for (const [format, mime] of Object.entries(formats)) {
+    const token = "synthetic-document-" + format;
+    const bytes = execFileSync(resolve(".runtime/documents/bin/python"), [
+      "tests/fixtures/document-source.py",
+      format,
+      token,
+    ]);
+    const source = dav.add("alice", [randomUUID() + "." + format], bytes, mime);
+    assert.equal(
+      (await files.list(s(), [])).find((f) => f.id === source.id)?.importable,
+      true,
+    );
+    const imported = await files.import(
+      s(),
+      source.path,
+      source.id,
+      source.etag,
+    );
+    const preview = await files.get(s(), imported.id);
+    assert.ok(preview.content.includes(token));
+    assert.equal(preview.parserVersion, "document-text-v1");
+    assert.equal(preview.extraction.format, format);
+    assert.ok(preview.extraction.sections.length > 0);
+    assert.ok(
+      (
+        await new KnowledgeService(db).index(
+          s(),
+          [imported.id],
+          documentEmbedding.id,
+        )
+      ).indexed.includes(imported.id),
+    );
+    await assert.rejects(files.get(s("bob"), imported.id));
+    const work = scopedWorkspace(async (request: any) => {
+      assert.ok(request.context.includes(token));
+      assert.ok(request.context.includes("document-text-v1"));
+      if (format === "xlsx")
+        assert.ok(request.context.includes("公式（未计算）"));
+      return readingProposal("Personal document reading " + format);
+    });
+    await chatProfile(work);
+    const started = await work.startFileRun(s(), imported.id, {
+      engine: "dsh",
+      instruction: "Read only this selected document.",
+      expectedSourceVersion: imported.sourceVersion,
+      idempotencyKey: randomUUID(),
+    });
+    await new RunProcessor(work).process(started.id);
+    const run = await work.getRun(s(), started.id);
+    assert.equal(run.state, "succeeded", run.error);
+    const readingId = run.result.receipts[0].id;
+    await db.pool.query(
+      "UPDATE cw_source_files SET parser_version='old-parser' WHERE asset_id=$1",
+      [imported.id],
+    );
+    await assert.rejects(files.get(s(), imported.id));
+    await assert.rejects(new FileReadingService(db).get(s(), readingId));
+    assert.deepEqual(
+      (
+        await db.pool.query(
+          "SELECT extraction_metadata FROM cw_source_files WHERE asset_id=$1",
+          [imported.id],
+        )
+      ).rows[0].extraction_metadata,
+      {},
+    );
+    const refreshed = await files.refresh(s(), imported.id);
+    assert.equal(refreshed.id, imported.id);
+    assert.ok((await files.get(s(), imported.id)).content.includes(token));
+    source.readers.clear();
+    await assert.rejects(files.get(s(), imported.id));
+    assert.equal(
+      (
+        await db.pool.query("SELECT content FROM cw_assets WHERE id=$1", [
+          imported.id,
+        ])
+      ).rows[0].content,
+      "",
+    );
+  }
+});
+
+test("Malformed documents and source changes during extraction cannot save an active copy", async () => {
+  const files = new SourceFileService(db);
+  const invalid = dav.add(
+    "alice",
+    [randomUUID() + ".pdf"],
+    "not-a-pdf",
+    "application/pdf",
+  );
+  await assert.rejects(
+    files.import(s(), invalid.path, invalid.id, invalid.etag),
+    /不是 PDF/,
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT asset_id FROM cw_source_files WHERE remote_file_id=$1 AND workspace_id=$2",
+        [invalid.id, workspace],
+      )
+    ).rowCount,
+    0,
+  );
+  const bytes = execFileSync(resolve(".runtime/documents/bin/python"), [
+    "tests/fixtures/document-source.py",
+    "pdf",
+    "synthetic-torn-document",
+  ]);
+  const source = dav.add(
+    "alice",
+    [randomUUID() + ".pdf"],
+    bytes,
+    "application/pdf",
+  );
+  source.afterRead = () => {
+    source.etag = '"changed-during-read"';
+  };
+  await assert.rejects(
+    files.import(s(), source.path, source.id, '"v1"'),
+    /读取期间文件已变化/,
+  );
+  const spoofed = dav.add(
+    "alice",
+    [randomUUID() + ".docx"],
+    bytes,
+    "application/pdf",
+  );
+  assert.equal(
+    (await files.list(s(), [])).find((f) => f.id === spoofed.id)?.importable,
+    false,
   );
 });
 

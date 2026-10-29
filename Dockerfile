@@ -26,6 +26,8 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && ln -s ../
 WORKDIR /app
 COPY runtime/dsh/package.json runtime/dsh/package-lock.json runtime/dsh/
 RUN npm ci --prefix runtime/dsh --registry=https://registry.npmjs.org
+COPY runtime/documents/requirements.lock runtime/documents/requirements.lock
+RUN python3 -m venv .runtime/documents && .runtime/documents/bin/python -m pip install --no-cache-dir --require-hashes -r runtime/documents/requirements.lock --index-url https://pypi.org/simple
 COPY runtime/hermes runtime/hermes
 RUN --mount=type=bind,from=hermes_source,target=/source-cache,ro \
     if [ -f /source-cache/hermes-source.tar.gz ]; then HERMES_SOURCE_ARCHIVE=/source-cache/hermes-source.tar.gz python3 runtime/hermes/install.py; else python3 runtime/hermes/install.py; fi && rm -f .runtime/hermes-*.tar.gz
@@ -48,6 +50,7 @@ COPY --from=engines /app/runtime/dsh/node_modules runtime/dsh/node_modules
 COPY runtime/dsh runtime/dsh
 COPY runtime/hermes runtime/hermes
 COPY db/migrations db/migrations
+COPY runtime/documents runtime/documents
 COPY ["docs/handoff-v1/AI-IM基线/product-baseline.v1.json", "docs/handoff-v1/AI-IM基线/product-baseline.v1.json"]
 COPY scripts/deploy-bootstrap.mjs scripts/deploy-database.mjs scripts/worker-health.mjs scripts/
 COPY LICENSE ./LICENSE

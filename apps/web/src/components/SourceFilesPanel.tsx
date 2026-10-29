@@ -14,6 +14,8 @@ interface Preview {
   title: string;
   content: string;
   sourceVersion: string;
+  parserVersion?: string;
+  extraction?: { format?: string; warnings?: string[] };
 }
 export function SourceFilesPanel({
   enabled,
@@ -149,8 +151,9 @@ export function SourceFilesPanel({
     <section aria-label="企业文件导入" className="source-files-panel">
       <h3>选择文件，加入个人资料</h3>
       <p className="muted">
-        从你有权限的文件中显式选择。当前支持 64 KiB、18000 字符内的 UTF-8 文本和
-        Markdown，副本仅你可见；不会自动加入项目 AI 上下文。
+        从你有权限的文件中显式选择。支持短文本/Markdown（64 KiB），以及
+        PDF、DOCX、XLSX、PPTX（8 MiB）。提取文本上限 18000 字符；扫描件不执行
+        OCR，不支持加密文件或宏。副本仅你可见，不自动加入项目 AI 上下文。
       </p>
       <form
         className="source-folder-form"
@@ -317,6 +320,19 @@ export function SourceFilesPanel({
       {preview ? (
         <section className="source-file-preview" aria-label="文件文本预览">
           <h4>{preview.title}</h4>
+          {preview.extraction?.format &&
+          preview.extraction.format !== "text" ? (
+            <div className="source-extraction-notice" role="status">
+              <p className="muted small">
+                当前显示提取文本，保留原始页码/块/单元格位置；不是原文件版式或在线编辑器。
+              </p>
+              {preview.extraction.warnings?.map((warning, index) => (
+                <p className="muted small" key={index}>
+                  {warning}
+                </p>
+              ))}
+            </div>
+          ) : null}
           <FileReaderPanel
             key={preview.id + preview.sourceVersion}
             file={preview}

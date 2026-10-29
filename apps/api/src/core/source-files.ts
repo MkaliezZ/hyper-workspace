@@ -14,6 +14,7 @@ import { invalidateFileDependents } from "./file-lifecycle.js";
 import {
   FileSourceRejected,
   NextcloudFilesProvider,
+  fileParserVersion,
 } from "../providers/nextcloud-files.js";
 
 const CLEAR_INDEX =
@@ -56,6 +57,11 @@ export class SourceFileService {
         [row.asset_id, validity, row.source_version],
       );
       if (changed.rowCount)
+        await c.query(
+          "UPDATE cw_source_files SET extraction_metadata='{}'::jsonb WHERE asset_id=$1",
+          [row.asset_id],
+        );
+      if (changed.rowCount)
         await invalidateFileDependents(c, row.asset_id, row.source_version);
     });
   }
@@ -93,7 +99,8 @@ export class SourceFileService {
               file.etag !== row.source_etag ||
               !file.importable ||
               file.size !== Number(row.size_bytes) ||
-              file.mime !== row.content_mime
+              file.mime !== row.content_mime ||
+              row.parser_version !== fileParserVersion(file)
             ) {
               await this.invalidate(row, "stale");
               // Names are shown only after the current employee can actually read the file.
@@ -161,7 +168,9 @@ export class SourceFileService {
       throw new NotFoundException("文件不可读取、已变化或需要重新导入。");
     const row = (
       await this.db.pool.query(
-        'SELECT id,title,content,source_ref AS "sourceRef",source_version AS "sourceVersion" FROM cw_assets WHERE id=$1 AND workspace_id=$2 AND owner_id=$3 AND source_version=$4 AND validity=\'active\' AND deleted_at IS NULL',
+        `SELECT a.id,a.title,a.content,a.source_ref AS "sourceRef",a.source_version AS "sourceVersion",f.parser_version AS "parserVersion",f.extraction_metadata AS extraction
+        FROM cw_assets a JOIN cw_source_files f ON f.asset_id=a.id AND f.workspace_id=a.workspace_id AND f.actor_id=a.owner_id
+        WHERE a.id=$1 AND a.workspace_id=$2 AND a.owner_id=$3 AND a.source_version=$4 AND a.validity='active' AND a.deleted_at IS NULL`,
         [id, s.workspaceId, s.id, version],
       )
     ).rows[0];
@@ -193,7 +202,13 @@ export class SourceFileService {
     const initial = await source.provider.stat(FilePath.parse(path));
     if (initial.id !== expectedId || initial.etag !== expectedEtag)
       throw new ConflictException("所选文件或版本已变化，请刷新文件夹。");
-    const content = await source.provider.read(initial);
+    const extracted = await source.provider.extract(initial),
+      content = extracted.text;
+    const metadata = {
+      format: extracted.format,
+      sections: extracted.sections,
+      warnings: extracted.warnings,
+    };
     // Recheck product/device/source membership and the exact version after downloading.
     const fresh = await this.connection(s),
       current = await fresh.provider.stat(path);
@@ -210,7 +225,18 @@ export class SourceFileService {
       version =
         current.etag +
         ":" +
-        digest(JSON.stringify([current.name, hash, "utf8-text-v1"]));
+        digest(
+          JSON.stringify(
+            extracted.parserVersion === "utf8-text-v1"
+              ? [current.name, hash, extracted.parserVersion]
+              : [
+                  current.name,
+                  hash,
+                  extracted.parserVersion,
+                  digest(JSON.stringify(metadata)),
+                ],
+          ),
+        );
     return this.db.tx(async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
         s.workspaceId + s.id + source.config.providerKey,
@@ -257,8 +283,8 @@ export class SourceFileService {
         );
       }
       await c.query(
-        `INSERT INTO cw_source_files(asset_id,workspace_id,actor_id,provider_key,remote_file_id,path,source_etag,size_bytes,content_mime,content_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-        ON CONFLICT(asset_id) DO UPDATE SET path=EXCLUDED.path,source_etag=EXCLUDED.source_etag,size_bytes=EXCLUDED.size_bytes,content_mime=EXCLUDED.content_mime,content_sha256=EXCLUDED.content_sha256,imported_at=clock_timestamp(),checked_at=clock_timestamp()`,
+        `INSERT INTO cw_source_files(asset_id,workspace_id,actor_id,provider_key,remote_file_id,path,source_etag,size_bytes,content_mime,content_sha256,parser_version,extraction_metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT(asset_id) DO UPDATE SET path=EXCLUDED.path,source_etag=EXCLUDED.source_etag,size_bytes=EXCLUDED.size_bytes,content_mime=EXCLUDED.content_mime,content_sha256=EXCLUDED.content_sha256,parser_version=EXCLUDED.parser_version,extraction_metadata=EXCLUDED.extraction_metadata,imported_at=clock_timestamp(),checked_at=clock_timestamp()`,
         [
           id,
           s.workspaceId,
@@ -270,6 +296,8 @@ export class SourceFileService {
           current.size,
           current.mime,
           hash,
+          extracted.parserVersion,
+          JSON.stringify(metadata),
         ],
       );
       return { id, title: current.name, sourceVersion: version };

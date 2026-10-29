@@ -1,12 +1,19 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
 import { modelFixture } from "../runtime/business-contract";
 import { Database } from "../../apps/api/src/db/database.js";
 import { origin, source, password, login } from "./helpers";
 const db = new Database(process.env.TEST_DATABASE_URL);
 test.afterAll(async () => db.close());
-async function upload(uid: string, name: string, content: string) {
+async function upload(
+  uid: string,
+  name: string,
+  content: string | Buffer,
+  mime = "text/markdown",
+) {
   const response = await fetch(
     source +
       "/remote.php/dav/files/" +
@@ -19,7 +26,7 @@ async function upload(uid: string, name: string, content: string) {
       headers: {
         Authorization:
           "Basic " + Buffer.from(uid + ":" + password).toString("base64"),
-        "Content-Type": "text/markdown",
+        "Content-Type": mime,
       },
       body: content,
     },
@@ -441,5 +448,155 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     await new Promise<void>((resolve) => model.close(() => resolve()));
     await bob.context.close();
     await alice.context.close();
+  }
+});
+
+test("Real PDF and Office shares produce versioned private readings through both native engines and clear on revocation", async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  let selected = "";
+  const fixture = modelFixture(["synthetic-document-reading-key"], (body) => {
+    const context = JSON.stringify(body.messages);
+    expect(context).toContain(selected);
+    expect(context).toContain("document-text-v1");
+    expect(context).toContain("native-file-reading-fixture");
+  });
+  await new Promise<void>((r) => fixture.server.listen(0, "127.0.0.1", r));
+  const actor = await login(browser, "talk-bob");
+  const headers = { Origin: origin };
+  try {
+    const profileResponse = await actor.context.request.post(
+      origin + "/api/models",
+      {
+        headers,
+        data: {
+          name: "Synthetic document reading",
+          provider: "openai-compatible",
+          purpose: "chat",
+          scope: "personal",
+          endpoint:
+            "http://127.0.0.1:" +
+            (fixture.server.address() as { port: number }).port +
+            "/v1",
+          model: "native-test-model",
+          apiKey: "synthetic-document-reading-key",
+        },
+      },
+    );
+    expect(profileResponse.status()).toBe(201);
+    const profile = await profileResponse.json();
+    for (const [index, format] of ["pdf", "docx", "xlsx", "pptx"].entries()) {
+      const name = "Hyper-document-" + randomUUID() + "." + format;
+      selected = "synthetic-document-" + format;
+      const binary = execFileSync(resolve(".runtime/documents/bin/python"), [
+        "tests/fixtures/document-source.py",
+        format,
+        selected,
+      ]);
+      const mime = {
+        pdf: "application/pdf",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      }[format]!;
+      await upload("talk-alice", name, binary, mime);
+      const shared = await share("talk-alice", name);
+      const listing = await actor.context.request.post(
+        origin + "/api/files/list",
+        { headers, data: { path: [] } },
+      );
+      expect(listing.status()).toBe(201);
+      const file = (await listing.json()).find((f: any) => f.name === name);
+      expect(file?.importable).toBe(true);
+      const imported = await actor.context.request.post(
+        origin + "/api/files/import",
+        {
+          headers,
+          data: {
+            path: file.path,
+            expectedId: file.id,
+            expectedEtag: file.etag,
+          },
+        },
+      );
+      expect(imported.status()).toBe(201);
+      const asset = await imported.json();
+      const preview = await (
+        await actor.context.request.get(
+          origin + "/api/files/imports/" + asset.id,
+        )
+      ).json();
+      expect(preview.content).toContain(selected);
+      expect(preview.extraction.format).toBe(format);
+      expect(preview.extraction.sections.length).toBeGreaterThan(0);
+      const started = await actor.context.request.post(
+        origin + "/api/files/imports/" + asset.id + "/readings",
+        {
+          headers,
+          data: {
+            engine: index % 2 ? "hermes" : "dsh",
+            modelProfileId: profile.id,
+            instruction:
+              "native-file-reading-fixture: explain this exact extracted document.",
+            expectedSourceVersion: asset.sourceVersion,
+            idempotencyKey: randomUUID(),
+          },
+        },
+      );
+      expect(started.status()).toBe(201);
+      const run = await started.json();
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await actor.context.request.get(origin + "/api/runs/" + run.id)
+              ).json()
+            ).state,
+          { timeout: 60000, intervals: [700] },
+        )
+        .toBe("succeeded");
+      const result = await (
+        await actor.context.request.get(origin + "/api/runs/" + run.id)
+      ).json();
+      const readingId = result.result.receipts[0].id;
+      await share("talk-alice", name, "DELETE", String(shared.id));
+      expect(
+        (
+          await actor.context.request.get(
+            origin + "/api/files/imports/" + asset.id,
+          )
+        ).status(),
+      ).toBe(404);
+      expect(
+        (
+          await actor.context.request.get(
+            origin + "/api/files/readings/" + readingId,
+          )
+        ).status(),
+      ).toBe(404);
+      expect(
+        (
+          await db.pool.query(
+            "SELECT content,embedding FROM cw_assets WHERE id=$1",
+            [asset.id],
+          )
+        ).rows[0],
+      ).toEqual({ content: "", embedding: null });
+      expect(
+        (
+          await db.pool.query(
+            "SELECT extraction_metadata FROM cw_source_files WHERE asset_id=$1",
+            [asset.id],
+          )
+        ).rows[0].extraction_metadata,
+      ).toEqual({});
+    }
+    expect(fixture.violations).toEqual([]);
+  } finally {
+    fixture.server.closeAllConnections();
+    await new Promise<void>((r) => fixture.server.close(() => r()));
+    await actor.context.close();
   }
 });

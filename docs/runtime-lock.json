@@ -194,5 +194,20 @@
       "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40913709891",
       "evidenceScope": "103 passing checks across three jobs; actual API/Worker role and credential environment, denied business DDL/system reads, native cross-engine artifact revisions, persisted encrypted model config and interrupted-worker quarantine; synthetic model and source employees only"
     }
+  },
+  "documentExtraction": {
+    "status": "product-integrated-local-verified-ci-pending",
+    "contract": "docs/DOCUMENT-INGESTION.md",
+    "migration": "db/migrations/015_document_extraction.sql",
+    "python": "3.14.6",
+    "lock": "runtime/documents/requirements.lock",
+    "lockSha256": "579ba26964e7443e1345770c389acac549f5864341b0b4bdafc0593e415cc6c5",
+    "scope": "Private selected PDF/DOCX/XLSX/PPTX text extraction, source locators/warnings, personal AI reading/revision and pgvector; exact extension/MIME, source and parser version invalidation; no original Office editing, OCR, long chunks or shared publication",
+    "processBoundary": "No shell or inherited credentials; two concurrent children per API process; 20s wall, 15s CPU, 1GiB Linux address space, 8MiB input and bounded output/diagnostics; not an independent OS sandbox",
+    "localEvidence": "19 unit, 79 database, 8 Python extraction checks, 7 file UI checks, typecheck/build and frozen baseline; two document/index integration cases repeated after binary printer-setting compatibility fix",
+    "componentEvidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563",
+    "componentEvidenceCommit": "5cdb970b9e33428d3c0e0839533d1c72df77b604",
+    "componentEvidenceScope": "145 tests across three successful jobs for isolated helper only; product integration requires its own CI",
+    "sourceEvidence": "New real Nextcloud four-format share/native-engine/revocation scenario and compiled container four-format scenario pending exact integration commit CI; no local Docker"
   }
 }

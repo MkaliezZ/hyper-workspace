@@ -145,7 +145,9 @@
 
 ## 本地环境证据
 
-文档接入正在实现：新增 `runtime/documents` 独立提取组件，锁定 pypdf/python-docx/openpyxl/python-pptx/defusedxml 及全部传递依赖哈希；本机独立 Python 3.14.6 环境已安装，8 项格式提取、定位、错误和资源限额测试通过。尚未接入 StorageProvider、产品预览/AI 或生产容器，不能称为 PDF/Office 产品支持。后续按 [组件接续要求](../runtime/documents/README.md) 完成 TypeScript 受限进程、源版本/解析元数据、撤权失效和业务端到端验证。CI 新增 Linux 解析器测试，结果以对应提交为准。
+独立文档组件 `5cdb970` 的 [run 40966081563](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563) 三个 job 全部成功，共 145 项（原 137 项加 8 项 Python 解析）；它当时尚未接入产品，不能作为完整文档业务证据。
+
+文档业务接入增量：产品 TypeScript 受限子进程、StorageProvider MIME/扩展名识别、解析版本/定位/限制元数据、个人预览/AI 与索引、来源/解析变动时清理均已实现，新增迁移 015。固定栈和引擎接口不变。19 单元、79 数据库、8 Python 解析、文件 UI 7 项、类型/构建通过；向量新增断言的 2 项针对性复测通过。Linux 真实来源四格式/双执行器和受限容器的新增场景已写入测试，待该接入提交 CI 验证。本机无 Docker，真实模型与公司文档未验收；完整边界、调试修复、部署和回退见 [DOCUMENT-INGESTION.md](DOCUMENT-INGESTION.md)。
 
 这台机器缺少 Docker/PostgreSQL，Homebrew 公式元数据与本机 Homebrew 不兼容。因此在被 Git 忽略的 .runtime 中使用官方源包与 SHA-256 校验构建 PostgreSQL 17.11，安装 pgvector 0.8.7，并实际启动本地数据库。没有用 SQLite 或内存数据库代替既定生产存储。
 
@@ -155,7 +157,7 @@
 
 - 真实供应商模型效果、Hermes Anthropic extra、交互确认/澄清与完整业务工具链路。
 - Nextcloud 公司环境 SSO/MFA、代理部署与大规模使用验证；AI 自主通信投递、Files 扩展、Calendar Provider 与完整端到端链路。
-- 真实 embedding 质量、长文分块、PDF/Office 解析、后台实时撤权与派生删除传播；当前短文本副本在读取/检索/索引时核验来源。
+- 真实 embedding 质量、长文分块、PDF/Office 复杂内容与原件编辑、后台实时撤权与派生删除传播；当前个人副本在读取/检索/索引时核验来源。
 - 原始 E01–E10 的双引擎业务验收，不能用单元测试或 fixture 流程代替。
 - 费用与预算策略、复杂审批、多模态、原生端与正式运行加固。
 - 运行恢复、资产版本一致性、实时源端权限变更和不同项目范围的更细粒度验证。
