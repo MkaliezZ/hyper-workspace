@@ -17,9 +17,17 @@ occ config:system:set default_language --value=en
 occ config:system:set force_language --value=en
 occ config:system:set overwrite.cli.url --value=http://127.0.0.1:8090
 occ group:add hyper-members
-for employee in employee-one employee-two; do
+for employee in employee-one employee-two talk-alice talk-bob talk-outsider; do
   docker exec --user www-data --env OC_PASS="$NC_TEST_PASSWORD" hyper-nextcloud-test php occ user:add --password-from-env "$employee"
   occ group:adduser hyper-members "$employee"
 done
 occ group:adduser hyper-members nc-admin
 occ status --output=json
+
+if [ "${NEXTCLOUD_TALK_ENABLED:-false}" = true ]; then
+  python3 runtime/nextcloud/install-talk.py
+  docker cp .runtime/nextcloud/spreed hyper-nextcloud-test:/var/www/html/custom_apps/
+  docker exec --user root hyper-nextcloud-test chown -R www-data:www-data /var/www/html/custom_apps/spreed
+  occ app:enable spreed
+  test "$(occ config:app:get spreed installed_version)" = 23.0.12
+fi

@@ -31,11 +31,17 @@
     "runtimeVersion": "33.0.10",
     "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
     "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
-    "scope": "Identity Login Flow v2/current user/self groups only; Talk/Files/Calendar remain pending",
+    "scope": "Identity Login Flow v2/current user/self groups verified; Talk read-through/send foundation implemented with real-service CI pending; Files/Calendar remain pending",
     "companySourceConnected": false,
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40797427984",
     "evidenceCommit": "abf6a0cab3c3eaa9d3d674deaaca18e958676b1a",
-    "evidenceScope": "Three real Nextcloud service/browser tests using synthetic accounts; no company SSO/MFA or production claim"
+    "evidenceScope": "Three real Nextcloud service/browser tests using synthetic accounts; no company SSO/MFA or production claim",
+    "talk": {
+      "version": "23.0.12",
+      "lock": "runtime/nextcloud/talk.lock.json",
+      "status": "protocol-verified-real-service-ci-pending",
+      "sourceReadModel": "read-through; no project chat import"
+    }
   },
   "note": "Implemented dependency pins do not claim a fully validated production runtime combination."
 }

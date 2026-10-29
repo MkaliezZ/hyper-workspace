@@ -237,3 +237,34 @@ export interface WorkspaceView {
   artifacts: Artifact[];
   engines: Record<string, EngineCapabilities>;
 }
+
+export interface CommunicationRoom {
+  id: string;
+  name: string;
+  readOnly: boolean;
+}
+export interface CommunicationMessage {
+  id: string;
+  authorId: string;
+  author: string;
+  content: string;
+  createdAt: string;
+  kind: "comment" | "system" | "deleted" | "unsupported";
+  referenceId: string;
+  version: string;
+  expiresAt: string | null;
+}
+
+export const CommunicationSendInput = z
+  .object({
+    content: z.string().trim().min(1).max(20000),
+    idempotencyKey: z.uuid(),
+  })
+  .strict();
+export interface CommunicationReceipt {
+  id: string;
+  state: "sending" | "succeeded" | "failed" | "recovery_required";
+  sourceMessageId: string | null;
+  error: string | null;
+  acknowledgedAt: string | null;
+}

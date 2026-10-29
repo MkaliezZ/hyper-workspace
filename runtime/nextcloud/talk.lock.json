@@ -1,0 +1,9 @@
+{
+  "version": "23.0.12",
+  "serverMajor": 33,
+  "archive": "https://github.com/nextcloud-releases/spreed/releases/download/v23.0.12/spreed-v23.0.12.tar.gz",
+  "sha256": "a907070cb8c0eb69a0ef808f62ea6eea822365c97a1c0e6f4a86aa748eda6c79",
+  "size": 54904625,
+  "source": "https://github.com/nextcloud/spreed/tree/v23.0.12",
+  "verifiedAt": "2026-10-29"
+}

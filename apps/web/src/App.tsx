@@ -11,6 +11,7 @@ import {
 } from "./components/WorkPanels";
 import { Dialog } from "./components/Dialog";
 import { ModelSettings, type ModelSummary } from "./components/ModelSettings";
+import { EnterpriseMessages } from "./components/EnterpriseMessages";
 import { Login } from "./components/Login";
 import { KnowledgePanel } from "./components/KnowledgePanel";
 type Tab = "discussion" | "tasks" | "artifacts";
@@ -179,7 +180,9 @@ export function App() {
       ? "知识库"
       : section === "settings"
         ? "设置"
-        : view.project.name;
+        : section === "enterprise"
+          ? "企业消息"
+          : view.project.name;
   const selectedRunModel = runModels.find(
     (model) => model.id === modelProfileId,
   );
@@ -189,7 +192,11 @@ export function App() {
     view.engines[engine]?.modelProviders &&
     !view.engines[engine]!.modelProviders!.includes(selectedRunModel.provider);
   return (
-    <div className="app-shell">
+    <div
+      className={
+        "app-shell" + (section === "enterprise" ? " enterprise-view" : "")
+      }
+    >
       <Navigation
         view={view}
         section={section}
@@ -197,6 +204,7 @@ export function App() {
         onProject={selectProject}
         onRun={() => {
           setError("");
+          if (section === "enterprise") setSection("messages");
           setDialog("run");
           setEngine("dsh");
         }}
@@ -207,16 +215,25 @@ export function App() {
           setDialog("project");
         }}
         open={navOpen}
+        onLogout={() =>
+          void act(async () => {
+            await mutation("/auth/logout", {});
+            window.location.reload();
+          })
+        }
       />
       <main className="main-pane">
         <MainHeader
           title={projectTitle}
+          enterprise={section === "enterprise"}
           subtitle={
             section === "knowledge"
               ? "有来源、可复用的工作资料"
               : section === "settings"
                 ? "模型与执行服务"
-                : "项目空间"
+                : section === "enterprise"
+                  ? "查看和回复你有权限访问的会话"
+                  : "项目空间"
           }
           query={query}
           onQuery={setQuery}
@@ -338,6 +355,18 @@ export function App() {
             )}
           </>
         ) : null}
+        {section === "enterprise" ? (
+          <EnterpriseMessages
+            demo={view.user.demo}
+            query={query}
+            onLogout={() =>
+              void act(async () => {
+                await mutation("/auth/logout", {});
+                window.location.reload();
+              })
+            }
+          />
+        ) : null}
         {section === "knowledge" ? (
           <KnowledgePanel busy={busy} act={act} />
         ) : null}
@@ -345,22 +374,24 @@ export function App() {
           <ModelSettings view={view} busy={busy} act={act} />
         ) : null}
       </main>
-      <ContextPanel
-        view={view}
-        open={contextOpen}
-        onTask={openTask}
-        onArtifact={openArtifact}
-        onToggle={(t) =>
-          void act(async () => {
-            await mutation(
-              "/tasks/" + t.id,
-              { status: t.status === "done" ? "open" : "done" },
-              "PATCH",
-            );
-            await refresh();
-          })
-        }
-      />
+      {section !== "enterprise" ? (
+        <ContextPanel
+          view={view}
+          open={contextOpen}
+          onTask={openTask}
+          onArtifact={openArtifact}
+          onToggle={(t) =>
+            void act(async () => {
+              await mutation(
+                "/tasks/" + t.id,
+                { status: t.status === "done" ? "open" : "done" },
+                "PATCH",
+              );
+              await refresh();
+            })
+          }
+        />
+      ) : null}
       {dialog === "task" ? (
         <Dialog title="新建待办" error={error} onClose={() => setDialog(null)}>
           <form

@@ -4,7 +4,7 @@
 
 ## 范围与版本
 
-实现 Login Flow v2、当前用户与自身群组查询、产品身份映射、按设备保存凭据、产品会话与执行前再鉴权。Talk、Files/WebDAV、Calendar/CalDAV 尚未接入。没有导入真实公司账号或资料。
+实现 Login Flow v2、当前用户与自身群组查询、产品身份映射、按设备保存凭据、产品会话与执行前再鉴权。Talk 通信基础模块另见 [NEXTCLOUD-TALK.md](NEXTCLOUD-TALK.md)；Files/WebDAV、Calendar/CalDAV 尚未接入。没有导入真实公司账号或资料。
 
 真实服务 CI 固定官方镜像 `nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305`；摘要于 2026-10-29 通过 Docker Registry v2 核验。当前机器没有 Docker/PHP，真实服务测试由 GitHub Actions 的 `nextcloud-identity` job 执行；已在 [run 40797427984](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40797427984)（提交 abf6a0c）通过 3 项真实服务测试。该 job 中 Nextcloud 使用独立 SQLite 测试库，产品仍使用独立 PostgreSQL/pgvector 测试库。此配置不作为生产部署方案。
 

@@ -1,5 +1,6 @@
 import {
   MessageSquare,
+  MessagesSquare,
   Folder,
   FileText,
   Settings,
@@ -9,9 +10,15 @@ import {
   Menu,
 } from "lucide-react";
 import type { Project, WorkspaceView } from "@hyper/contracts";
-export type Section = "messages" | "projects" | "knowledge" | "settings";
+export type Section =
+  | "messages"
+  | "projects"
+  | "knowledge"
+  | "settings"
+  | "enterprise";
 const navigation = [
   { id: "messages", label: "消息", Icon: MessageSquare },
+  { id: "enterprise", label: "企业消息", Icon: MessagesSquare },
   { id: "projects", label: "项目", Icon: Folder },
   { id: "knowledge", label: "知识库", Icon: FileText },
   { id: "settings", label: "设置", Icon: Settings },
@@ -23,6 +30,7 @@ export function Navigation({
   onProject,
   onRun,
   onNewProject,
+  onLogout,
   open,
 }: {
   view: WorkspaceView;
@@ -31,6 +39,7 @@ export function Navigation({
   onProject: (p: Project) => void;
   onRun: () => void;
   onNewProject: () => void;
+  onLogout: () => void;
   open: boolean;
 }) {
   return (
@@ -52,9 +61,14 @@ export function Navigation({
             </button>
           ))}
         </div>
-        <div className="user-initial" title={view.user.name}>
+        <button
+          className="user-initial"
+          title={view.user.name + " · 退出登录"}
+          aria-label="退出登录"
+          onClick={onLogout}
+        >
           {view.user.name.slice(0, 1)}
-        </div>
+        </button>
       </aside>
       <aside className={"sidebar " + (open ? "mobile-open" : "")}>
         <header className="workspace-brand">
@@ -120,6 +134,7 @@ export function MainHeader({
   onQuery,
   onMenu,
   onContext,
+  enterprise = false,
 }: {
   title: string;
   subtitle: string;
@@ -127,6 +142,7 @@ export function MainHeader({
   onQuery: (v: string) => void;
   onMenu: () => void;
   onContext: () => void;
+  enterprise?: boolean;
 }) {
   return (
     <header className="main-header">
@@ -144,8 +160,8 @@ export function MainHeader({
       <label className="search-box">
         <Search size={18} />
         <input
-          aria-label="搜索当前项目"
-          placeholder="搜索讨论、任务或文件…"
+          aria-label={enterprise ? "搜索当前页企业消息" : "搜索当前项目"}
+          placeholder={enterprise ? "搜索当前页消息…" : "搜索讨论、任务或文件…"}
           value={query}
           onChange={(e) => onQuery(e.target.value)}
         />

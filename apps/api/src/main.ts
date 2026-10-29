@@ -29,6 +29,7 @@ import {
   TaskPatch,
   ArtifactRevision,
   ModelInput,
+  CommunicationSendInput,
 } from "@hyper/contracts";
 import { Database, DEMO } from "./db/database.js";
 import { authenticate, issueSession } from "./core/security.js";
@@ -38,12 +39,15 @@ import { RunProcessor } from "./core/processor.js";
 import { engineRegistry } from "./engines/adapters.js";
 import { ModelService } from "./core/models.js";
 import { KnowledgeService } from "./core/knowledge.js";
+import { CommunicationService } from "./core/communication.js";
+import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
 const db = new Database();
 const service = new WorkspaceService(db, engineRegistry());
 const queue = new RunProcessor(service);
 const identity = new IdentityService(db);
+const communication = new CommunicationService(db);
 const sessionCookie = {
   httpOnly: true,
   sameSite: "strict" as const,
@@ -290,6 +294,57 @@ class ApiController {
       input.modelProfileId,
     );
   }
+  @Get("talk/rooms") async talkRooms(@Req() req: Request) {
+    return communication.rooms(await subject(req));
+  }
+  @Get("talk/rooms/:token/messages") async talkMessages(
+    @Req() req: Request,
+    @Param("token") token: string,
+    @Query("before") before?: string,
+  ) {
+    return communication.messages(
+      await subject(req),
+      TalkToken.parse(token),
+      before ? TalkCursor.parse(before) : undefined,
+    );
+  }
+  @Post("talk/rooms/:token/messages") async sendTalk(
+    @Req() req: Request,
+    @Param("token") token: string,
+    @Body() body: unknown,
+  ) {
+    const input = CommunicationSendInput.parse(body);
+    return communication.send(
+      await subject(req),
+      TalkToken.parse(token),
+      input.content,
+      input.idempotencyKey,
+    );
+  }
+  @Get("talk/rooms/:token/sends") async pendingTalk(
+    @Req() req: Request,
+    @Param("token") token: string,
+  ) {
+    return communication.pending(await subject(req), TalkToken.parse(token));
+  }
+  @Post("talk/sends/:id/acknowledge") async acknowledgeTalk(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return communication.acknowledge(await subject(req), uuid(id));
+  }
+  @Get("talk/sends/:id") async talkReceipt(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return communication.receipt(await subject(req), uuid(id));
+  }
+  @Post("talk/sends/:id/reconcile") async reconcileTalk(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return communication.reconcile(await subject(req), uuid(id));
+  }
   @Get("models") async models(@Req() req: Request) {
     return service.models(await subject(req));
   }
@@ -379,6 +434,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     return;
   }
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "no-store");
   next();
 });
 await queue.start(false);
