@@ -8,6 +8,8 @@ python3 runtime/hermes/install.py
 
 安装器按 [lock.json](lock.json) 下载不可变提交，校验源码压缩包 SHA-256，通过上游官方 `pm.build_environment` 按 `uv.lock` 创建独立环境。下载、源码、PM 工具和 Python 环境均位于 Git 忽略的 `.runtime`；不安装上游的 `all` extra，也不改写上游内核。
 
+源码归档使用 `.runtime/hermes-source.tar.gz` 缓存；每次使用仍验证固定摘要，摘要错误直接失败。网络 429/短暂故障最多尝试 6 次，遵守不超过 60 秒的数字 `Retry-After`；更长冷却期直接停止，等待后续重试，不替换提交或校验值。CI 仅缓存这份公开源码，Docker 构建经只读 BuildKit secret 复用；不缓存运行目录、凭据或模型输入。下载器回归：`python3 -m unittest discover -s runtime/hermes -p test_download.py`。
+
 安装后重启 API/Worker，产品会自动发现安装回执。每个 Run 独立生成 HERMES_HOME，使用本次模型连接的 endpoint、model 和凭据环境变量引用。配置文件不写 Key；企业资产和成果仍由产品数据库拥有。
 
 本版本的共同模型协议为 **OpenAI Chat Completions 兼容 API**，包括按该协议配置的 DeepSeek 连接。Hermes 的 Anthropic extra 尚未接入；前后端会阻止不兼容的连接进入执行队列，不会自动改用其他人的 Key。

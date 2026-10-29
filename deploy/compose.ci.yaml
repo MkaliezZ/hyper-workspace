@@ -4,6 +4,10 @@ services:
     environment:
       DEMO_MODE: "true"
   api:
+    build:
+      secrets:
+        - source: hermes_source
+          target: hermes_source
     environment:
       DEMO_MODE: "true"
   worker:
@@ -17,3 +21,6 @@ services:
     security_opt: [no-new-privileges:true]
     volumes: ["./tests/fixtures/deployment-model.mjs:/fixture/model.mjs:ro"]
     command: [node, /fixture/model.mjs]
+secrets:
+  hermes_source:
+    file: .runtime/hermes-source.tar.gz

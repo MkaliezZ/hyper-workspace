@@ -3,11 +3,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tarfile
-import urllib.request
+from download import ensure_archive
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = json.loads(Path(__file__).with_name("lock.json").read_text())
@@ -35,17 +34,7 @@ def main():
             print("Hermes runtime is already installed at the pinned commit.")
             return
         raise RuntimeError("Existing Hermes installation differs from the lock; inspect it before rebuilding.")
-    archive = RUNTIME / ("hermes-" + LOCK["commit"] + ".tar.gz")
-    if not archive.exists():
-        temporary = archive.with_suffix(".download")
-        with urllib.request.urlopen(LOCK["archiveUrl"], timeout=30) as response, temporary.open("wb") as file:
-            shutil.copyfileobj(response, file)
-        if digest(temporary) != LOCK["archiveSha256"]:
-            temporary.unlink()
-            raise RuntimeError("Hermes archive digest mismatch.")
-        temporary.replace(archive)
-    if digest(archive) != LOCK["archiveSha256"]:
-        raise RuntimeError("Cached Hermes archive digest mismatch.")
+    archive = ensure_archive(local=os.environ.get("HERMES_SOURCE_ARCHIVE"))
     if not source.exists():
         source.parent.mkdir(exist_ok=True)
         with tarfile.open(archive) as package:
