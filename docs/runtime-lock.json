@@ -61,7 +61,26 @@
         "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40833543520",
         "evidenceCommit": "e9eb756d8d5c4593fb83603167b478c1d6f115ae"
       }
+    },
+    "files": {
+      "status": "implemented-real-service-ci-pending",
+      "contract": "docs/NEXTCLOUD-FILES.md",
+      "migration": "db/migrations/009_source_files.sql",
+      "parser": "fast-xml-parser@5.11.2",
+      "scope": "Authenticated personal file metadata and explicit short UTF-8 text/Markdown snapshots; private retrieval/indexing with live content permission and version checks; PDF/Office, chunking and agent tool entry pending"
     }
   },
-  "note": "Implemented dependency pins do not claim a fully validated production runtime combination."
+  "note": "Implemented dependency pins do not claim a fully validated production runtime combination.",
+  "dependencyRemediation": {
+    "date": "2026-10-29",
+    "zod": "4.6.7 in API and contracts",
+    "multerOverride": "2.5.0",
+    "esbuildOverride": "0.28.1",
+    "concurrently": "9.2.5",
+    "shellQuote": "1.12.0",
+    "auditRegistry": "https://registry.npmjs.org",
+    "rootNpmAuditKnownVulnerabilities": 0,
+    "scope": "Root npm lockfile only; not independent engine runtimes or source images; clean npm ci verified; not a complete security assessment",
+    "workspaceOverrideAnchor": "@nestjs/platform-express@11.2.8 pinned in root devDependencies and API for npm 11.11.0 workspace override resolution"
+  }
 }

@@ -41,6 +41,8 @@ import { ModelService } from "./core/models.js";
 import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
 import { ReplyDraftService } from "./core/reply-drafts.js";
+import { SourceFileService } from "./core/source-files.js";
+import { FilePath } from "@hyper/contracts";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
@@ -112,6 +114,8 @@ class ApiController {
     return {
       demoEnabled: process.env.DEMO_MODE === "true",
       nextcloudConfigured: !!nextcloudConfig(),
+      filesEnabled:
+        process.env.NEXTCLOUD_FILES_ENABLED === "true" && !!nextcloudConfig(),
     };
   }
   @Post("auth/nextcloud/start") async startLogin(
@@ -290,6 +294,49 @@ class ApiController {
   }
   @Get("knowledge") async knowledge(@Req() req: Request, @Query("q") q = "") {
     return service.search(await subject(req), q.slice(0, 500));
+  }
+  @Post("files/list") async sourceFiles(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = z.object({ path: FilePath }).strict().parse(body);
+    return new SourceFileService(db).list(await subject(req), input.path);
+  }
+  @Post("files/import") async importFile(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = z
+      .object({
+        path: FilePath,
+        expectedId: z.string().regex(/^[1-9]\d{0,19}$/),
+        expectedEtag: z.string().min(1).max(256),
+      })
+      .strict()
+      .parse(body);
+    return new SourceFileService(db).import(
+      await subject(req),
+      input.path,
+      input.expectedId,
+      input.expectedEtag,
+    );
+  }
+  @Get("files/imports") async importedFiles(@Req() req: Request) {
+    return new SourceFileService(db).imported(await subject(req));
+  }
+  @Get("files/imports/:id") async importedFile(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new SourceFileService(db).get(await subject(req), uuid(id));
+  }
+  @Post("files/imports/:id/refresh") async refreshFile(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    z.object({}).strict().parse(body);
+    return new SourceFileService(db).refresh(await subject(req), uuid(id));
   }
   @Post("knowledge/index") async indexKnowledge(
     @Req() req: Request,

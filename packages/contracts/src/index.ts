@@ -293,3 +293,29 @@ export interface ReplyDraft {
   sendState: CommunicationReceipt["state"] | null;
   sendId: string | null;
 }
+
+export const FilePath = z
+  .array(
+    z
+      .string()
+      .min(1)
+      .max(255)
+      .refine(
+        (value) =>
+          value !== "." &&
+          value !== ".." &&
+          !/[\\/\u0000-\u001f\u007f]/.test(value),
+        "Invalid path segment",
+      ),
+  )
+  .max(20);
+export interface SourceFile {
+  path: string[];
+  id: string;
+  name: string;
+  kind: "file" | "directory";
+  etag: string;
+  size: number;
+  mime: string;
+  importable: boolean;
+}

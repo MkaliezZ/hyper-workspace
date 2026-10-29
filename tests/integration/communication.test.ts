@@ -12,6 +12,8 @@ import { KnowledgeService } from "../../apps/api/src/core/knowledge.js";
 import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
 import { CommunicationService } from "../../apps/api/src/core/communication.js";
 import { ReplyDraftService } from "../../apps/api/src/core/reply-drafts.js";
+import { SourceFileService } from "../../apps/api/src/core/source-files.js";
+import { DavFixture } from "../fixtures/dav.js";
 const url = process.env.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.endsWith("_test"))
   throw new Error("Use an isolated TEST_DATABASE_URL ending in _test.");
@@ -50,6 +52,8 @@ function room(members = ["alice", "bob"]) {
   return r;
 }
 const embeddingInputs: string[][] = [];
+const dav = new DavFixture();
+let revokeEmbeddingFile: ReturnType<DavFixture["add"]> | undefined;
 let revokeEmbeddingRoom: Room | undefined;
 const server = createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
@@ -58,6 +62,13 @@ const server = createServer(async (req, res) => {
   if (req.url?.startsWith("/v1/embeddings")) {
     const body = JSON.parse(raw);
     embeddingInputs.push(body.input);
+    if (
+      revokeEmbeddingFile &&
+      body.input.some((text: string) =>
+        text.includes("file-revoke-during-embedding"),
+      )
+    )
+      revokeEmbeddingFile.blockedDownloads.add("alice");
     if (
       revokeEmbeddingRoom &&
       body.input.some((text: string) => text.includes("revoke-while-indexing"))
@@ -98,6 +109,7 @@ const server = createServer(async (req, res) => {
     json({ groups: person.group ? ["members"] : [] });
     return;
   }
+  if (dav.handle(req, res, uid)) return;
   const metadata = (r: Room) => ({
     token: r.id,
     displayName: "来源会话 " + r.id,
@@ -182,6 +194,7 @@ const server = createServer(async (req, res) => {
 before(async () => {
   process.env.CREDENTIAL_MASTER_KEY = "ab".repeat(32);
   process.env.NEXTCLOUD_TALK_ENABLED = "true";
+  process.env.NEXTCLOUD_FILES_ENABLED = "true";
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   process.env.NEXTCLOUD_URL =
     "http://127.0.0.1:" + (server.address() as { port: number }).port;
@@ -911,4 +924,237 @@ test("Reply drafting rejects model-selected recipients and cannot save after sou
     0,
   );
   assert.equal(r.posts, 0);
+});
+
+async function fileEmbedding(work: WorkspaceService) {
+  return work.saveModel(s(), {
+    name: "file embedding",
+    provider: "openai-compatible",
+    endpoint: requireNextcloud().transportUrl + "/v1",
+    model: "file-vector",
+    purpose: "embedding",
+    scope: "personal",
+    apiKey: "synthetic-file-vector-key",
+  });
+}
+test("Explicit file imports preserve IDs and source provenance without publishing employee content", async () => {
+  const source = dav.add(
+    "alice",
+    ["资料", "private-file-alpha.md"],
+    "file-alpha-private-sentinel",
+  );
+  const files = new SourceFileService(db),
+    work = new WorkspaceService(db, engineRegistry());
+  const listing = await files.list(s(), ["资料"]);
+  assert.ok(listing.some((f) => f.id === source.id));
+  const [first, same] = await Promise.all([
+    files.import(s(), source.path, source.id, source.etag),
+    files.import(s(), source.path, source.id, source.etag),
+  ]);
+  assert.equal(first.id, same.id);
+  assert.equal(
+    (await files.get(s(), first.id)).content,
+    "file-alpha-private-sentinel",
+  );
+  assert.equal(
+    (
+      await db.pool.query("SELECT visibility FROM cw_assets WHERE id=$1", [
+        first.id,
+      ])
+    ).rows[0].visibility,
+    "private",
+  );
+  assert.equal(
+    (await work.search(s("bob"), "file-alpha-private-sentinel")).length,
+    0,
+  );
+  await assert.rejects(files.get(s("bob"), first.id));
+  const before = embeddingInputs.length;
+  await assert.rejects(new KnowledgeService(db).index(s("bob"), [first.id]));
+  assert.equal(embeddingInputs.length, before);
+  const profile = await fileEmbedding(work);
+  await new KnowledgeService(db).index(s(), [first.id], profile.id);
+  const indexed = (
+    await db.pool.query("SELECT indexed_at FROM cw_assets WHERE id=$1", [
+      first.id,
+    ])
+  ).rows[0].indexed_at;
+  await files.import(s(), source.path, source.id, source.etag);
+  assert.deepEqual(
+    (
+      await db.pool.query("SELECT indexed_at FROM cw_assets WHERE id=$1", [
+        first.id,
+      ])
+    ).rows[0].indexed_at,
+    indexed,
+  );
+  assert.equal(
+    (
+      await new KnowledgeService(db).semantic(s(), "private alpha", profile.id)
+    ).some((row) => row.id === first.id),
+    true,
+  );
+});
+test("A changed or replaced source file cannot serve old text or vectors; refresh retains the exact stable object", async () => {
+  const source = dav.add("alice", ["versioned.md"], "file-version-one"),
+    files = new SourceFileService(db),
+    work = new WorkspaceService(db, engineRegistry()),
+    knowledge = new KnowledgeService(db);
+  const imported = await files.import(s(), source.path, source.id, source.etag),
+    profile = await fileEmbedding(work);
+  await knowledge.index(s(), [imported.id], profile.id);
+  source.content = Buffer.from("file-version-two");
+  source.etag = '"new-version"';
+  assert.equal((await work.search(s(), "file-version-one")).length, 0);
+  const stale = (
+    await db.pool.query(
+      "SELECT content,embedding,validity FROM cw_assets WHERE id=$1",
+      [imported.id],
+    )
+  ).rows[0];
+  assert.equal(stale.content, "");
+  assert.equal(stale.embedding, null);
+  assert.equal(stale.validity, "stale");
+  await assert.rejects(files.get(s(), imported.id));
+  assert.equal((await files.refresh(s(), imported.id)).id, imported.id);
+  assert.equal((await files.get(s(), imported.id)).content, "file-version-two");
+  assert.equal(
+    (await knowledge.semantic(s(), "file version", profile.id)).some(
+      (row) => row.id === imported.id,
+    ),
+    false,
+  );
+  const previous = source.id;
+  source.id = String(dav.next++);
+  source.etag = '"replacement"';
+  await assert.rejects(files.refresh(s(), imported.id), /替换/);
+  assert.equal((await work.search(s(), "file-version-two")).length, 0);
+  const replacement = await files.import(
+    s(),
+    source.path,
+    source.id,
+    source.etag,
+  );
+  assert.notEqual(replacement.id, imported.id);
+  assert.notEqual(source.id, previous);
+});
+test("Metadata-only permission and source outages never authorize cached file content", async () => {
+  const source = dav.add(
+      "alice",
+      ["download-control.md"],
+      "file-download-private-sentinel",
+    ),
+    files = new SourceFileService(db),
+    work = new WorkspaceService(db, engineRegistry());
+  const imported = await files.import(s(), source.path, source.id, source.etag);
+  source.blockedDownloads.add("alice");
+  assert.equal(
+    (await files.list(s(), [])).some((f) => f.id === source.id),
+    true,
+  );
+  assert.equal(
+    (await work.search(s(), "file-download-private-sentinel")).length,
+    0,
+  );
+  assert.equal(
+    (
+      await db.pool.query("SELECT content FROM cw_assets WHERE id=$1", [
+        imported.id,
+      ])
+    ).rows[0].content,
+    "",
+  );
+  source.blockedDownloads.clear();
+  await files.refresh(s(), imported.id);
+  dav.outage = true;
+  try {
+    await assert.rejects(files.get(s(), imported.id));
+    assert.equal(
+      (await work.search(s(), "file-download-private-sentinel")).length,
+      0,
+    );
+    assert.equal(
+      (
+        await db.pool.query("SELECT content FROM cw_assets WHERE id=$1", [
+          imported.id,
+        ])
+      ).rows[0].content,
+      "file-download-private-sentinel",
+    );
+  } finally {
+    dav.outage = false;
+  }
+  assert.equal(
+    (await files.get(s(), imported.id)).content,
+    "file-download-private-sentinel",
+  );
+  process.env.NEXTCLOUD_FILES_ENABLED = "false";
+  try {
+    assert.equal(
+      (await work.search(s(), "file-download-private-sentinel")).length,
+      0,
+    );
+  } finally {
+    process.env.NEXTCLOUD_FILES_ENABLED = "true";
+  }
+});
+test("Source revocation during embedding skips the vector write; a corrupted workspace flag cannot bypass file ownership", async () => {
+  const source = dav.add(
+      "alice",
+      ["embedding-control.md"],
+      "file-revoke-during-embedding",
+    ),
+    files = new SourceFileService(db),
+    work = new WorkspaceService(db, engineRegistry()),
+    knowledge = new KnowledgeService(db);
+  const imported = await files.import(s(), source.path, source.id, source.etag),
+    profile = await fileEmbedding(work);
+  revokeEmbeddingFile = source;
+  try {
+    const result = await knowledge.index(s(), [imported.id], profile.id);
+    assert.deepEqual(result.indexed, []);
+    assert.deepEqual(result.skipped, [imported.id]);
+  } finally {
+    revokeEmbeddingFile = undefined;
+  }
+  assert.equal(
+    (
+      await db.pool.query("SELECT embedding FROM cw_assets WHERE id=$1", [
+        imported.id,
+      ])
+    ).rows[0].embedding,
+    null,
+  );
+  source.blockedDownloads.clear();
+  await files.refresh(s(), imported.id);
+  await db.pool.query(
+    "UPDATE cw_assets SET visibility='workspace' WHERE id=$1",
+    [imported.id],
+  );
+  assert.equal(
+    (await work.search(s("bob"), "file-revoke-during-embedding")).length,
+    0,
+  );
+  await assert.rejects(knowledge.index(s("bob"), [imported.id]));
+});
+test("A torn file read never becomes an active asset", async () => {
+  const source = dav.add("alice", ["torn.md"], "old-file-snapshot"),
+    files = new SourceFileService(db);
+  source.afterRead = () => {
+    source.content = Buffer.from("new-file-snapshot");
+    source.etag = '"changed-during-read"';
+  };
+  await assert.rejects(
+    files.import(s(), source.path, source.id, source.etag),
+    /变化/,
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT asset_id FROM cw_source_files WHERE remote_file_id=$1 AND workspace_id=$2",
+        [source.id, workspace],
+      )
+    ).rowCount,
+    0,
+  );
 });

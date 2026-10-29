@@ -20,6 +20,7 @@ import { assertMember } from "./security.js";
 import { maskKey, stableDigest, Vault } from "./credentials.js";
 import { reviseArtifactVersion } from "./artifacts.js";
 import { ProjectAccess } from "./project-access.js";
+import { SourceFileService } from "./source-files.js";
 import { ModelService } from "./models.js";
 
 export class WorkspaceService {
@@ -230,19 +231,31 @@ export class WorkspaceService {
     await assertMember(this.db, s);
     if (!query.trim()) return [];
     const projectIds = await this.access.visibleIds(s);
+    const files = new SourceFileService(this.db),
+      fileAccess = await files.verify(s);
     const r = await this.db.pool.query(
-      "SELECT id,title,content,type,project_id,source_ref AS \"sourceRef\",source_version AS \"sourceVersion\" FROM cw_assets WHERE workspace_id=$1 AND deleted_at IS NULL AND validity='active' AND (visibility='workspace' OR owner_id=$2) AND (project_id IS NULL OR project_id=ANY($4::uuid[])) AND (title ILIKE $3 OR content ILIKE $3) ORDER BY created_at DESC LIMIT 30",
+      'SELECT id,title,content,type,project_id,EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) AS "fileSource",source_ref AS "sourceRef",source_version AS "sourceVersion" FROM cw_assets WHERE workspace_id=$1 AND deleted_at IS NULL AND validity=\'active\' AND (visibility=\'workspace\' OR owner_id=$2) AND (project_id IS NULL OR project_id=ANY($4::uuid[])) AND (NOT EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) OR id=ANY($5::uuid[])) AND (title ILIKE $3 OR content ILIKE $3) ORDER BY created_at DESC LIMIT 30',
       [
         s.workspaceId,
         s.id,
         "%" + query.replace(/[\\%_]/g, "\\$&") + "%",
         projectIds,
+        [...fileAccess.allowed.keys()],
       ],
     );
     const current = new Set(await this.access.visibleIds(s));
+    const finalFiles = await files.verify(
+      s,
+      r.rows.filter((row) => row.fileSource).map((row) => row.id),
+    );
     return r.rows
       .filter((row) => !row.project_id || current.has(row.project_id))
-      .map(({ project_id, ...row }) => row);
+      .filter(
+        (row) =>
+          !row.fileSource ||
+          finalFiles.allowed.get(row.id) === row.sourceVersion,
+      )
+      .map(({ project_id, fileSource, ...row }) => row);
   }
   async models(s: Subject) {
     await assertMember(this.db, s);

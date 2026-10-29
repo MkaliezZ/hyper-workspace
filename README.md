@@ -80,6 +80,16 @@ npm run dev
 
 [移动端回复草稿](docs/images/reply-draft-mobile.png)
 
+## 企业文件与个人资料
+
+新增 Nextcloud Files/WebDAV 浏览与显式导入，在“知识库 → 企业文件”选择短文本/Markdown，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。真实来源分享/撤权联合用例待本次 CI。PDF/Office、长文分块、文件到项目 AI 成果的权限传播和 Calendar 仍待完成。[配置、数据契约与回退](docs/NEXTCLOUD-FILES.md)。
+
+下图使用明确 UI 协议测试资料，非真实公司文件。
+
+![企业文件导入](docs/images/files-desktop.png)
+
+[移动端文件预览](docs/images/files-mobile.png)
+
 ## 检查与验证
 
 ```bash
@@ -92,11 +102,13 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、9 项单元测试、38 项数据库集成测试、14 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过类型检查、构建、12 项单元/Provider 测试、43 项数据库集成测试、16 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
 GitHub Actions 使用真实 PostgreSQL/pgvector 及固定 Nextcloud 33.0.10/Talk 23.0.12；来源 job 当前为 7 项，主 job 为 64 项。绿色状态只证明工作流实际覆盖的测试，不代表真实模型质量或原始 E01–E10 已全部完成。
 
 本轮修复提交 `e9eb756` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40833543520) 两个 job 成功，共 71 项测试（9 单元、38 数据库、14 浏览器、3 原生执行器、7 真实来源），另含类型、构建和冻结包校验。新增用例验证个人草稿、群主读取拒绝、双原生引擎、人工检查后实际发送/回读、重复拒绝及撤权；模型仍为协议测试服务。
+
+本次 Files 增量将真实来源 job 扩充到 8 项，待当前提交 CI 核验；不把旧提交通过结果当作新功能证据。
 
 ## 开发依据与进展
 

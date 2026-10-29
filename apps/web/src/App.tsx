@@ -28,6 +28,7 @@ export function App() {
     [status, setStatus] = useState<{
       demoEnabled: boolean;
       nextcloudConfigured: boolean;
+      filesEnabled?: boolean;
     }>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -529,7 +530,12 @@ export function App() {
           />
         ) : null}
         {section === "knowledge" ? (
-          <KnowledgePanel busy={busy} act={act} />
+          <KnowledgePanel
+            busy={busy}
+            act={act}
+            demo={view.user.demo}
+            filesEnabled={!!status?.filesEnabled}
+          />
         ) : null}
         {section === "settings" ? (
           <ModelSettings view={view} busy={busy} act={act} />
