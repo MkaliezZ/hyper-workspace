@@ -130,13 +130,17 @@
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218",
     "evidenceScope": "Two real container tests: compiled web and loopback login boundary, DSH create / Hermes revise, persisted session/model config/artifact versions across DB/API/Worker restart, and interrupted Worker quarantined without model replay; synthetic model only",
     "databaseRoleSeparation": {
-      "status": "implemented-container-ci-pending",
+      "status": "real-container-and-full-ci-verified",
       "contract": "docs/DEPLOYMENT-DATABASE.md",
       "administrator": "hyper: database container and one-shot initialize only",
       "runtime": "hyper_runtime: product DML and queue-schema ownership; no database or business schema ownership",
       "credentials": "Independent generated DB_RUNTIME_PASSWORD; old administrator password and encryption master key preserved",
       "localEvidence": "16 unit/config and 52 database checks, including three isolated real PostgreSQL role/queue cases; type and build pass",
-      "scope": "Dedicated product database; product authorization still applies; no new RLS, backup restore, company deployment or full production security claim"
+      "scope": "Dedicated product database; product authorization still applies; no new RLS, backup restore, company deployment or full production security claim",
+      "recordedDate": "2026-10-30",
+      "evidenceCommit": "42facee7faaa56be69d16f12032be5afcb96c4d8",
+      "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40913709891",
+      "evidenceScope": "103 passing checks across three jobs; actual API/Worker role and credential environment, denied business DDL/system reads, native cross-engine artifact revisions, persisted encrypted model config and interrupted-worker quarantine; synthetic model and source employees only"
     }
   }
 }

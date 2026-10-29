@@ -20,7 +20,7 @@ Compose 启动数据库、一次性迁移/工作区初始化、API 与 Worker。
 
 API/Worker 使用 UID/GID 10001、只读根文件系统、去除 Linux capabilities、临时 `/tmp`。只有 Worker 挂载 `runs` 写入卷，数据库使用 `database` 卷；默认不挂载主机目录或 Docker socket，不公开 PostgreSQL 端口。产品端口只绑定主机 `127.0.0.1:8080`，供本机访问或组织代理转发。执行器原生工具仍关闭，这些设置不等于完整生产沙箱或隔离验收。
 
-数据库管理员连接仅用于 PostgreSQL 与 `initialize`；API/Worker 改用独立 `hyper_runtime`，可写业务数据并管理队列 schema，不能管理数据库或修改业务表结构。旧配置需补充独立运行密码；[账号权限、旧卷升级、失败与回退说明](DEPLOYMENT-DATABASE.md)。该增量容器验证待本轮 CI，原有证据见下方固定提交。
+数据库管理员连接仅用于 PostgreSQL 与 `initialize`；API/Worker 改用独立 `hyper_runtime`，可写业务数据并管理队列 schema，不能管理数据库或修改业务表结构。旧配置需补充独立运行密码；[账号权限、旧卷升级、失败与回退说明及通过证据](DEPLOYMENT-DATABASE.md)。角色分离后的 3 项容器权限/双执行器/恢复用例已通过 CI。
 
 ## 准备与首次启动
 
@@ -75,7 +75,7 @@ docker compose --env-file .env.compose up -d
 docker compose --env-file .env.compose exec -T db pg_dump -U hyper -Fc hyper > /path/to/private-backup/hyper-backup.dump
 ```
 
-备份包含企业资料与密文，需与主密钥分开受控保存。数据库管理/运行角色已在配置与本地测试中分离，容器验证待本轮 CI；正式恢复演练、备份保留、负载容量、费用策略和主机加固尚未完成。`down --volumes` 只用于本仓库的隔离 CI 清理，不能作为保留企业数据的停止方式。
+备份包含企业资料与密文，需与主密钥分开受控保存。数据库管理/运行角色分离已通过 CI；正式恢复演练、备份保留、负载容量、费用策略和主机加固尚未完成。`down --volumes` 只用于本仓库的隔离 CI 清理，不能作为保留企业数据的停止方式。
 
 ## 升级与回退
 
@@ -99,6 +99,6 @@ API 与 Worker/数据库重启后，业务对象与历史保存在 PostgreSQL。
 
 提交 `5a0cb37125661da261b96b841dcf23d6db0d022a` 的 [CI 40906030218](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 三个 job 均成功，共 98 项测试。独立 `deployment` job 在 Linux amd64 从干净镜像构建、启动 Compose，2 项用例均通过：构建网页/私有路径/原 socket 演示登录边界，原生 DSH 创建与 Hermes 对同一成果修订，数据库/API/Worker 停启后会话/密文模型配置/成果版本保留，以及中断 Worker 后进入 `recovery_required` 而不重放模型调用。模型为内部合成协议服务，没有公司数据或真实供应商 Key。
 
-本机无 Docker；容器结论来自上述真实 CI，本地静态 HTTP 验证单独记录。真实公司 HTTPS/SSO、真实模型质量、完整 E01–E10、备份恢复演练、最小权限数据库角色和全面生产隔离仍未验收。
+本机无 Docker；容器结论来自真实 CI，本地静态 HTTP 验证单独记录。后续角色分离提交 `42facee` 的 [CI 40913709891](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40913709891) 三个 job 全部成功，共 103 项测试，包含 3 项容器权限与恢复用例。真实公司 HTTPS/SSO、真实模型质量、完整 E01–E10、备份恢复演练和全面生产隔离仍未验收。
 
 依据：[Compose 启动依赖](https://docs.docker.com/compose/how-tos/startup-order/)、[独立构建上下文](https://docs.docker.com/reference/compose-file/build/#additional_contexts)、[多阶段构建](https://docs.docker.com/build/building/multi-stage/)、[官方 Python 镜像构建定义](https://github.com/docker-library/python/blob/master/3.14/slim-bookworm/Dockerfile)。文档分支只作说明，实际版本以摘要与 CI 为准。

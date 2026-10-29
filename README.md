@@ -56,7 +56,7 @@ npm run dev
 
 新增构建后的网页/API、独立 Worker、PostgreSQL/pgvector 与一次性初始化服务；镜像包含锁定的 DSH/Hermes。Nextcloud 作为独立来源接入。配置生成器以 0600 创建新密钥文件并拒绝覆盖，容器持久化卷独立，默认只向主机 loopback 开放应用端口。
 
-API/Worker 的数据库运行账号与管理员分离，管理员凭据仅用于数据库与初始化；[旧配置与旧数据卷升级说明](docs/DEPLOYMENT-DATABASE.md)。角色增量已通过本地数据库验证，容器权限/恢复复核待本轮 CI。
+API/Worker 的数据库运行账号与管理员分离，管理员凭据仅用于数据库与初始化；[旧配置与旧数据卷升级说明](docs/DEPLOYMENT-DATABASE.md)。受限账号的业务、队列、容器权限与双执行器恢复已通过 CI，原有数据和加密主密钥保留。
 
 ```bash
 node scripts/deploy-init.mjs
@@ -129,7 +129,9 @@ npm run test:e2e
 
 部署首轮 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 在固定 Hermes 源码下载时遇到 HTTP 429，第二轮复用归档遇到构建 secret 大小限制。修复为有界重试、公开源码缓存/摘要复核与独立构建上下文后，提交 `5a0cb37` 的 [容器 job](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 2 项用例通过；完整证据和首轮失败记录见部署文档。
 
-提交 `5a0cb37` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 三个 job 均成功，共 98 项测试：15 单元/Provider/部署配置、3 Python 下载回归、49 数据库、18 UI、3 原生执行器、8 真实 Nextcloud/Talk/Files、2 容器部署恢复。另含类型、构建、两个 npm 审计和冻结包校验。模型仍为协议测试服务；未代表真实模型质量或原始 E01–E10 全部完成。
+数据库权限修复提交 `42facee` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40913709891) 三个 job 均成功，共 103 项测试：16 单元/Provider/部署配置、3 Python 下载回归、52 数据库、18 UI、3 原生执行器、8 真实 Nextcloud/Talk/Files、3 容器部署与权限/恢复。另含类型、构建、两个 npm 审计和冻结包校验。模型仍为协议测试服务；未代表真实模型质量或原始 E01–E10 全部完成。
+
+此前容器基础提交 `5a0cb37` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 三个 job 成功，共 98 项测试；后续数据库权限变化和首轮清理失败的记录见上述部署权限文档。
 
 个人文件阅读实现提交 `38de927` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40869859532) 两个 job 成功，共 90 项测试（12 单元/Provider、49 数据库、18 浏览器、3 原生执行器、8 真实来源），另含类型、构建、两个 npm 依赖审计和冻结包校验。来源用例覆盖 DSH/Hermes 的私有文件解读、修订、源更新与撤权传播；模型仍为协议测试服务。后续提交以各自 Actions 为准。
 
