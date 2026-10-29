@@ -21,6 +21,10 @@ import {
 } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { Request, Response, NextFunction } from "express";
+import express from "express";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { applicationConfig } from "./core/application-config.js";
 import { z, ZodError } from "zod";
 import {
   RunInput,
@@ -51,6 +55,7 @@ import { FileReadingService } from "./core/file-readings.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
+const config = applicationConfig();
 const db = new Database();
 const service = new WorkspaceService(db, engineRegistry());
 const queue = new RunProcessor(service);
@@ -59,7 +64,7 @@ const communication = new CommunicationService(db);
 const sessionCookie = {
   httpOnly: true,
   sameSite: "strict" as const,
-  secure: process.env.NODE_ENV === "production",
+  secure: config.secureCookie,
   maxAge: 12 * 60 * 60 * 1000,
   path: "/",
 };
@@ -572,9 +577,27 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader("Cache-Control", "no-store");
   next();
 });
+if (config.serveWeb) {
+  const directory = fileURLToPath(new URL("../../web/dist/", import.meta.url));
+  if (!existsSync(directory + "/index.html"))
+    throw new Error("Build the web application before enabling SERVE_WEB.");
+  app.use(
+    express.static(directory, {
+      dotfiles: "deny",
+      setHeaders(res, path) {
+        res.setHeader(
+          "Cache-Control",
+          path.endsWith("/index.html")
+            ? "no-store"
+            : "public, max-age=31536000, immutable",
+        );
+      },
+    }),
+  );
+}
 await queue.start(false);
 app.enableShutdownHooks();
-await app.listen(Number(process.env.API_PORT ?? 3100), "127.0.0.1");
+await app.listen(config.port, config.host);
 for (const sig of ["SIGINT", "SIGTERM"] as const)
   process.once(sig, () => {
     void queue

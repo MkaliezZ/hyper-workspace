@@ -102,3 +102,31 @@ jobs:
       - run: npm run test:nextcloud
       - if: failure()
         run: docker logs --tail 80 hyper-nextcloud-test
+
+  deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      COMPOSE_TEST_PROJECT: hyper-deployment-ci
+      COMPOSE_TEST_ENV: .runtime/compose-ci.env
+      HYPER_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.14.1"
+          cache: npm
+      - run: npm ci
+      - run: |
+          mkdir -p .runtime
+          node scripts/deploy-init.mjs .runtime/compose-ci.env
+          docker compose version
+          docker compose --project-name hyper-deployment-ci --env-file .runtime/compose-ci.env -f compose.yaml -f deploy/compose.ci.yaml config --quiet
+      - run: docker compose --project-name hyper-deployment-ci --env-file .runtime/compose-ci.env -f compose.yaml -f deploy/compose.ci.yaml build api
+      - run: docker compose --project-name hyper-deployment-ci --env-file .runtime/compose-ci.env -f compose.yaml -f deploy/compose.ci.yaml up -d --no-build --wait --wait-timeout 180
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:deployment
+      - if: failure()
+        run: docker compose --project-name hyper-deployment-ci --env-file .runtime/compose-ci.env -f compose.yaml -f deploy/compose.ci.yaml logs --tail 100
+      - if: always()
+        run: docker compose --project-name hyper-deployment-ci --env-file .runtime/compose-ci.env -f compose.yaml -f deploy/compose.ci.yaml down --volumes

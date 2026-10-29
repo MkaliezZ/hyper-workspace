@@ -27,7 +27,7 @@
 
 ## 本地开发
 
-需要 Node.js 24 与可用的 PostgreSQL（安装 pgvector）。Docker Compose 自部署教程正在补齐。
+需要 Node.js 24 与可用的 PostgreSQL（安装 pgvector）。容器运行包见下方自部署章节。
 
 ```bash
 npm ci
@@ -51,6 +51,18 @@ npm run dev
 打开 http://127.0.0.1:5173 ，点击“进入演示工作区”。演示登录仅接受本机请求；演示数据与确定性 fixture 执行不代表真实企业数据或模型效果。DSH/Hermes 未配置时会明确报错。
 
 使用 DSH 时另行运行 `npm ci --prefix runtime/dsh`；Hermes 需要 Python 3.14.6，再运行 `python3 runtime/hermes/install.py`。在设置页保存 chat 模型连接，重启 API/Worker 后发起任务。可显式选择个人/工作区连接；自动选择时优先个人连接。[DSH](runtime/dsh/README.md) · [Hermes 安装及验证边界](runtime/hermes/README.md)。
+
+## Docker Compose 自部署
+
+新增构建后的网页/API、独立 Worker、PostgreSQL/pgvector 与一次性初始化服务；镜像包含锁定的 DSH/Hermes。Nextcloud 作为独立来源接入。配置生成器以 0600 创建新密钥文件并拒绝覆盖，容器持久化卷独立，默认只向主机 loopback 开放应用端口。
+
+```bash
+node scripts/deploy-init.mjs
+# 编辑 .env.compose 中的组织来源与 APP_ORIGIN
+HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -d --build
+```
+
+[完整配置、备份、迁移与回退说明](docs/DEPLOYMENT.md)。目前已完成本地配置/编译网页验证，真实容器构建与恢复用例待本轮 CI；不代表生产验收。
 
 ## 企业账号登录
 
@@ -111,7 +123,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、12 项单元/Provider 测试、49 项数据库集成测试、18 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过类型检查、构建、15 项单元/Provider/部署配置测试、49 项数据库集成测试、18 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
 GitHub Actions 使用真实 PostgreSQL/pgvector 及固定 Nextcloud 33.0.10/Talk 23.0.12；来源 job 当前为 8 项，主 job 为 82 项。绿色状态只证明工作流实际覆盖的测试，不代表真实模型质量或原始 E01–E10 已全部完成。
 

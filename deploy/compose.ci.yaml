@@ -1,0 +1,19 @@
+# Synthetic CI only. The production Compose file has no model fixture or host file mounts.
+services:
+  initialize:
+    environment:
+      DEMO_MODE: "true"
+  api:
+    environment:
+      DEMO_MODE: "true"
+  worker:
+    environment:
+      DEMO_MODE: "true"
+  model-fixture:
+    image: hyper-workspace:${HYPER_IMAGE_TAG:-local}
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes: ["./tests/fixtures/deployment-model.mjs:/fixture/model.mjs:ro"]
+    command: [node, /fixture/model.mjs]

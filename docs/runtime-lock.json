@@ -114,5 +114,17 @@
     "rootNpmAuditKnownVulnerabilities": 0,
     "scope": "Root npm lockfile only; not independent engine runtimes or source images; clean npm ci verified; not a complete security assessment",
     "workspaceOverrideAnchor": "@nestjs/platform-express@11.2.8 pinned in root devDependencies and API for npm 11.11.0 workspace override resolution"
+  },
+  "deployment": {
+    "status": "implemented-container-ci-pending",
+    "contract": "docs/DEPLOYMENT.md",
+    "nodeImage": "node:24.14.1-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c",
+    "pythonImage": "python:3.14.6-slim-bookworm@sha256:4c92ffcde4dd6f1ff72a24518f49fd4990b27134987dfa31a733badde66df9f8",
+    "npm": "11.11.0",
+    "imagePinEvidence": "Docker Registry v2 OCI index digest response verified 2026-10-29",
+    "targetPlatform": "linux/amd64, container CI pending",
+    "sourceService": "Existing independently managed compatible Nextcloud; not automatically provisioned",
+    "localEvidence": "Compiled Node API serves built web, HTTP loopback cookie, private paths, desktop/mobile; no local Docker",
+    "scope": "Product core Compose, persisted PG and worker task volume, native runtimes; synthetic model only; no company, TLS/SSO, full security or production claim"
   }
 }

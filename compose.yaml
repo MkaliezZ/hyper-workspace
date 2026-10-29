@@ -1,0 +1,93 @@
+name: hyper-workspace
+x-environment: &environment
+  DATABASE_URL: postgres://hyper:${DB_PASSWORD:?Generate .env.compose first}@db:5432/hyper
+  DB_PASSWORD: ${DB_PASSWORD:?Generate .env.compose first}
+  CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY:?Generate .env.compose first}
+  APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
+  API_HOST: 0.0.0.0
+  API_PORT: "3100"
+  SERVE_WEB: "true"
+  DEMO_MODE: ${DEMO_MODE:-false}
+  NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
+  NEXTCLOUD_INTERNAL_URL: ${NEXTCLOUD_INTERNAL_URL:-}
+  NEXTCLOUD_WORKSPACE_ID: ${NEXTCLOUD_WORKSPACE_ID:-}
+  NEXTCLOUD_MEMBER_GROUP: ${NEXTCLOUD_MEMBER_GROUP:-}
+  NEXTCLOUD_BOOTSTRAP_ADMIN_IDS: ${NEXTCLOUD_BOOTSTRAP_ADMIN_IDS:-[]}
+  WORKSPACE_NAME: ${WORKSPACE_NAME:-Hyper Workspace}
+  NEXTCLOUD_TALK_ENABLED: ${NEXTCLOUD_TALK_ENABLED:-false}
+  NEXTCLOUD_FILES_ENABLED: ${NEXTCLOUD_FILES_ENABLED:-false}
+x-application: &application
+  image: hyper-workspace:${HYPER_IMAGE_TAG:-local}
+  build:
+    context: .
+    args:
+      VCS_REF: ${HYPER_REVISION:-unrecorded}
+  init: true
+  read_only: true
+  user: "10001:10001"
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,size=256m,uid=10001,gid=10001,mode=1770
+  stop_grace_period: 20s
+services:
+  db:
+    image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+    environment:
+      POSTGRES_USER: hyper
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Generate .env.compose first}
+      POSTGRES_DB: hyper
+    volumes: [database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U hyper -d hyper"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    restart: unless-stopped
+  initialize:
+    <<: *application
+    environment: *environment
+    command: [node, --import, tsx, /app/scripts/deploy-bootstrap.mjs]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+  api:
+    <<: *application
+    environment: *environment
+    ports: ["127.0.0.1:${HYPER_PORT:-8080}:3100"]
+    depends_on:
+      initialize: { condition: service_completed_successfully }
+      db: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3100/api/health').then(async r=>{await r.arrayBuffer();process.exit(r.ok?0:1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    restart: unless-stopped
+  worker:
+    <<: *application
+    environment:
+      <<: *environment
+      RUNTIME_DIR: /var/lib/hyper/runs
+      WORKER_HEALTH_FILE: /tmp/hyper-worker-health.json
+    command: [node, --import, tsx, dist/worker.js]
+    volumes: [runs:/var/lib/hyper/runs]
+    depends_on:
+      initialize: { condition: service_completed_successfully }
+      db: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, /app/scripts/worker-health.mjs]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+volumes:
+  database:
+  runs:

@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/.runtime
+**/.data
+**/dist
+**/.env
+**/.env.*
+**/*.log
+**/test-results
+**/playwright-report
+**/coverage
+**/__pycache__
+.DS_Store
