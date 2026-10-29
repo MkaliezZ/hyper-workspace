@@ -22,13 +22,19 @@ async function fixture(t: any, legacy = false) {
     runtime: Database | undefined,
     boss: PgBoss | undefined;
   t.after(async () => {
-    if (boss) await boss.stop({ graceful: true, timeout: 3000 });
-    await runtime?.close();
-    await db?.close();
-    // Only this fixture's random, isolated database and role are removed.
-    await cluster.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
-    await cluster.query(`DROP ROLE IF EXISTS "${role}"`);
-    await cluster.end();
+    try {
+      try {
+        if (boss) await boss.stop({ graceful: true, timeout: 3000 });
+      } finally {
+        await Promise.all([runtime?.close(), db?.close()]);
+      }
+      // A normal DROP waits for closed sockets to leave the server. FORCE races Pool.end()
+      // and can emit an asynchronous 57P01 into a later test; a genuine leak must fail cleanup.
+      await cluster.query(`DROP DATABASE IF EXISTS "${name}"`);
+      await cluster.query(`DROP ROLE IF EXISTS "${role}"`);
+    } finally {
+      await cluster.end();
+    }
   });
   await cluster.query(`CREATE DATABASE "${name}"`);
   db = new Database(url.toString());

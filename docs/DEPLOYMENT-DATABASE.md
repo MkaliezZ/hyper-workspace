@@ -50,4 +50,6 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 本地受限业务/向量/队列、旧队列接管与重复初始化、拒绝额外权限/成员关系等 3 项数据库用例通过。首轮为 1 通过/2 失败，定位到默认授权记录与队列表 TOAST 所有权被误判；只对这两类合法依赖增加限定检查后通过。新配置生成/升级等 4 项部署配置保护测试通过。容器内凭据/权限、双执行器修订和中断恢复等待本轮 CI；没有公司数据或真实供应商模型。
 
+首轮提交 `9606c71` 的 [CI 40912295143](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40912295143) 中，3 项容器和 8 项真实来源通过，主 job 数据库用例为 51 通过/1 失败，报错是清理测试库时连接被管理员终止。日志指向 `DROP DATABASE ... FORCE` 与连接关闭竞争，已移除强制删除并保证管理连接最终关闭；真正未退出的连接会使普通删除失败。独立临时 SCRAM 认证实例上的 52 项数据库复测通过；旧强制方式本地三次未复现，不将其记为已稳定复现。完整 CI 待修正提交复测。
+
 依据：[PostgreSQL 17 GRANT](https://www.postgresql.org/docs/17/sql-grant.html)、[默认权限作用域](https://www.postgresql.org/docs/17/sql-alterdefaultprivileges.html)。行为以固定 PostgreSQL/pg-boss 组合的实际测试为准。
