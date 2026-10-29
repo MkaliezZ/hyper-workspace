@@ -6,7 +6,7 @@
 
 实现 Login Flow v2、当前用户与自身群组查询、产品身份映射、按设备保存凭据、产品会话与执行前再鉴权。Talk、Files/WebDAV、Calendar/CalDAV 尚未接入。没有导入真实公司账号或资料。
 
-真实服务 CI 固定官方镜像 `nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305`；摘要于 2026-10-29 通过 Docker Registry v2 核验。当前机器没有 Docker/PHP，真实服务测试由 GitHub Actions 的 `nextcloud-identity` job 执行；第一次结果待核验。该 job 中 Nextcloud 使用独立 SQLite 测试库，产品仍使用独立 PostgreSQL/pgvector 测试库。此配置不作为生产部署方案。
+真实服务 CI 固定官方镜像 `nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305`；摘要于 2026-10-29 通过 Docker Registry v2 核验。当前机器没有 Docker/PHP，真实服务测试由 GitHub Actions 的 `nextcloud-identity` job 执行；已在 [run 40797427984](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40797427984)（提交 abf6a0c）通过 3 项真实服务测试。该 job 中 Nextcloud 使用独立 SQLite 测试库，产品仍使用独立 PostgreSQL/pgvector 测试库。此配置不作为生产部署方案。
 
 协议依据为固定版本源码：[Login Flow v2 Controller](https://github.com/nextcloud/server/blob/v33.0.10/core/Controller/ClientFlowLoginV2Controller.php)、[当前用户和群组查询](https://github.com/nextcloud/server/blob/v33.0.10/apps/provisioning_api/lib/Controller/UsersController.php)。Nextcloud `stable` 文档会随版本变化；本次核验时文档标题为 35，因此没有将其标题当作已验证运行版本。Talk 版本必须另外核验兼容范围，不能直接取 GitHub latest。
 
@@ -82,3 +82,5 @@ npm run test:nextcloud
 ```
 
 新增 9 项身份数据库测试覆盖角色/UID、多设备隔离、浏览器绑定、流程重放/取消/过期、暂时故障重试、源群组与产品撤权、来源改绑拒绝、推理中撤权后停止写入。新增 2 项界面测试只使用明确的协议 fixture。真实服务 CI 另测 Login Flow v2 浏览器授权、持久化讨论、设备应用密码撤销、群组撤销及 Origin/Cookie 约束。真实公司 SSO/MFA、代理配置、目录映射和全量业务验收仍未验证。
+
+首次 run 40796637776 因仅按 link 角色寻找来源授权入口而超时；测试已改为兼容 link/button，并增加不输出凭据的页面诊断。复跑通过。两个执行器与业务主 CI 同时通过；这些证据不等于真实公司环境、真实模型或全量 IM 已验收。
