@@ -27,15 +27,15 @@
     }
   },
   "nextcloud": {
-    "status": "identity-talk-and-source-project-real-service-ci-verified",
+    "status": "identity-talk-source-project-and-reviewed-replies-ci-verified",
     "runtimeVersion": "33.0.10",
     "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
     "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
-    "scope": "Identity, Talk text messaging, source-bound project permissions and AI read-only context verified against pinned services and native DSH/Hermes; AI Talk writes and Files/Calendar pending",
+    "scope": "Identity, Talk messaging, source-bound projects, AI read context and personal AI reply drafts with employee-reviewed delivery verified; autonomous AI sends and Files/Calendar pending",
     "companySourceConnected": false,
-    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40826947341",
-    "evidenceCommit": "dc1869edebc898f99222605ca258a1f9a953638d",
-    "evidenceScope": "Six real Nextcloud/Talk service tests with synthetic employees; native DSH/Hermes use a local model protocol service; no company SSO/MFA, real model quality or production claim",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40833543520",
+    "evidenceCommit": "e9eb756d8d5c4593fb83603167b478c1d6f115ae",
+    "evidenceScope": "Seven real Nextcloud/Talk service tests with synthetic employees; native DSH/Hermes use a local model protocol service; no company SSO/MFA, real model quality or production claim",
     "talk": {
       "version": "23.0.12",
       "lock": "runtime/nextcloud/talk.lock.json",
@@ -53,11 +53,13 @@
         "evidenceCommit": "dc1869edebc898f99222605ca258a1f9a953638d"
       },
       "replyDrafts": {
-        "status": "implemented-real-source-native-ci-pending",
+        "status": "real-source-and-native-engines-ci-verified",
         "migration": "db/migrations/008_communication_drafts.sql",
         "contract": "docs/AI-REPLY-DRAFTS.md",
         "delivery": "explicit employee review and send via CommunicationService; no autonomous send",
-        "modelEvidence": "local deterministic protocol service; no real model quality claim"
+        "modelEvidence": "local deterministic protocol service; no real model quality claim",
+        "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40833543520",
+        "evidenceCommit": "e9eb756d8d5c4593fb83603167b478c1d6f115ae"
       }
     }
   },
