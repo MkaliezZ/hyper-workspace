@@ -39,6 +39,7 @@ export function FileReaderPanel({
     [notice, setNotice] = useState("");
   const alive = useRef(true),
     selection = useRef(0),
+    selectedReading = useRef<string | undefined>(undefined),
     attempt = useRef<{ hash: string; key: string } | undefined>(undefined);
   async function library() {
     const value = await api<Library>("/files/imports/" + file.id + "/readings");
@@ -54,6 +55,7 @@ export function FileReaderPanel({
       token === selection.current &&
       value.sourceVersion === file.sourceVersion
     ) {
+      selectedReading.current = value.id;
       setReading(value);
       setDraft(value.content);
     }
@@ -108,7 +110,11 @@ export function FileReaderPanel({
           const saved = r.result?.receipts.find(
             (v) => v.tool === "file.reading.save",
           );
-          if (saved) await select(saved.id);
+          if (saved) {
+            if (!selectedReading.current) await select(saved.id);
+            else if (alive.current)
+              setNotice("新解读已保存，可从记录打开。当前编辑内容已保留。");
+          }
         }
       } catch {
         if (!stopped && alive.current) {

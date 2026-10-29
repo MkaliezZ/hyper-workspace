@@ -173,7 +173,7 @@ test("Personal AI reading chooses engine/model, resumes a saved result and prese
       starts++;
       return route.fulfill({
         json: {
-          id: starts === 1 ? runId : runId.replace(/1$/, "2"),
+          id: runId.replace(/1$/, String(starts)),
           state: "queued",
         },
       });
@@ -181,7 +181,18 @@ test("Personal AI reading chooses engine/model, resumes a saved result and prese
     return route.fulfill({
       json: {
         readings: finished
-          ? [{ id: readingId, version, engine: "hermes" }]
+          ? [
+              { id: readingId, version, engine: "hermes" },
+              ...(starts >= 2
+                ? [
+                    {
+                      id: readingId.replace(/1$/, "2"),
+                      version: 1,
+                      engine: "hermes",
+                    },
+                  ]
+                : []),
+            ]
           : [],
         runs: [],
       },
@@ -194,13 +205,23 @@ test("Personal AI reading chooses engine/model, resumes a saved result and prese
       return route.fulfill({ json: { state: "cancelled" } });
     }
     const first = route.request().url().endsWith(runId);
+    const second = route.request().url().endsWith(runId.replace(/1$/, "2"));
     return route.fulfill({
       json: {
         id: runId,
-        state: first ? "succeeded" : cancelled ? "cancelled" : "running",
-        result: first
-          ? { receipts: [{ tool: "file.reading.save", id: readingId }] }
-          : undefined,
+        state:
+          first || second ? "succeeded" : cancelled ? "cancelled" : "running",
+        result:
+          first || second
+            ? {
+                receipts: [
+                  {
+                    tool: "file.reading.save",
+                    id: first ? readingId : readingId.replace(/1$/, "2"),
+                  },
+                ],
+              }
+            : undefined,
       },
     });
   });
@@ -264,6 +285,15 @@ test("Personal AI reading chooses engine/model, resumes a saved result and prese
     ),
   ).toBe(false);
   await page.screenshot({ path: ".runtime/file-reading-mobile.png" });
+  await editor.fill("保留这段人工草稿");
+  await page
+    .getByRole("textbox", { name: "阅读问题", exact: true })
+    .fill("生成另一个角度的解读");
+  await page.getByRole("button", { name: "开始个人阅读", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "HERMES · 解读 v1", exact: true }),
+  ).toBeVisible();
+  await expect(editor).toHaveValue("保留这段人工草稿");
   await page
     .getByRole("textbox", { name: "阅读问题", exact: true })
     .fill("再次核对这份文件");
@@ -273,7 +303,7 @@ test("Personal AI reading chooses engine/model, resumes a saved result and prese
   await expect(
     page.getByRole("button", { name: "停止阅读", exact: true }),
   ).toHaveCount(0);
-  await expect(editor).toHaveValue("人工修订：确认来源与版本后再使用解读。");
+  await expect(editor).toHaveValue("保留这段人工草稿");
 });
 test("Lost file scope clears personal AI editors and a delayed private response cannot restore them", async ({
   page,

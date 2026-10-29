@@ -46,15 +46,15 @@
     }
   },
   "nextcloud": {
-    "status": "identity-talk-and-personal-files-ci-verified",
+    "status": "identity-talk-personal-files-and-ai-readings-ci-verified",
     "runtimeVersion": "33.0.10",
     "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
     "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
-    "scope": "Identity, Talk, source-bound projects, AI read context and reviewed private replies; personal short-text Files snapshots with live source checks and pgvector; autonomous sends, file agent tools, PDF/Office and Calendar pending",
+    "scope": "Identity, Talk, source projects and private reviewed replies; personal text Files, pgvector and private AI readings with revisions and source invalidation; shared file publication, PDF/Office, Calendar, autonomous sends and production pending",
     "companySourceConnected": false,
-    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40863698233",
-    "evidenceCommit": "10742f3c2e1b4ef9dc6b7419f85d76bf96edebd5",
-    "evidenceScope": "Eight real Nextcloud/Talk/Files service tests with synthetic employees; local deterministic model protocol service; no company SSO/MFA, model quality or production claim",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40869859532",
+    "evidenceCommit": "38de92795eb611ae3c46d57ed3d17b5f29df49c1",
+    "evidenceScope": "Eight real Nextcloud/Talk/Files tests with synthetic employees, including native DSH v1 / Hermes v2 private readings and manual revisions; local model protocol service; no real company or model quality claim",
     "talk": {
       "version": "23.0.12",
       "lock": "runtime/nextcloud/talk.lock.json",
@@ -91,12 +91,14 @@
       "evidenceCommit": "10742f3c2e1b4ef9dc6b7419f85d76bf96edebd5",
       "evidenceScope": "Explicit private shared-file import, source updates, stable-ID refresh, pgvector and share revocation; synthetic users and local embedding protocol service",
       "personalReadings": {
-        "status": "implemented-real-service-ci-pending",
+        "status": "real-source-and-native-engines-ci-verified",
         "contract": "docs/FILE-AI-READING.md",
         "migration": "db/migrations/010_file_readings.sql",
         "engineCapability": "EngineAdapter 1.0 additive read_file / file.reading.save",
         "scope": "Single explicit private file version; personal reading objects and manual versions; dependent text redacted on source invalidation; no shared project publication or cross-file retrieval",
-        "modelEvidence": "Local protocol model only; real-source native-engine joint assertions pending this commit CI"
+        "modelEvidence": "Local deterministic model protocol service; native DSH/Hermes; no real model quality claim",
+        "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40869859532",
+        "evidenceCommit": "38de92795eb611ae3c46d57ed3d17b5f29df49c1"
       }
     }
   },
