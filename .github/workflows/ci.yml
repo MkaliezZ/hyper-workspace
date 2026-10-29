@@ -53,3 +53,43 @@ jobs:
       - run: npm run migrate && npm run seed
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+  nextcloud-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+        env:
+          POSTGRES_USER: hyper
+          POSTGRES_PASSWORD: hyper-ci-only
+          POSTGRES_DB: hyper_identity_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hyper -d hyper_identity_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgres://hyper:hyper-ci-only@127.0.0.1:5432/hyper_identity_test
+      TEST_DATABASE_URL: postgres://hyper:hyper-ci-only@127.0.0.1:5432/hyper_identity_test
+      DEMO_MODE: "false"
+      APP_ORIGIN: http://127.0.0.1:5173
+      API_PORT: "3100"
+      CREDENTIAL_MASTER_KEY: "abababababababababababababababababababababababababababababababab"
+      NEXTCLOUD_URL: http://127.0.0.1:8090
+      NEXTCLOUD_WORKSPACE_ID: 10000000-0000-4000-8000-000000000001
+      NEXTCLOUD_MEMBER_GROUP: hyper-members
+      NEXTCLOUD_BOOTSTRAP_ADMIN_IDS: '["employee-one"]'
+      WORKSPACE_NAME: Synthetic Nextcloud CI Workspace
+      NC_TEST_PASSWORD: Hyper-CI-Fixture-Only-1234!
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.14.1"
+          cache: npm
+      - run: npm ci
+      - run: bash scripts/ci/nextcloud-setup.sh
+      - run: npm run migrate && npm run workspace:init
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:nextcloud
+      - if: failure()
+        run: docker logs --tail 80 hyper-nextcloud-test

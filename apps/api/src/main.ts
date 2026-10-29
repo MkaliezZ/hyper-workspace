@@ -31,15 +31,42 @@ import {
   ModelInput,
 } from "@hyper/contracts";
 import { Database, DEMO } from "./db/database.js";
-import { authenticate, issueSession, digest } from "./core/security.js";
+import { authenticate, issueSession } from "./core/security.js";
+import { digest } from "./core/credentials.js";
 import { WorkspaceService } from "./core/workspace.js";
 import { RunProcessor } from "./core/processor.js";
 import { engineRegistry } from "./engines/adapters.js";
 import { ModelService } from "./core/models.js";
 import { KnowledgeService } from "./core/knowledge.js";
+import { IdentityService } from "./core/identity.js";
+import { nextcloudConfig } from "./providers/nextcloud.js";
 const db = new Database();
 const service = new WorkspaceService(db, engineRegistry());
 const queue = new RunProcessor(service);
+const identity = new IdentityService(db);
+const sessionCookie = {
+  httpOnly: true,
+  sameSite: "strict" as const,
+  secure: process.env.NODE_ENV === "production",
+  maxAge: 12 * 60 * 60 * 1000,
+  path: "/",
+};
+const flowCookie = {
+  ...sessionCookie,
+  maxAge: 10 * 60 * 1000,
+  path: "/api/auth/nextcloud",
+};
+function cookie(req: Request, name: string) {
+  return req.headers.cookie
+    ?.split(";")
+    .map((s) => s.trim())
+    .find((s) => s.startsWith(name + "="))
+    ?.slice(name.length + 1);
+}
+function loginOrigin(req: Request) {
+  if (!process.env.APP_ORIGIN || req.headers.origin !== process.env.APP_ORIGIN)
+    throw new ForbiddenException("请从工作区页面发起企业登录。");
+}
 const uuid = (v: string) => z.uuid().parse(v);
 function token(req: Request) {
   const bearer = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
@@ -79,8 +106,53 @@ class ApiController {
   @Get("auth/status") status() {
     return {
       demoEnabled: process.env.DEMO_MODE === "true",
-      nextcloudConfigured: !!process.env.NEXTCLOUD_URL,
+      nextcloudConfigured: !!nextcloudConfig(),
     };
+  }
+  @Post("auth/nextcloud/start") async startLogin(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    loginOrigin(req);
+    const { binding, ...flow } = await identity.start(
+      cookie(req, "hyper_login"),
+    );
+    res.cookie("hyper_login", binding, flowCookie);
+    return flow;
+  }
+  @Post("auth/nextcloud/poll") async pollLogin(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() body: unknown,
+  ) {
+    loginOrigin(req);
+    const input = z.object({ flowId: z.uuid() }).strict().parse(body);
+    const result = await identity.poll(
+      input.flowId,
+      cookie(req, "hyper_login"),
+    );
+    if (result.state === "complete")
+      res.cookie("hyper_session", result.session, sessionCookie);
+    return { state: result.state };
+  }
+  @Post("auth/nextcloud/cancel") async cancelLogin(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() body: unknown,
+  ) {
+    loginOrigin(req);
+    const input = z.object({ flowId: z.uuid() }).strict().parse(body);
+    const cancelledSession = await identity.cancel(
+      input.flowId,
+      cookie(req, "hyper_login"),
+    );
+    if (
+      cancelledSession &&
+      token(req) &&
+      digest(token(req)!) === cancelledSession
+    )
+      res.clearCookie("hyper_session", { path: "/" });
+    return { ok: true };
   }
   @Post("auth/demo") async demo(
     @Req() req: Request,
@@ -93,13 +165,7 @@ class ApiController {
     );
     if (!loopback) throw new ForbiddenException("演示登录仅限本机访问。");
     const session = await issueSession(db, DEMO.user, DEMO.workspace, true);
-    res.cookie("hyper_session", session, {
-      httpOnly: true,
-      sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 12 * 60 * 60 * 1000,
-      path: "/",
-    });
+    res.cookie("hyper_session", session, sessionCookie);
     return { ok: true, evidence: "fixture" };
   }
   @Post("auth/logout") async logout(
@@ -108,9 +174,19 @@ class ApiController {
   ) {
     const t = token(req);
     if (t)
-      await db.pool.query("DELETE FROM cw_sessions WHERE token_hash=$1", [
-        digest(t),
-      ]);
+      await db.tx(async (c) => {
+        const session = (
+          await c.query(
+            "DELETE FROM cw_sessions WHERE token_hash=$1 RETURNING identity_credential_id",
+            [digest(t)],
+          )
+        ).rows[0];
+        if (session?.identity_credential_id)
+          await c.query(
+            "UPDATE cw_identity_credentials SET disabled_at=now(),credential_enc='' WHERE id=$1",
+            [session.identity_credential_id],
+          );
+      });
     res.clearCookie("hyper_session", { path: "/" });
     return { ok: true };
   }

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RunInput, assertTransition } from "@hyper/contracts";
-import { Vault } from "../apps/api/src/core/security.js";
+import { Vault } from "../apps/api/src/core/credentials.js";
 import { runtimeCommand, JsonRpcProcess } from "../apps/api/src/engines/rpc.js";
 import { FixtureAdapter } from "../apps/api/src/engines/adapters.js";
 import { tmpdir } from "node:os";

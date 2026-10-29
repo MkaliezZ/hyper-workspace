@@ -1049,3 +1049,50 @@ p {
     animation: none !important;
   }
 }
+
+.login-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(390px, calc(100vw - 40px));
+}
+.login-actions > p {
+  margin: 0;
+  text-align: center;
+  line-height: 1.7;
+}
+.login-actions > button {
+  width: 100%;
+}
+.login-actions small {
+  text-align: center;
+  line-height: 1.6;
+}
+.login-link {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.login-flow-buttons {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+.login-flow-buttons > span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.login-page .error-text {
+  max-width: min(390px, calc(100vw - 40px));
+}
+.login-page > p {
+  color: #59677b;
+}
+.login-page small,
+.login-flow-buttons > span {
+  color: #59677b;
+}

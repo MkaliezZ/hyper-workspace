@@ -22,7 +22,9 @@
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm test && npm run build",
     "migrate": "npm run migrate -w @hyper/api",
-    "seed": "npm run seed -w @hyper/api"
+    "seed": "npm run seed -w @hyper/api",
+    "workspace:init": "npm run workspace:init -w @hyper/api",
+    "test:nextcloud": "playwright test --config playwright.nextcloud.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

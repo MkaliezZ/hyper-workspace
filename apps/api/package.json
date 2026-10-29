@@ -10,7 +10,8 @@
     "migrate": "node --import ../../scripts/load-env.mjs --import tsx src/db/cli.ts migrate",
     "seed": "node --import ../../scripts/load-env.mjs --import tsx src/db/cli.ts seed",
     "start": "node --import ../../scripts/load-env.mjs --import tsx src/main.ts",
-    "worker": "node --import ../../scripts/load-env.mjs --import tsx --watch src/worker.ts"
+    "worker": "node --import ../../scripts/load-env.mjs --import tsx --watch src/worker.ts",
+    "workspace:init": "node --import ../../scripts/load-env.mjs --import tsx src/db/cli.ts workspace:init"
   },
   "dependencies": {
     "@hyper/contracts": "0.1.0",

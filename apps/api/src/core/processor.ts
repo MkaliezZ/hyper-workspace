@@ -11,7 +11,8 @@ import {
 } from "@hyper/contracts";
 import { Database } from "../db/database.js";
 import { WorkspaceService, appendEvent } from "./workspace.js";
-import { assertMember, stableDigest } from "./security.js";
+import { assertMember } from "./security.js";
+import { stableDigest } from "./credentials.js";
 import { reviseArtifactVersion } from "./artifacts.js";
 import { ModelService } from "./models.js";
 export class RunProcessor {
@@ -112,6 +113,7 @@ export class RunProcessor {
         ...actor,
         workspaceId: run.workspace_id,
         demo: run.demo,
+        identityCredentialId: run.identity_credential_id ?? undefined,
       };
       await assertMember(db, subject);
       await event("run.started", {
@@ -229,7 +231,14 @@ export class RunProcessor {
           ),
         );
       }
+      await assertMember(db, subject);
       await db.tx(async (c) => {
+        const member = await c.query(
+          "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+          [subject.workspaceId, subject.id],
+        );
+        if (!member.rowCount)
+          throw new Error("工作区权限已撤销，不能发布执行结果。");
         const current = await c.query(
           "SELECT state FROM cw_runs WHERE id=$1 AND lease_owner=$2 FOR UPDATE",
           [runId, lease],

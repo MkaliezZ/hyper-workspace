@@ -30,3 +30,7 @@ Model settings and the knowledge panel were subsequently inspected in the runnin
 The engine/model selector and a real missing-model response were also inspected in the native task dialog at both widths. The error is visible inside the modal, its heading provides the accessible dialog name, the draft remains, and controls fit the mobile viewport. Page errors: none; horizontal overflow: false. Review captures are .runtime/engine-desktop-review.png and .runtime/engine-mobile-review.png.
 
 This comparison verifies the implemented first-stage UI surface. DSH/Hermes model execution and Nextcloud integration remain unverified and are not inferred from screenshots.
+
+### 企业身份登录增量
+
+沿用现有蓝白黑和 H 品牌，新增独立来源授权页面入口、弹窗受阻时的链接、等待/重试/取消状态；产品不出现账号密码输入框。已查看 1504×1045 与 390×844 的实际页面截图（UI 协议 fixture，非公司来源），页面无横向溢出，主入口与取消可访问，提示文字颜色调整为 #59677b。真实 Nextcloud 授权在独立 CI job 验证。

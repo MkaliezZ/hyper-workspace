@@ -126,6 +126,8 @@ export interface Subject {
   workspaceId: string;
   role: "admin" | "member";
   demo: boolean;
+  /** Server-owned source credential reference. Never accepted from client input. */
+  identityCredentialId?: string;
 }
 export interface RunEvent {
   eventId: string;

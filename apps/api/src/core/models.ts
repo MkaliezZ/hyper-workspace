@@ -1,7 +1,8 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { Subject } from "@hyper/contracts";
 import type { Database } from "../db/database.js";
-import { assertMember, Vault } from "./security.js";
+import { assertMember } from "./security.js";
+import { Vault } from "./credentials.js";
 
 export interface ModelConnection {
   id: string;

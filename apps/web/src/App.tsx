@@ -11,6 +11,7 @@ import {
 } from "./components/WorkPanels";
 import { Dialog } from "./components/Dialog";
 import { ModelSettings, type ModelSummary } from "./components/ModelSettings";
+import { Login } from "./components/Login";
 import { KnowledgePanel } from "./components/KnowledgePanel";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
@@ -52,9 +53,14 @@ export function App() {
       );
       setView(v);
       setLogin(false);
+      setError("");
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setLogin(true);
-      else setError((e as Error).message);
+      if (e instanceof ApiError && [401, 403].includes(e.status)) {
+        setView(null);
+        setRun(null);
+        setLogin(true);
+        if (e.status === 403) setError(e.message);
+      } else setError((e as Error).message);
     }
   }, []);
   useEffect(() => {
@@ -161,36 +167,12 @@ export function App() {
   }
   if (!view)
     return (
-      <div className="login-page">
-        <div className="login-brand">H</div>
-        <h1>Hyper Workspace</h1>
-        <p>让讨论有沉淀，让工作持续向前。</p>
-        {error ? <p className="error-text">{error}</p> : null}
-        {login ? (
-          <>
-            <button
-              className="primary login-button"
-              disabled={busy || !status?.demoEnabled}
-              onClick={() =>
-                void act(async () => {
-                  await mutation("/auth/demo", {});
-                  await load();
-                })
-              }
-            >
-              {busy ? <LoaderCircle size={18} /> : null}进入演示工作区
-              <ArrowRight size={18} />
-            </button>
-            <small>
-              {status?.demoEnabled
-                ? "使用独立演示资料，未连接企业数据。"
-                : "演示模式未启用。请配置工作区登录服务。"}
-            </small>
-          </>
-        ) : (
-          <p>正在连接工作区…</p>
-        )}
-      </div>
+      <Login
+        ready={login}
+        status={status}
+        error={error}
+        onAuthenticated={() => load()}
+      />
     );
   const projectTitle =
     section === "knowledge"

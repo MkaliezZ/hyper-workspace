@@ -16,7 +16,8 @@ import type {
   TaskInput,
 } from "@hyper/contracts";
 import { Database } from "../db/database.js";
-import { assertMember, maskKey, stableDigest, Vault } from "./security.js";
+import { assertMember } from "./security.js";
+import { maskKey, stableDigest, Vault } from "./credentials.js";
 import { reviseArtifactVersion } from "./artifacts.js";
 import { ModelService } from "./models.js";
 
@@ -61,7 +62,13 @@ export class WorkspaceService {
       ),
     ]);
     return {
-      user: s,
+      user: {
+        id: s.id,
+        name: s.name,
+        workspaceId: s.workspaceId,
+        role: await assertMember(this.db, s),
+        demo: s.demo,
+      },
       projects,
       project,
       messages: messages.rows,
@@ -236,7 +243,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -251,6 +258,7 @@ export class WorkspaceService {
         s.demo,
         model?.id ?? null,
         expectedVersion,
+        s.identityCredentialId ?? null,
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };

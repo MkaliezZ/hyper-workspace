@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Isolated synthetic source only. Product state still uses PostgreSQL + pgvector.
+: "${NC_TEST_PASSWORD:?Synthetic CI password required}"
+docker run --detach --name hyper-nextcloud-test --publish 127.0.0.1:8090:80 \
+  --env NEXTCLOUD_ADMIN_USER=nc-admin --env NEXTCLOUD_ADMIN_PASSWORD="$NC_TEST_PASSWORD" \
+  --env SQLITE_DATABASE=nextcloud-ci --env NEXTCLOUD_TRUSTED_DOMAINS=127.0.0.1 \
+  --env OVERWRITEHOST=127.0.0.1:8090 --env OVERWRITEPROTOCOL=http \
+  nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305
+for attempt in $(seq 1 120); do
+  if curl --silent --fail http://127.0.0.1:8090/status.php | python3 -c 'import sys,json; v=json.load(sys.stdin); sys.exit(not(v.get("installed") and not v.get("maintenance")))' 2>/dev/null; then break; fi
+  if [ "$attempt" = 120 ]; then docker logs hyper-nextcloud-test; exit 1; fi
+  sleep 2
+done
+occ() { docker exec --user www-data hyper-nextcloud-test php occ "$@"; }
+occ config:system:set default_language --value=en
+occ config:system:set force_language --value=en
+occ config:system:set overwrite.cli.url --value=http://127.0.0.1:8090
+occ group:add hyper-members
+for employee in employee-one employee-two; do
+  docker exec --user www-data --env OC_PASS="$NC_TEST_PASSWORD" hyper-nextcloud-test php occ user:add --password-from-env "$employee"
+  occ group:adduser hyper-members "$employee"
+done
+occ group:adduser hyper-members nc-admin
+occ status --output=json

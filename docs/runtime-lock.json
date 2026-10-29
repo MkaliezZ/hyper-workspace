@@ -27,8 +27,12 @@
     }
   },
   "nextcloud": {
-    "status": "not-connected",
-    "runtimeVersion": null
+    "status": "identity-provider-implemented-real-service-ci-pending",
+    "runtimeVersion": "33.0.10",
+    "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
+    "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
+    "scope": "Identity Login Flow v2/current user/self groups only; Talk/Files/Calendar remain pending",
+    "companySourceConnected": false
   },
   "note": "Implemented dependency pins do not claim a fully validated production runtime combination."
 }
