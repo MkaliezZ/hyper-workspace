@@ -96,6 +96,17 @@ test("A source room opens a new scoped project and makes the AI input scope visi
     "不会自动发布到企业会话",
   );
   await page
+    .getByRole("combobox", { name: "工作类型", exact: true })
+    .selectOption("follow_up");
+  await expect(page.getByRole("dialog")).toContainText("不包含讨论正文");
+  await expect(page.getByRole("dialog")).not.toContainText("最近至多 60");
+  await expect(page.getByRole("dialog")).toContainText(
+    "定时跟进请在任务页管理",
+  );
+  await page
+    .getByRole("combobox", { name: "工作类型", exact: true })
+    .selectOption("discussion_to_minutes");
+  await page
     .getByRole("textbox", { name: "工作要求", exact: true })
     .fill("private-run-draft");
   await page

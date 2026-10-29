@@ -694,7 +694,7 @@ export function App() {
           error={error}
           onClose={() => setDialog(null)}
         >
-          {view.project.source ? (
+          {view.project.source && workflow !== "follow_up" ? (
             <p className="source-scope-note">
               此任务会读取「{view.project.source.name}」当前获准的最近至多 60
               条普通消息，并交给所选模型连接处理。
@@ -706,8 +706,10 @@ export function App() {
           ) : null}
           {workflow === "follow_up" ? (
             <p className="source-scope-note">
-              只检查当前项目待办。首次建立基线，无变化时不发消息；有变化时合并为一条项目消息。
-              本次为单次检查，尚未设置定时跟进。
+              只将「{view.project.name}
+              」当前待办交给所选模型，不包含讨论正文；仍核验项目及来源访问权限。
+              首次建立基线，无变化时不发消息；有变化时合并为一条项目消息。
+              本次为单次检查；定时跟进请在任务页管理。
             </p>
           ) : null}
           <form
