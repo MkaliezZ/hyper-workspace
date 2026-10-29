@@ -49,7 +49,7 @@ COPY runtime/dsh runtime/dsh
 COPY runtime/hermes runtime/hermes
 COPY db/migrations db/migrations
 COPY ["docs/handoff-v1/AI-IM基线/product-baseline.v1.json", "docs/handoff-v1/AI-IM基线/product-baseline.v1.json"]
-COPY scripts/deploy-bootstrap.mjs scripts/worker-health.mjs scripts/
+COPY scripts/deploy-bootstrap.mjs scripts/deploy-database.mjs scripts/worker-health.mjs scripts/
 COPY LICENSE ./LICENSE
 RUN mkdir -p /var/lib/hyper/runs && chown 10001:10001 /var/lib/hyper/runs && chmod 700 /var/lib/hyper/runs && node --version && python3 --version && dpkg-query -W > /app/runtime/image-packages.txt
 ARG VCS_REF=unrecorded

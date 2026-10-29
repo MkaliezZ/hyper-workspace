@@ -56,6 +56,47 @@ async function completed(request: any, id: string) {
     .toBe("succeeded");
   return (await request.get("/api/runs/" + id)).json();
 }
+test("API and Worker use the restricted role without administrator credentials or business schema privileges", async () => {
+  for (const service of ["api", "worker"]) {
+    const report = JSON.parse(
+      compose(
+        "exec",
+        "-T",
+        service,
+        "node",
+        "--input-type=module",
+        "-e",
+        `
+      import {Pool} from 'pg';
+      const pool=new Pool({connectionString:process.env.DATABASE_URL,max:1});
+      try {
+        const {rows:[role]}=await pool.query("SELECT current_user AS name,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,has_schema_privilege(current_user,'public','CREATE') AS business_ddl,has_table_privilege(current_user,'public.cw_migrations','UPDATE') AS edit_migrations,has_database_privilege(current_user,current_database(),'TEMP') AS temporary_tables FROM pg_roles WHERE rolname=current_user");
+        const denied=[];
+        for(const sql of ["ALTER TABLE cw_users ADD COLUMN forbidden text","SELECT * FROM pg_authid","SELECT pg_read_file('postgresql.conf')"]){
+          try{await pool.query(sql);denied.push('unexpected-success')}catch(error){denied.push(error.code)}
+        }
+        process.stdout.write(JSON.stringify({role,denied,adminEnvironment:'DB_PASSWORD' in process.env || 'DB_RUNTIME_PASSWORD' in process.env}));
+      }finally{await pool.end()}
+    `,
+      ),
+    );
+    expect(report).toEqual({
+      role: {
+        name: "hyper_runtime",
+        rolsuper: false,
+        rolcreatedb: false,
+        rolcreaterole: false,
+        rolreplication: false,
+        rolbypassrls: false,
+        business_ddl: false,
+        edit_migrations: false,
+        temporary_tables: false,
+      },
+      denied: ["42501", "42501", "42501"],
+      adminEnvironment: false,
+    });
+  }
+});
 test("Built containers serve only the compiled web app and preserve native DSH/Hermes revisions across restart", async ({
   browser,
   request,

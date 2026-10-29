@@ -35,6 +35,7 @@ export class RunProcessor {
     this.boss = new PgBoss({
       connectionString: process.env.DATABASE_URL!,
       schema: "hyper_jobs",
+      createSchema: process.env.QUEUE_SCHEMA_PRECREATED !== "true",
     });
     this.boss.on("error", () =>
       console.error("Background queue error; inspect service health."),

@@ -56,6 +56,8 @@ npm run dev
 
 新增构建后的网页/API、独立 Worker、PostgreSQL/pgvector 与一次性初始化服务；镜像包含锁定的 DSH/Hermes。Nextcloud 作为独立来源接入。配置生成器以 0600 创建新密钥文件并拒绝覆盖，容器持久化卷独立，默认只向主机 loopback 开放应用端口。
 
+API/Worker 的数据库运行账号与管理员分离，管理员凭据仅用于数据库与初始化；[旧配置与旧数据卷升级说明](docs/DEPLOYMENT-DATABASE.md)。角色增量已通过本地数据库验证，容器权限/恢复复核待本轮 CI。
+
 ```bash
 node scripts/deploy-init.mjs
 # 编辑 .env.compose 中的组织来源与 APP_ORIGIN
@@ -123,7 +125,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、15 项单元/Provider/部署配置测试、49 项数据库集成测试、18 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过类型检查、构建、16 项单元/Provider/部署配置测试、52 项数据库集成测试；既有 18 项浏览器和 3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
 部署首轮 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 在固定 Hermes 源码下载时遇到 HTTP 429，第二轮复用归档遇到构建 secret 大小限制。修复为有界重试、公开源码缓存/摘要复核与独立构建上下文后，提交 `5a0cb37` 的 [容器 job](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 2 项用例通过；完整证据和首轮失败记录见部署文档。
 

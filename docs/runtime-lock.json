@@ -128,6 +128,15 @@
     "scope": "Product core Compose, persisted PG and worker task volume, native runtimes; synthetic model only; no company, TLS/SSO, full security or production claim",
     "evidenceCommit": "5a0cb37125661da261b96b841dcf23d6db0d022a",
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218",
-    "evidenceScope": "Two real container tests: compiled web and loopback login boundary, DSH create / Hermes revise, persisted session/model config/artifact versions across DB/API/Worker restart, and interrupted Worker quarantined without model replay; synthetic model only"
+    "evidenceScope": "Two real container tests: compiled web and loopback login boundary, DSH create / Hermes revise, persisted session/model config/artifact versions across DB/API/Worker restart, and interrupted Worker quarantined without model replay; synthetic model only",
+    "databaseRoleSeparation": {
+      "status": "implemented-container-ci-pending",
+      "contract": "docs/DEPLOYMENT-DATABASE.md",
+      "administrator": "hyper: database container and one-shot initialize only",
+      "runtime": "hyper_runtime: product DML and queue-schema ownership; no database or business schema ownership",
+      "credentials": "Independent generated DB_RUNTIME_PASSWORD; old administrator password and encryption master key preserved",
+      "localEvidence": "16 unit/config and 52 database checks, including three isolated real PostgreSQL role/queue cases; type and build pass",
+      "scope": "Dedicated product database; product authorization still applies; no new RLS, backup restore, company deployment or full production security claim"
+    }
   }
 }

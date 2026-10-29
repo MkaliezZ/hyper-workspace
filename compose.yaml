@@ -1,7 +1,7 @@
 name: hyper-workspace
 x-environment: &environment
-  DATABASE_URL: postgres://hyper:${DB_PASSWORD:?Generate .env.compose first}@db:5432/hyper
-  DB_PASSWORD: ${DB_PASSWORD:?Generate .env.compose first}
+  DATABASE_URL: postgres://hyper_runtime:${DB_RUNTIME_PASSWORD:?Add a runtime password to the private Compose configuration}@db:5432/hyper
+  QUEUE_SCHEMA_PRECREATED: "true"
   CREDENTIAL_MASTER_KEY: ${CREDENTIAL_MASTER_KEY:?Generate .env.compose first}
   APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
   API_HOST: 0.0.0.0
@@ -48,7 +48,11 @@ services:
     restart: unless-stopped
   initialize:
     <<: *application
-    environment: *environment
+    environment:
+      <<: *environment
+      DATABASE_URL: postgres://hyper:${DB_PASSWORD:?Generate .env.compose first}@db:5432/hyper
+      DB_PASSWORD: ${DB_PASSWORD:?Generate .env.compose first}
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?Add a runtime password to the private Compose configuration}
     command: [node, --import, tsx, /app/scripts/deploy-bootstrap.mjs]
     depends_on:
       db: { condition: service_healthy }

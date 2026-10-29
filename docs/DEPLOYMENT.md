@@ -20,6 +20,8 @@ Compose 启动数据库、一次性迁移/工作区初始化、API 与 Worker。
 
 API/Worker 使用 UID/GID 10001、只读根文件系统、去除 Linux capabilities、临时 `/tmp`。只有 Worker 挂载 `runs` 写入卷，数据库使用 `database` 卷；默认不挂载主机目录或 Docker socket，不公开 PostgreSQL 端口。产品端口只绑定主机 `127.0.0.1:8080`，供本机访问或组织代理转发。执行器原生工具仍关闭，这些设置不等于完整生产沙箱或隔离验收。
 
+数据库管理员连接仅用于 PostgreSQL 与 `initialize`；API/Worker 改用独立 `hyper_runtime`，可写业务数据并管理队列 schema，不能管理数据库或修改业务表结构。旧配置需补充独立运行密码；[账号权限、旧卷升级、失败与回退说明](DEPLOYMENT-DATABASE.md)。该增量容器验证待本轮 CI，原有证据见下方固定提交。
+
 ## 准备与首次启动
 
 准备有 Docker Engine、BuildKit 和 Compose 2.17+ 的 Linux 主机，构建使用 `additional_contexts`。本机开发仍可按 README 的 Node/PostgreSQL 方式运行；容器支持范围先按 CI 的 Linux amd64 验证，不从基础镜像的多架构清单推导出 ARM/Windows 已验收。
@@ -30,10 +32,11 @@ cd hyper-workspace
 node scripts/deploy-init.mjs
 ```
 
-配置生成器需要 Node 24；它以 0600 创建 `.env.compose`，生成独立的数据库密码、凭据加密主密钥和工作区 UUID，拒绝覆盖已有文件，不打印秘密。该文件被 Git 与 Docker build context 排除。之后在本机编辑该文件：
+配置生成器需要 Node 24；它以 0600 创建 `.env.compose`，生成独立的管理员密码、运行密码、凭据加密主密钥和工作区 UUID，拒绝覆盖已有文件，不打印秘密。该文件被 Git 与 Docker build context 排除。之后在本机编辑该文件：
 
 | 配置                                   | 含义                                                                                                              |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| DB_PASSWORD / DB_RUNTIME_PASSWORD / CREDENTIAL_MASTER_KEY | 生成器创建的三个独立 64-hex 秘密；管理员密码仅供数据库与初始化，API/Worker 使用运行密码 |
 | APP_ORIGIN                             | 员工使用的规范 origin，无末尾 `/` 或路径，例如 `https://workspace.example.com`；生产模式仅本机 loopback 允许 HTTP |
 | HYPER_PORT                             | 代理访问的主机 loopback 端口，默认 8080；容器内部仍为 3100                                                        |
 | NEXTCLOUD_URL                          | 浏览器和来源 Login Flow 返回的规范公开地址，通常为组织的有效 HTTPS 地址                                           |
@@ -72,7 +75,7 @@ docker compose --env-file .env.compose up -d
 docker compose --env-file .env.compose exec -T db pg_dump -U hyper -Fc hyper > /path/to/private-backup/hyper-backup.dump
 ```
 
-备份包含企业资料与密文，需与主密钥分开受控保存。正式恢复演练、备份保留、数据库最小权限角色分离、负载容量、费用策略和主机加固尚未完成。`down --volumes` 只用于本仓库的隔离 CI 清理，不能作为保留企业数据的停止方式。
+备份包含企业资料与密文，需与主密钥分开受控保存。数据库管理/运行角色已在配置与本地测试中分离，容器验证待本轮 CI；正式恢复演练、备份保留、负载容量、费用策略和主机加固尚未完成。`down --volumes` 只用于本仓库的隔离 CI 清理，不能作为保留企业数据的停止方式。
 
 ## 升级与回退
 
