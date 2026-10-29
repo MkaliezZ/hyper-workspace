@@ -51,6 +51,13 @@
         "modelEvidence": "local deterministic protocol service; native engines; no company data",
         "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40826947341",
         "evidenceCommit": "dc1869edebc898f99222605ca258a1f9a953638d"
+      },
+      "replyDrafts": {
+        "status": "implemented-real-source-native-ci-pending",
+        "migration": "db/migrations/008_communication_drafts.sql",
+        "contract": "docs/AI-REPLY-DRAFTS.md",
+        "delivery": "explicit employee review and send via CommunicationService; no autonomous send",
+        "modelEvidence": "local deterministic protocol service; no real model quality claim"
       }
     }
   },

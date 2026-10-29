@@ -66,6 +66,13 @@
 - 新增迁移 007；已有来源项目不能直接回退到忽略绑定表的旧版，否则可能扩大资料可见范围。范围、回退保护与未完成项见 [PROJECT-SOURCE-SCOPE.md](PROJECT-SOURCE-SCOPE.md)。冻结交接快照未改。
 - 首轮联合 [run 40826264902](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40826264902) 主 job 全通过，来源 job 为 5 通过/1 失败：Nest 对未关联项目的顶层 null 返回空正文，导致前端创建入口解析失败。API 固定为 `{project: 对象或 null}` 并补真实接口断言后，上述修复 CI 通过；首轮仍保留失败证据。同时补齐主动切换项目时清理 AI 工作要求和成果选择的 UI 回归。
 
+## AI 个人回复草稿增量
+
+- 新增统一 `draft_reply/communication.draft`，DSH/Hermes 仅准备一条个人回复；目标来自后端项目来源绑定，参数不接受会话或员工。模型总结不写共享讨论、不冒充实际发送结果。
+- 产品保存不可变生成草稿与输入引用，只对发起员工开放；预览后可替换发送框内容，人工编辑后发送复用通信回执，记录 draft_id/draft_modified。已有成功/未知发送的草稿不能换键重复投递。
+- 4 项新数据库测试及 2 项 UI 测试通过，当前本地 9 单元、38 数据库、14 浏览器和 3 原生运行时测试通过；7 项真实来源 job 待本轮核验。没有真实公司来源或真实模型质量结论。
+- 迁移、权限、输入输出、恢复、数据保留缺口与映射见 [AI-REPLY-DRAFTS.md](AI-REPLY-DRAFTS.md)。AI 自主投递、Files/Calendar 与完整 E01–E10 仍未完成；原冻结包未修改。
+
 ## 本地环境证据
 
 这台机器缺少 Docker/PostgreSQL，Homebrew 公式元数据与本机 Homebrew 不兼容。因此在被 Git 忽略的 .runtime 中使用官方源包与 SHA-256 校验构建 PostgreSQL 17.11，安装 pgvector 0.8.7，并实际启动本地数据库。没有用 SQLite 或内存数据库代替既定生产存储。

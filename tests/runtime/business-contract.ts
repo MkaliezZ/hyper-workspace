@@ -75,21 +75,29 @@ export function modelFixture(
     const revision = JSON.stringify(body.messages).match(
       /switch-revise-(\d+)/,
     )?.[1];
+    const draftReply = JSON.stringify(body.messages).includes(
+      "native-reply-draft-fixture",
+    );
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        revision
+        draftReply
           ? {
-              tool: "artifact.revise",
-              args: { content: "protocol-fixture-revision " + revision },
+              tool: "communication.draft",
+              args: { content: "private-native-reply-draft-" + employee },
             }
-          : {
-              tool: "artifact.create",
-              args: {
-                title: "Native runtime test " + employee,
-                content: "protocol-fixture-model-result " + employee,
+          : revision
+            ? {
+                tool: "artifact.revise",
+                args: { content: "protocol-fixture-revision " + revision },
+              }
+            : {
+                tool: "artifact.create",
+                args: {
+                  title: "Native runtime test " + employee,
+                  content: "protocol-fixture-model-result " + employee,
+                },
               },
-            },
       ],
     });
     if (body.stream) {

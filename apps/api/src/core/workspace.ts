@@ -289,6 +289,11 @@ export class WorkspaceService {
   async startRun(s: Subject, input: RunInput) {
     const conversation = await this.conversation(s, input.conversationId);
     if (
+      input.workflow === "draft_reply" &&
+      !(await this.access.binding(s, conversation.project_id))
+    )
+      throw new BadRequestException("请先从企业会话创建关联项目，再起草回复。");
+    if (
       input.engine === "fixture" &&
       (!s.demo || process.env.DEMO_MODE !== "true")
     )

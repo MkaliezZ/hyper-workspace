@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { z } from "zod";
 import { PgBoss } from "pg-boss";
 import {
   TaskInput,
@@ -278,7 +279,9 @@ export class RunProcessor {
             ? ["artifact.revise"]
             : run.workflow === "follow_up"
               ? ["follow_up.check"]
-              : [];
+              : run.workflow === "draft_reply"
+                ? ["communication.draft"]
+                : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -286,6 +289,8 @@ export class RunProcessor {
         throw new Error("执行器没有提出本次工作要求的成果操作，不能报告完成。");
       if (run.workflow === "revise_artifact" && result.actions.length !== 1)
         throw new Error("一次修订必须对应一个明确的成果版本。");
+      if (run.workflow === "draft_reply" && result.actions.length !== 1)
+        throw new Error("一次起草必须只准备一条会话回复。");
       const receipts: Record<string, unknown>[] = [];
       for (const [index, action] of result.actions.entries()) {
         await this.service.conversation(subject, run.conversation_id);
@@ -307,19 +312,30 @@ export class RunProcessor {
           [runId, lease],
         );
         if (current.rows[0]?.state !== "running") return;
-        await c.query(
-          "INSERT INTO cw_messages(id,workspace_id,conversation_id,author,role,content,metadata) VALUES($1,$2,$3,'协作助手','assistant',$4,$5)",
-          [
-            randomUUID(),
-            run.workspace_id,
-            run.conversation_id,
-            result.text,
-            { runId, evidence: result.evidence, receipts },
-          ],
-        );
+        if (run.workflow !== "draft_reply")
+          await c.query(
+            "INSERT INTO cw_messages(id,workspace_id,conversation_id,author,role,content,metadata) VALUES($1,$2,$3,'协作助手','assistant',$4,$5)",
+            [
+              randomUUID(),
+              run.workspace_id,
+              run.conversation_id,
+              result.text,
+              { runId, evidence: result.evidence, receipts },
+            ],
+          );
         await c.query(
           "UPDATE cw_runs SET state='succeeded',result=$2,updated_at=now(),lease_expires_at=NULL WHERE id=$1",
-          [runId, { text: result.text, receipts, evidence: result.evidence }],
+          [
+            runId,
+            {
+              text:
+                run.workflow === "draft_reply"
+                  ? "回复草稿已保存，尚未发送。"
+                  : result.text,
+              receipts,
+              evidence: result.evidence,
+            },
+          ],
         );
         await appendEvent(c, runId, "run.completed", {
           receipts,
@@ -483,6 +499,37 @@ export class RunProcessor {
         );
         receipt = { tool: action.tool, ...revision };
         await appendEvent(c, run.id, "artifact.updated", receipt);
+      } else if (action.tool === "communication.draft") {
+        const input = z
+          .object({ content: z.string().trim().min(1).max(20000) })
+          .strict()
+          .parse(action.args);
+        const scope = (
+          await c.query(
+            "SELECT conversation_ref FROM cw_project_sources WHERE project_id=$1 AND workspace_id=$2",
+            [conv.project_id, s.workspaceId],
+          )
+        ).rows[0];
+        if (!scope) throw new Error("回复草稿必须绑定企业会话来源。");
+        const id = randomUUID();
+        await c.query(
+          "INSERT INTO cw_communication_drafts(id,workspace_id,project_id,actor_id,source_run_id,content,source_message_ids) VALUES($1,$2,$3,$4,$5,$6,$7)",
+          [
+            id,
+            s.workspaceId,
+            conv.project_id,
+            s.id,
+            run.id,
+            input.content,
+            JSON.stringify(sourceIds),
+          ],
+        );
+        receipt = {
+          tool: action.tool,
+          id,
+          roomId: scope.conversation_ref,
+          state: "draft",
+        };
       } else if (action.tool === "follow_up.check") {
         const pending = (
           await c.query(

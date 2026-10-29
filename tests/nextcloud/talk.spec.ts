@@ -456,3 +456,223 @@ test("Source project scope survives both real engines and blocks results after r
     await outside.context.close();
   }
 });
+
+test("Both native engines prepare private Talk replies that an employee reviews and sends through the real source", async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const room = await talk("talk-alice", "v4/room", "POST", {
+    roomType: "2",
+    roomName: "Hyper Reply Draft Room",
+  });
+  await talk("talk-alice", "v4/room/" + room.token + "/participants", "POST", {
+    newParticipant: "talk-bob",
+    source: "users",
+  });
+  await talk("talk-alice", "v1/chat/" + room.token, "POST", {
+    message: "synthetic-reply-context",
+    referenceId: randomBytes(32).toString("hex"),
+  });
+  let sourceContexts = 0;
+  const fixture = modelFixture(["synthetic-reply-model-key"], (body) => {
+    if (JSON.stringify(body.messages).includes("synthetic-reply-context"))
+      sourceContexts++;
+  });
+  await new Promise<void>((resolve) =>
+    fixture.server.listen(0, "127.0.0.1", resolve),
+  );
+  const actor = await login(browser, "talk-bob"),
+    peer = await login(browser, "talk-alice");
+  try {
+    await expect(
+      actor.page.getByRole("heading", { name: "团队讨论", exact: true }),
+    ).toBeVisible();
+    await expect(
+      peer.page.getByRole("heading", { name: "团队讨论", exact: true }),
+    ).toBeVisible();
+    const created = await actor.context.request.post(
+      origin + "/api/projects/from-talk",
+      {
+        headers: { Origin: origin },
+        data: {
+          roomId: room.token,
+          name: "Personal reply preparation",
+          goal: "Prepare source-scoped employee replies",
+        },
+      },
+    );
+    expect(created.status()).toBe(201);
+    const project = await created.json();
+    const profile = await (
+      await actor.context.request.post(origin + "/api/models", {
+        headers: { Origin: origin },
+        data: {
+          name: "Synthetic draft model",
+          provider: "openai-compatible",
+          endpoint:
+            "http://127.0.0.1:" +
+            (fixture.server.address() as { port: number }).port +
+            "/v1",
+          model: "native-test-model",
+          purpose: "chat",
+          scope: "personal",
+          apiKey: "synthetic-reply-model-key",
+        },
+      })
+    ).json();
+    const draftIds: string[] = [];
+    for (const engine of ["dsh", "hermes"]) {
+      const started = await actor.context.request.post(origin + "/api/runs", {
+        headers: { Origin: origin },
+        data: {
+          conversationId: project.conversationId,
+          engine,
+          workflow: "draft_reply",
+          instruction:
+            "native-reply-draft-fixture: prepare a reply from the authorized source; never send",
+          modelProfileId: profile.id,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(started.status()).toBe(201);
+      const run = await started.json();
+      await expect
+        .poll(
+          async () => {
+            const data = await (
+              await actor.context.request.get(origin + "/api/runs/" + run.id)
+            ).json();
+            return data.error ? data.state + ":" + data.error : data.state;
+          },
+          { timeout: 60000, intervals: [700] },
+        )
+        .toBe("succeeded");
+      const result = await (
+        await actor.context.request.get(origin + "/api/runs/" + run.id)
+      ).json();
+      expect(result.result.text).toBe("回复草稿已保存，尚未发送。");
+      const id = result.result.receipts[0].id;
+      draftIds.push(id);
+      const draft = await actor.context.request.get(
+        origin + "/api/talk/drafts/" + id,
+      );
+      expect(draft.status()).toBe(200);
+      expect((await draft.json()).sourceMessageIds).toEqual(result.contextRefs);
+      expect(
+        (
+          await peer.context.request.get(origin + "/api/talk/drafts/" + id)
+        ).status(),
+      ).toBe(404);
+    }
+    expect(
+      (
+        await (
+          await peer.context.request.get(
+            origin + "/api/talk/rooms/" + room.token + "/drafts",
+          )
+        ).json()
+      ).length,
+    ).toBe(0);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT id FROM cw_messages WHERE conversation_id=$1",
+          [project.conversationId],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT id FROM cw_communication_sends WHERE conversation_ref=$1",
+          [room.token],
+        )
+      ).rowCount,
+    ).toBe(0);
+    await actor.page
+      .getByRole("navigation", { name: "工作区导航" })
+      .getByRole("button", { name: "企业消息", exact: true })
+      .click();
+    await actor.page
+      .getByRole("button", { name: "Hyper Reply Draft Room", exact: true })
+      .click();
+    await actor.page.getByText("我的 AI 草稿", { exact: false }).click();
+    await actor.page
+      .getByRole("button", { name: "预览草稿", exact: true })
+      .first()
+      .click();
+    await expect(
+      actor.page.getByRole("region", { name: "AI 回复草稿" }),
+    ).toContainText("private-native-reply-draft");
+    await actor.page
+      .getByRole("button", { name: "放入发送框", exact: true })
+      .click();
+    const reviewed = "Synthetic human-reviewed AI reply";
+    await actor.page
+      .getByRole("textbox", { name: "企业消息内容", exact: true })
+      .fill(reviewed);
+    await actor.page
+      .getByRole("button", { name: "发送消息", exact: true })
+      .click();
+    await expect(
+      actor.page.getByRole("textbox", { name: "企业消息内容", exact: true }),
+    ).toHaveValue("");
+    const messages = await talk(
+      "talk-alice",
+      "v1/chat/" + room.token + "?lookIntoFuture=0&setReadMarker=0&limit=100",
+    );
+    expect(
+      messages.filter(
+        (m: any) => m.message === reviewed && m.actorId === "talk-bob",
+      ),
+    ).toHaveLength(1);
+    const sent = (
+      await db.pool.query(
+        "SELECT * FROM cw_communication_sends WHERE conversation_ref=$1",
+        [room.token],
+      )
+    ).rows;
+    expect(sent).toHaveLength(1);
+    expect(sent[0].draft_modified).toBe(true);
+    expect(draftIds).toContain(sent[0].draft_id);
+    expect(
+      (
+        await actor.context.request.post(
+          origin + "/api/talk/rooms/" + room.token + "/messages",
+          {
+            headers: { Origin: origin },
+            data: {
+              content: reviewed,
+              draftId: sent[0].draft_id,
+              idempotencyKey: randomUUID(),
+            },
+          },
+        )
+      ).status(),
+    ).toBe(409);
+    expect(sourceContexts).toBeGreaterThanOrEqual(2);
+    expect(fixture.violations).toEqual([]);
+    const participants = await talk(
+      "talk-alice",
+      "v4/room/" + room.token + "/participants",
+    );
+    const member = participants.find(
+      (p: any) => p.actorType === "users" && p.actorId === "talk-bob",
+    );
+    await talk("talk-alice", "v4/room/" + room.token + "/attendees", "DELETE", {
+      attendeeId: String(member.attendeeId),
+    });
+    expect(
+      (
+        await actor.context.request.get(
+          origin + "/api/talk/drafts/" + draftIds[0],
+        )
+      ).status(),
+    ).toBe(404);
+  } finally {
+    fixture.server.closeAllConnections();
+    await new Promise<void>((resolve) => fixture.server.close(() => resolve()));
+    await actor.context.close();
+    await peer.context.close();
+  }
+});

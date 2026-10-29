@@ -34,6 +34,7 @@ export const Workflow = z.enum([
   "revise_artifact",
   "follow_up",
   "chat",
+  "draft_reply",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
 export const RunInput = z
@@ -144,7 +145,8 @@ export interface PlannedAction {
     | "artifact.revise"
     | "task.create"
     | "project.report"
-    | "follow_up.check";
+    | "follow_up.check"
+    | "communication.draft";
   args: Record<string, unknown>;
 }
 export interface EngineRequest {
@@ -180,6 +182,8 @@ export function toolsForWorkflow(
       return ["follow_up.check"];
     case "chat":
       return [];
+    case "draft_reply":
+      return ["communication.draft"];
   }
 }
 export interface EngineResult {
@@ -260,6 +264,7 @@ export const CommunicationSendInput = z
   .object({
     content: z.string().trim().min(1).max(20000),
     idempotencyKey: z.uuid(),
+    draftId: z.uuid().optional(),
   })
   .strict();
 export interface CommunicationReceipt {
@@ -268,4 +273,23 @@ export interface CommunicationReceipt {
   sourceMessageId: string | null;
   error: string | null;
   acknowledgedAt: string | null;
+}
+export interface ReplyDraftSummary {
+  id: string;
+  runId: string;
+  createdAt: string;
+  engine: string;
+  sendState: CommunicationReceipt["state"] | null;
+  sendId: string | null;
+}
+export interface ReplyDraft {
+  id: string;
+  runId: string;
+  createdAt: string;
+  roomId: string;
+  roomName: string;
+  content: string;
+  sourceMessageIds: string[];
+  sendState: CommunicationReceipt["state"] | null;
+  sendId: string | null;
 }

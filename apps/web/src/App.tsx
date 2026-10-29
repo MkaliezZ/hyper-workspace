@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Artifact, Task, Project, WorkspaceView } from "@hyper/contracts";
+import type {
+  Artifact,
+  Task,
+  Project,
+  WorkspaceView,
+  CommunicationRoom,
+  ReplyDraft,
+} from "@hyper/contracts";
 import { Plus, ArrowRight, LoaderCircle, X } from "lucide-react";
 import { api, mutation, ApiError } from "./api";
 import { Navigation, MainHeader, type Section } from "./components/Shell";
@@ -40,8 +47,10 @@ export function App() {
   const [sourceRoom, setSourceRoom] = useState<{
     id: string;
     name: string;
+    reply?: boolean;
   } | null>(null);
   const [initialRoomId, setInitialRoomId] = useState<string>();
+  const [initialReplyDraft, setInitialReplyDraft] = useState<ReplyDraft>();
   const loadVersion = useRef(0);
   const loadedProject = useRef<string | undefined>(undefined);
   const [instruction, setInstruction] = useState(
@@ -67,6 +76,7 @@ export function App() {
       setDue("");
       setQuery("");
       setSourceRoom(null);
+      setInitialReplyDraft(undefined);
       setRun(null);
       setInstruction("请把当前讨论整理成纪要，保留明确分工与时间。");
       setWorkflow("discussion_to_minutes");
@@ -228,6 +238,30 @@ export function App() {
     setNavOpen(false);
     void load(p.id);
   }
+  function openReplyRun() {
+    setWorkflow("draft_reply");
+    setInstruction("请根据当前会话起草一条简洁、准确的回复，供我检查后发送。");
+    setEngine("dsh");
+    setDialog("run");
+  }
+  async function openSourceProject(room: CommunicationRoom, reply = false) {
+    const { project } = await api<{ project: Project | null }>(
+      "/talk/rooms/" + room.id + "/project",
+    );
+    if (project) {
+      setSection("messages");
+      setTab("discussion");
+      setNavOpen(false);
+      await load(project.id);
+      if (reply && loadedProject.current === project.id) openReplyRun();
+    } else {
+      setSourceRoom({ id: room.id, name: room.name, reply });
+      setTitle(room.name);
+      setGoal("");
+      setError("");
+      setDialog("project");
+    }
+  }
   function navigate(s: Section) {
     setSection(s);
     setQuery("");
@@ -252,6 +286,9 @@ export function App() {
           : view.project.name;
   const selectedRunModel = runModels.find(
     (model) => model.id === modelProfileId,
+  );
+  const replyReceipt = run?.result?.receipts?.find(
+    (receipt: any) => receipt.tool === "communication.draft",
   );
   const incompatibleRunModel =
     engine !== "fixture" &&
@@ -359,6 +396,25 @@ export function App() {
               )[run.state] ?? run.state}
               {run.error ? "：" + run.error : ""}
             </span>
+            {replyReceipt ? (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    const projectId = view.project.id;
+                    const value = await api<ReplyDraft>(
+                      "/talk/drafts/" + replyReceipt.id,
+                    );
+                    if (loadedProject.current !== projectId) return;
+                    setInitialRoomId(value.roomId);
+                    setInitialReplyDraft(value);
+                    setSection("enterprise");
+                  })
+                }
+              >
+                查看回复草稿
+              </button>
+            ) : null}
             {![
               "succeeded",
               "failed",
@@ -461,23 +517,9 @@ export function App() {
             demo={view.user.demo}
             query={query}
             initialRoomId={initialRoomId}
-            onProject={async (room) => {
-              const { project: existing } = await api<{
-                project: Project | null;
-              }>("/talk/rooms/" + room.id + "/project");
-              if (existing) {
-                setSection("messages");
-                setTab("discussion");
-                setNavOpen(false);
-                await load(existing.id);
-              } else {
-                setSourceRoom({ id: room.id, name: room.name });
-                setTitle(room.name);
-                setGoal("");
-                setError("");
-                setDialog("project");
-              }
-            }}
+            initialReplyDraft={initialReplyDraft}
+            onProject={(room) => openSourceProject(room)}
+            onDraft={(room) => openSourceProject(room, true)}
             onLogout={() =>
               void act(async () => {
                 await mutation("/auth/logout", {});
@@ -587,11 +629,13 @@ export function App() {
                     ...(sourceRoom ? { roomId: sourceRoom.id } : {}),
                   },
                 );
+                const reply = sourceRoom?.reply;
                 setSourceRoom(null);
                 setSection("messages");
                 setTab("discussion");
                 setDialog(null);
                 await load(p.id);
+                if (reply && loadedProject.current === p.id) openReplyRun();
               });
             }}
           >
@@ -627,7 +671,11 @@ export function App() {
           {view.project.source ? (
             <p className="source-scope-note">
               此任务会读取「{view.project.source.name}」当前获准的最近至多 60
-              条普通消息，并交给所选模型连接处理。成果保存在当前项目，不会自动发布到企业会话。
+              条普通消息，并交给所选模型连接处理。
+              {workflow === "draft_reply"
+                ? "回复草稿仅你可见，检查后可放入企业会话发送框。"
+                : "成果保存在当前项目。"}
+              不会自动发布到企业会话。
             </p>
           ) : null}
           <form
@@ -664,6 +712,9 @@ export function App() {
                 <option value="discussion_to_minutes">讨论 → 纪要</option>
                 <option value="project_report">项目周报</option>
                 <option value="follow_up">检查待办进展</option>
+                {view.project.source ? (
+                  <option value="draft_reply">起草会话回复</option>
+                ) : null}
                 {selectedArtifact ? (
                   <option value="revise_artifact">按反馈修改成果</option>
                 ) : null}

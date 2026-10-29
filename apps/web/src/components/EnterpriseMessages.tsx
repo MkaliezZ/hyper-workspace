@@ -4,11 +4,14 @@ import type {
   CommunicationMessage,
   CommunicationReceipt,
   CommunicationRoom,
+  ReplyDraft,
+  ReplyDraftSummary,
 } from "@hyper/contracts";
 import { api, mutation, ApiError } from "../api";
 interface Draft {
   text: string;
   key: string;
+  draftId?: string;
 }
 export function EnterpriseMessages({
   demo,
@@ -16,17 +19,23 @@ export function EnterpriseMessages({
   onLogout,
   initialRoomId,
   onProject,
+  onDraft,
+  initialReplyDraft,
 }: {
   demo: boolean;
   query: string;
   onLogout: () => void;
   initialRoomId?: string;
   onProject?: (room: CommunicationRoom) => Promise<void>;
+  onDraft?: (room: CommunicationRoom) => Promise<void>;
+  initialReplyDraft?: ReplyDraft;
 }) {
   const [rooms, setRooms] = useState<CommunicationRoom[]>([]),
     [selected, setSelected] = useState("");
   const [messages, setMessages] = useState<CommunicationMessage[]>([]),
     [pending, setPending] = useState<CommunicationReceipt[]>([]);
+  const [replyDrafts, setReplyDrafts] = useState<ReplyDraftSummary[]>([]);
+  const [proposal, setProposal] = useState<ReplyDraft>();
   const [before, setBefore] = useState<string | null>(null),
     [nextBefore, setNextBefore] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({}),
@@ -37,9 +46,24 @@ export function EnterpriseMessages({
   const current = useRef(selected),
     scroll = useRef<HTMLDivElement>(null),
     stick = useRef(true);
+  const scopeEpoch = useRef(0),
+    initialSeen = useRef("");
   current.current = selected;
   const room = rooms.find((r) => r.id === selected),
     draft = drafts[selected] ?? { text: "", key: "" };
+  const proposalState =
+    replyDrafts.find((value) => value.id === proposal?.id)?.sendState ??
+    proposal?.sendState;
+  useEffect(() => {
+    if (
+      initialReplyDraft &&
+      initialReplyDraft.roomId === selected &&
+      initialSeen.current !== initialReplyDraft.id
+    ) {
+      initialSeen.current = initialReplyDraft.id;
+      setProposal(initialReplyDraft);
+    }
+  }, [selected, initialReplyDraft]);
   async function loadRooms() {
     if (demo) return;
     try {
@@ -47,6 +71,9 @@ export function EnterpriseMessages({
       setRooms(values);
       setError("");
       if (!values.some((r) => r.id === current.current)) {
+        scopeEpoch.current++;
+        setProposal(undefined);
+        setReplyDrafts([]);
         setSelected(
           values.some((room) => room.id === initialRoomId)
             ? initialRoomId!
@@ -57,6 +84,10 @@ export function EnterpriseMessages({
       }
       setRefresh((value) => value + 1);
     } catch (e) {
+      scopeEpoch.current++;
+      setDrafts({});
+      setProposal(undefined);
+      setReplyDrafts([]);
       setRooms([]);
       setSelected("");
       setMessages([]);
@@ -79,11 +110,12 @@ export function EnterpriseMessages({
       inFlight = true;
       try {
         const path = "/talk/rooms/" + selected;
-        const [page, receipts] = await Promise.all([
+        const [page, receipts, savedDrafts] = await Promise.all([
           api<{ messages: CommunicationMessage[]; before: string | null }>(
             path + "/messages" + (before ? "?before=" + before : ""),
           ),
           api<CommunicationReceipt[]>(path + "/sends"),
+          api<ReplyDraftSummary[]>(path + "/drafts"),
         ]);
         if (!alive) return;
         const atBottom =
@@ -96,10 +128,18 @@ export function EnterpriseMessages({
         setMessages(page.messages);
         setNextBefore(page.before);
         setPending(receipts);
+        setReplyDrafts(savedDrafts);
         setLoading(false);
       } catch (e) {
         if (!alive) return;
         paused = true;
+        scopeEpoch.current++;
+        setDrafts((values) => ({
+          ...values,
+          [selected]: { text: "", key: "" },
+        }));
+        setProposal(undefined);
+        setReplyDrafts([]);
         setMessages([]);
         setPending([]);
         setError((e as Error).message);
@@ -131,21 +171,44 @@ export function EnterpriseMessages({
   function edit(text: string) {
     setDrafts((values) => ({
       ...values,
-      [selected]: { text, key: crypto.randomUUID() },
+      [selected]: { ...values[selected], text, key: crypto.randomUUID() },
     }));
+  }
+  async function preview(id: string) {
+    const roomId = selected,
+      epoch = scopeEpoch.current;
+    try {
+      const value = await api<ReplyDraft>("/talk/drafts/" + id);
+      if (
+        current.current === roomId &&
+        scopeEpoch.current === epoch &&
+        value.roomId === roomId
+      )
+        setProposal(value);
+    } catch (e) {
+      if (current.current === roomId) setError((e as Error).message);
+    }
   }
   async function send() {
     if (!room || !draft.text.trim() || busy || pending.length || loading)
       return;
     const id = selected,
-      intent = { text: draft.text, key: draft.key || crypto.randomUUID() };
+      intent = {
+        text: draft.text,
+        key: draft.key || crypto.randomUUID(),
+        ...(draft.draftId ? { draftId: draft.draftId } : {}),
+      };
     setDrafts((values) => ({ ...values, [id]: intent }));
     setBusy(true);
     setError("");
     try {
       const receipt = await mutation<CommunicationReceipt>(
         "/talk/rooms/" + id + "/messages",
-        { content: intent.text, idempotencyKey: intent.key },
+        {
+          content: intent.text,
+          idempotencyKey: intent.key,
+          ...(intent.draftId ? { draftId: intent.draftId } : {}),
+        },
       );
       if (receipt.state === "succeeded") {
         setDrafts((values) => ({ ...values, [id]: { text: "", key: "" } }));
@@ -191,6 +254,7 @@ export function EnterpriseMessages({
             ...values[selected],
             text: values[selected]?.text ?? "",
             key: crypto.randomUUID(),
+            draftId: undefined,
           },
         }));
       setRefresh((value) => value + 1);
@@ -236,10 +300,13 @@ export function EnterpriseMessages({
               }
               disabled={busy}
               onClick={() => {
+                scopeEpoch.current++;
                 setSelected(item.id);
                 setBefore(null);
                 setMessages([]);
                 setPending([]);
+                setReplyDrafts([]);
+                setProposal(undefined);
                 setError("");
                 stick.current = true;
               }}
@@ -270,6 +337,22 @@ export function EnterpriseMessages({
                 </small>
               </div>
               <div className="enterprise-history-buttons">
+                {onDraft ? (
+                  <button
+                    disabled={
+                      busy || loading || room.readOnly || !!pending.length
+                    }
+                    onClick={() => {
+                      setBusy(true);
+                      setError("");
+                      void onDraft(room)
+                        .catch((e) => setError(e.message))
+                        .finally(() => setBusy(false));
+                    }}
+                  >
+                    AI 起草回复
+                  </button>
+                ) : null}
                 {onProject ? (
                   <button
                     disabled={busy}
@@ -339,6 +422,86 @@ export function EnterpriseMessages({
               {!loading && !messages.length ? (
                 <p className="enterprise-hint">这里还没有消息。</p>
               ) : null}
+              {replyDrafts.length ? (
+                <details className="reply-draft-history">
+                  <summary>我的 AI 草稿 · 最近 {replyDrafts.length} 份</summary>
+                  {replyDrafts.map((value) => (
+                    <div key={value.id}>
+                      <span>
+                        {value.engine.toUpperCase()} ·{" "}
+                        {new Date(value.createdAt).toLocaleString("zh-CN")} ·{" "}
+                        {value.sendState === "succeeded"
+                          ? "已发送"
+                          : value.sendState === "sending" ||
+                              value.sendState === "recovery_required"
+                            ? "发送待核对"
+                            : "未发送"}
+                      </span>
+                      <button
+                        disabled={
+                          busy ||
+                          loading ||
+                          !!pending.length ||
+                          (!!value.sendState && value.sendState !== "failed")
+                        }
+                        onClick={() => void preview(value.id)}
+                      >
+                        预览草稿
+                      </button>
+                    </div>
+                  ))}
+                </details>
+              ) : null}
+              {proposal && proposal.roomId === selected ? (
+                <section
+                  className="reply-draft-preview"
+                  aria-label="AI 回复草稿"
+                >
+                  <strong>
+                    AI 回复草稿 · 仅你可见 ·{" "}
+                    {proposalState === "succeeded"
+                      ? "已发送"
+                      : proposalState === "sending" ||
+                          proposalState === "recovery_required"
+                        ? "发送待核对"
+                        : "尚未发送"}
+                  </strong>
+                  <p>{proposal.content}</p>
+                  <small>
+                    生成于{" "}
+                    {new Date(proposal.createdAt).toLocaleString("zh-CN")}
+                    ，请检查内容与当前会话，再发送。
+                  </small>
+                  <div>
+                    <button
+                      className="primary"
+                      disabled={
+                        busy ||
+                        loading ||
+                        !!pending.length ||
+                        room.readOnly ||
+                        (!!proposalState && proposalState !== "failed")
+                      }
+                      onClick={() => {
+                        setDrafts((values) => ({
+                          ...values,
+                          [selected]: {
+                            text: proposal.content,
+                            key: crypto.randomUUID(),
+                            draftId: proposal.id,
+                          },
+                        }));
+                        setProposal(undefined);
+                      }}
+                    >
+                      {draft.text ? "替换当前草稿" : "放入发送框"}
+                    </button>
+                    <button onClick={() => setProposal(undefined)}>
+                      关闭预览
+                    </button>
+                  </div>
+                </section>
+              ) : null}
             </div>
             {pending.map((receipt) => (
               <div
@@ -371,6 +534,11 @@ export function EnterpriseMessages({
                 </div>
               </div>
             ))}
+            {draft.draftId ? (
+              <p className="reply-draft-notice">
+                AI 起草的回复，可修改后发送。发送结果以会话回执为准。
+              </p>
+            ) : null}
             <form
               className="enterprise-composer"
               onSubmit={(e) => {

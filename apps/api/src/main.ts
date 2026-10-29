@@ -40,6 +40,7 @@ import { engineRegistry } from "./engines/adapters.js";
 import { ModelService } from "./core/models.js";
 import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
+import { ReplyDraftService } from "./core/reply-drafts.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
@@ -327,6 +328,21 @@ class ApiController {
   @Get("talk/rooms") async talkRooms(@Req() req: Request) {
     return communication.rooms(await subject(req));
   }
+  @Get("talk/rooms/:token/drafts") async replyDrafts(
+    @Req() req: Request,
+    @Param("token") token: string,
+  ) {
+    return new ReplyDraftService(db).list(
+      await subject(req),
+      TalkToken.parse(token),
+    );
+  }
+  @Get("talk/drafts/:id") async replyDraft(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new ReplyDraftService(db).get(await subject(req), uuid(id));
+  }
   @Get("talk/rooms/:token/messages") async talkMessages(
     @Req() req: Request,
     @Param("token") token: string,
@@ -349,6 +365,7 @@ class ApiController {
       TalkToken.parse(token),
       input.content,
       input.idempotencyKey,
+      input.draftId,
     );
   }
   @Get("talk/rooms/:token/sends") async pendingTalk(

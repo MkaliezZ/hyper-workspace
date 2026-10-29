@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { Subject } from "@hyper/contracts";
 import type { Database } from "../db/database.js";
 import { sourceConnection } from "./source-connection.js";
+import { ReplyDraftService } from "./reply-drafts.js";
 import { digest, stableDigest } from "./credentials.js";
 import {
   NextcloudTalkProvider,
@@ -50,14 +51,26 @@ export class CommunicationService {
   async messages(s: Subject, id: string, before?: string) {
     return (await this.connection(s)).provider.messages(id, before);
   }
-  async send(s: Subject, roomId: string, content: string, key: string) {
+  async send(
+    s: Subject,
+    roomId: string,
+    content: string,
+    key: string,
+    draftId?: string,
+  ) {
     const source = await this.connection(s);
     const room = await source.provider.room(roomId);
     if (room.readOnly) throw new ForbiddenException("此企业会话当前只读。");
+    const draft = draftId
+      ? await new ReplyDraftService(this.db).get(s, draftId)
+      : undefined;
+    if (draft && draft.roomId !== roomId)
+      throw new ForbiddenException("回复草稿不能发送到其他会话。");
     const hash = stableDigest({
         providerKey: source.config.providerKey,
         roomId,
         content,
+        ...(draftId ? { draftId } : {}),
       }),
       id = randomUUID();
     const inserted = await this.db.tx(async (c) => {
@@ -69,6 +82,18 @@ export class CommunicationService {
         [s.workspaceId, s.id, key],
       );
       if (existing.rowCount) return { rowCount: 0, rows: [] };
+      if (
+        draftId &&
+        (
+          await c.query(
+            "SELECT id FROM cw_communication_sends WHERE draft_id=$1 AND state IN ('sending','succeeded','recovery_required') LIMIT 1",
+            [draftId],
+          )
+        ).rowCount
+      )
+        throw new ConflictException(
+          "这份草稿已有发送记录，请核对原回执，不要重复发送。",
+        );
       const unfinished = (
         await c.query(
           "SELECT id FROM cw_communication_sends WHERE workspace_id=$1 AND actor_id=$2 AND provider_key=$3 AND conversation_ref=$4 AND state IN ('sending','recovery_required') AND acknowledged_at IS NULL LIMIT 1",
@@ -80,7 +105,7 @@ export class CommunicationService {
           "此会话有一条发送结果待核对，请先处理该回执。",
         );
       return c.query(
-        "INSERT INTO cw_communication_sends(id,workspace_id,actor_id,identity_credential_id,provider_key,conversation_ref,idempotency_key,params_hash,reference_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'sending') ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING *",
+        "INSERT INTO cw_communication_sends(id,workspace_id,actor_id,identity_credential_id,provider_key,conversation_ref,idempotency_key,params_hash,reference_id,state,draft_id,draft_modified) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'sending',$10,$11) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING *",
         [
           id,
           s.workspaceId,
@@ -91,6 +116,8 @@ export class CommunicationService {
           key,
           hash,
           digest(randomUUID()),
+          draftId ?? null,
+          draft ? draft.content !== content : null,
         ],
       );
     });

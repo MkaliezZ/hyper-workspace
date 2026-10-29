@@ -11,6 +11,7 @@ import { RunProcessor } from "../../apps/api/src/core/processor.js";
 import { KnowledgeService } from "../../apps/api/src/core/knowledge.js";
 import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
 import { CommunicationService } from "../../apps/api/src/core/communication.js";
+import { ReplyDraftService } from "../../apps/api/src/core/reply-drafts.js";
 const url = process.env.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.endsWith("_test"))
   throw new Error("Use an isolated TEST_DATABASE_URL ending in _test.");
@@ -697,4 +698,210 @@ test("Oversized authorized source context fails before dispatching a model reque
   assert.equal(calls, 0);
   assert.equal(result.state, "failed");
   assert.match(result.error, /100 KB/);
+});
+
+async function preparedReply(
+  r: Room,
+  content = "private-ai-reply-sentinel",
+  args?: Record<string, unknown>,
+) {
+  const work = scopedWorkspace(async () => ({
+    text: "model-text-must-not-appear-in-project",
+    evidence: "fixture",
+    actions: [{ tool: "communication.draft", args: args ?? { content } }],
+  }));
+  const project = await work.createTalkProject(
+    s(),
+    r.id,
+    "Reply project " + r.id,
+    "Prepare a reply for review",
+  );
+  await chatProfile(work);
+  const run = await work.startRun(s(), {
+    conversationId: project.conversationId,
+    workflow: "draft_reply",
+    engine: "dsh",
+    instruction: "Prepare, never send",
+    idempotencyKey: randomUUID(),
+  });
+  const processor = new RunProcessor(work);
+  await Promise.all([processor.process(run.id), processor.process(run.id)]);
+  const result = await work.getRun(s(), run.id);
+  return {
+    work,
+    project,
+    run: result,
+    draftId: result.result?.receipts?.[0]?.id,
+  };
+}
+test("Reply drafting is private, source-bound and durable; engine text never becomes a project message or a delivery receipt", async () => {
+  const r = room();
+  sourceMessage(r, "reply-source-evidence");
+  const { work, project, run, draftId } = await preparedReply(r);
+  assert.equal(run.state, "succeeded", run.error);
+  assert.equal(run.result.text, "回复草稿已保存，尚未发送。");
+  assert.equal(r.posts, 0);
+  const drafts = new ReplyDraftService(db),
+    own = await drafts.get(s(), draftId);
+  assert.equal(own.content, "private-ai-reply-sentinel");
+  assert.equal(own.roomId, r.id);
+  assert.deepEqual(own.sourceMessageIds, run.contextRefs);
+  assert.equal((await drafts.list(s(), r.id)).length, 1);
+  assert.equal((await drafts.list(s("bob"), r.id)).length, 0);
+  await assert.rejects(drafts.get(s("bob"), draftId));
+  await assert.rejects(drafts.get(s("outsider"), draftId));
+  assert.equal((await work.view(s("bob"), project.id)).messages.length, 0);
+  assert.equal(
+    (await work.search(s("bob"), "private-ai-reply-sentinel")).length,
+    0,
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_communication_drafts WHERE source_run_id=$1",
+        [run.id],
+      )
+    ).rowCount,
+    1,
+  );
+  const local = await work.createProject(
+    s(),
+    "Public project",
+    "No communication target",
+  );
+  await assert.rejects(
+    work.startRun(s(), {
+      conversationId: local.conversationId,
+      workflow: "draft_reply",
+      engine: "dsh",
+      instruction: "Prepare",
+      idempotencyKey: randomUUID(),
+    }),
+    /关联项目/,
+  );
+});
+test("Reviewed draft sends bind the employee, source room and edited content; new retry keys cannot duplicate delivery", async () => {
+  const r = room(),
+    other = room();
+  const { draftId } = await preparedReply(r);
+  await assert.rejects(
+    service.send(s("bob"), r.id, "stolen", randomUUID(), draftId),
+  );
+  await assert.rejects(
+    service.send(s(), other.id, "wrong room", randomUUID(), draftId),
+  );
+  assert.equal(r.posts + other.posts, 0);
+  const key = randomUUID();
+  const result = await service.send(
+    s(),
+    r.id,
+    "human-reviewed-edited-reply",
+    key,
+    draftId,
+  );
+  assert.equal(result.state, "succeeded");
+  assert.equal(
+    (await service.send(s(), r.id, "human-reviewed-edited-reply", key, draftId))
+      .id,
+    result.id,
+  );
+  await assert.rejects(
+    service.send(
+      s(),
+      r.id,
+      "human-reviewed-edited-reply",
+      randomUUID(),
+      draftId,
+    ),
+    /发送记录/,
+  );
+  assert.equal(r.posts, 1);
+  const row = (
+    await db.pool.query("SELECT * FROM cw_communication_sends WHERE id=$1", [
+      result.id,
+    ])
+  ).rows[0];
+  assert.equal(row.draft_id, draftId);
+  assert.equal(row.draft_modified, true);
+  assert.equal(
+    JSON.stringify(row).includes("human-reviewed-edited-reply"),
+    false,
+  );
+  r.members.delete("alice");
+  await assert.rejects(new ReplyDraftService(db).get(s(), draftId));
+  await assert.rejects(new ReplyDraftService(db).list(s(), r.id));
+  await assert.rejects(
+    service.send(s(), r.id, "revoked", randomUUID(), draftId),
+  );
+});
+test("Unknown draft delivery remains unknown after acknowledgement; only reconciliation can confirm it", async () => {
+  const r = room();
+  const { draftId } = await preparedReply(r);
+  r.post = "drop-after";
+  const receipt = await service.send(
+    s(),
+    r.id,
+    "reviewed message",
+    randomUUID(),
+    draftId,
+  );
+  assert.equal(receipt.state, "recovery_required");
+  await service.acknowledge(s(), receipt.id);
+  await assert.rejects(
+    service.send(s(), r.id, "reviewed message", randomUUID(), draftId),
+    /发送记录/,
+  );
+  assert.equal(
+    (await new ReplyDraftService(db).list(s(), r.id))[0].sendState,
+    "recovery_required",
+  );
+  assert.equal((await service.reconcile(s(), receipt.id)).state, "succeeded");
+  assert.equal(
+    (await new ReplyDraftService(db).list(s(), r.id))[0].sendState,
+    "succeeded",
+  );
+  assert.equal(r.posts, 1);
+});
+test("Reply drafting rejects model-selected recipients and cannot save after source revocation", async () => {
+  const r = room();
+  const invalid = await preparedReply(r, "unused", {
+    content: "attempt",
+    roomId: "otherroom",
+  });
+  assert.equal(invalid.run.state, "failed");
+  assert.equal(invalid.draftId, undefined);
+  const work = scopedWorkspace(async () => {
+    r.members.delete("alice");
+    return {
+      text: "claimed done",
+      evidence: "fixture",
+      actions: [
+        { tool: "communication.draft", args: { content: "revoked proposal" } },
+      ],
+    };
+  });
+  await chatProfile(work);
+  const started = await work.startRun(s(), {
+    conversationId: invalid.project.conversationId,
+    workflow: "draft_reply",
+    engine: "dsh",
+    instruction: "Prepare",
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(work).process(started.id);
+  assert.equal(
+    (await db.pool.query("SELECT state FROM cw_runs WHERE id=$1", [started.id]))
+      .rows[0].state,
+    "failed",
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_communication_drafts WHERE source_run_id=$1",
+        [started.id],
+      )
+    ).rowCount,
+    0,
+  );
+  assert.equal(r.posts, 0);
 });

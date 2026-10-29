@@ -1355,3 +1355,66 @@ p {
     flex-wrap: wrap;
   }
 }
+
+.reply-draft-history,
+.reply-draft-preview,
+.reply-draft-notice {
+  margin: 8px 24px 0;
+  padding: 12px 16px;
+  border: 1px solid #dbe6fc;
+  background: #f6f9ff;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.reply-draft-history summary {
+  cursor: pointer;
+  color: #2563eb;
+}
+.reply-draft-history > div,
+.reply-draft-preview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.reply-draft-history span {
+  overflow-wrap: anywhere;
+}
+.reply-draft-preview p {
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.reply-draft-preview small {
+  color: #59677b;
+}
+.reply-draft-preview > div {
+  justify-content: flex-start;
+}
+.reply-draft-notice {
+  border: 0;
+  padding: 8px 12px;
+  color: #364964;
+}
+@media (max-width: 760px) {
+  .reply-draft-history,
+  .reply-draft-preview,
+  .reply-draft-notice {
+    margin: 6px 10px 0;
+    padding: 10px;
+  }
+  .reply-draft-history > div {
+    align-items: flex-start;
+  }
+  .enterprise-chat-heading .enterprise-history-buttons {
+    flex-wrap: wrap;
+  }
+}
+
+.enterprise-message-scroll .reply-draft-history,
+.enterprise-message-scroll .reply-draft-preview {
+  margin: 12px 0 0;
+}

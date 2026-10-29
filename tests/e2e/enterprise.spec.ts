@@ -6,6 +6,9 @@ async function workspace(page: any, request: any) {
   await page.route("**/api/workspace", (route: any) =>
     route.fulfill({ json: fixture }),
   );
+  await page.route("**/api/talk/rooms/*/drafts", (route: any) =>
+    route.fulfill({ json: [] }),
+  );
   await page.route("**/api/talk/rooms", (route: any) =>
     route.fulfill({
       json: [

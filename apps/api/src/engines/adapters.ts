@@ -20,6 +20,7 @@ const resultSchema = z.object({
           "task.create",
           "project.report",
           "follow_up.check",
+          "communication.draft",
         ]),
         args: z.record(z.string(), z.unknown()),
       }),
@@ -27,7 +28,7 @@ const resultSchema = z.object({
     .max(30),
 });
 const instruction =
-  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|task.create|project.report|follow_up.check","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Never invent project facts. No native shell or business tools are needed.';
+  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|task.create|project.report|follow_up.check|communication.draft","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Use only content for communication.draft (max 20000 characters); it saves a personal draft for review, never sends a message. Never choose a recipient or room. Never invent project facts. No native shell or business tools are needed.';
 function parseResult(text: string): EngineResult {
   const clean = text
     .trim()
@@ -160,6 +161,7 @@ export class DshAdapter implements EngineAdapter {
         "revise_artifact",
         "follow_up",
         "chat",
+        "draft_reply",
       ],
       evidence: this.command ? "configured-unverified" : "not-configured",
     };
@@ -264,6 +266,7 @@ export class HermesAdapter implements EngineAdapter {
         "revise_artifact",
         "follow_up",
         "chat",
+        "draft_reply",
       ],
       evidence: this.command ? "configured-unverified" : "not-configured",
     };

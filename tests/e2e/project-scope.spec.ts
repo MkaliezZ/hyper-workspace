@@ -35,6 +35,9 @@ test("A source room opens a new scoped project and makes the AI input scope visi
           : base,
     }),
   );
+  await page.route("**/api/talk/rooms/*/drafts", (route: any) =>
+    route.fulfill({ json: [] }),
+  );
   await page.route("**/api/talk/rooms", (route) =>
     route.fulfill({
       json: [{ id: "source0001", name: "设计协作", readOnly: false }],
