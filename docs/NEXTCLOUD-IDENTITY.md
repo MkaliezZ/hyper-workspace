@@ -41,16 +41,16 @@ npm run dev
 
 ## 来源绑定与权限
 
-| 绑定字段                    | 本模块的明确范围                                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| connector / object_selector | 管理员配置的单个 Nextcloud 来源；仅当前授权员工自身身份与自身群组                                                  |
-| field_allowlist             | canonical UID、displayname、自身群组 ID；不导入 email、quota、完整通讯录                                           |
-| time_scope                  | 每次登录与业务鉴权时查询当前状态；不采集历史身份资料                                                               |
-| credential_ref              | 每次登录单独的 cw_identity_credentials.id，应用密码 AES-256-GCM 加密；不进入模型上下文、运行事件、向量或前端       |
-| access_policy_ref           | NEXTCLOUD_MEMBER_GROUP 准入 ∩ cw_members 当前产品授权；初始管理 UID 由服务配置指定                                 |
-| sync_policy                 | 来源 UID/URL 标识与产品 UUID 映射；登录更新显示名；查询成功记录 verified_at                                        |
-| revocation_policy           | 身份凭据失效禁用对应设备；群组缺失撤销产品成员和该工作区全部会话；服务故障阻止本次操作且保留授权记录               |
-| deletion_policy             | 不同步完整目录；撤权保留业务对象和历史主体关联；过期流程在下一次发起登录时清理；员工彻底删除与合规留存管理后续补齐 |
+| 绑定字段                    | 本模块的明确范围                                                                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| connector / object_selector | 管理员配置的单个 Nextcloud 来源；仅当前授权员工自身身份与自身群组                                                                |
+| field_allowlist             | canonical UID、displayname、自身群组 ID；不导入 email、quota、完整通讯录                                                         |
+| time_scope                  | 每次登录与业务鉴权时查询当前状态；不采集历史身份资料                                                                             |
+| credential_ref              | 每次登录单独的 cw_identity_credentials.id，应用密码 AES-256-GCM 加密；不进入模型上下文、运行事件、向量或前端                     |
+| access_policy_ref           | NEXTCLOUD_MEMBER_GROUP 准入 ∩ cw_members 当前产品授权；初始管理 UID 由服务配置指定                                               |
+| sync_policy                 | 来源 UID/URL 标识与产品 UUID 映射；登录更新显示名；查询成功记录 verified_at                                                      |
+| revocation_policy           | 身份凭据失效禁用对应设备；群组缺失（包括新设备登录时首次发现）撤销产品成员和该工作区全部会话；服务故障阻止本次操作且保留授权记录 |
+| deletion_policy             | 不同步完整目录；撤权保留业务对象和历史主体关联；过期流程在下一次发起登录时清理；员工彻底删除与合规留存管理后续补齐               |
 
 `provider_key` 由规范来源 URL 派生；登录名可能是别名，实际身份使用 OCS 返回的 UID。相同显示名不会合并。已有产品成员被移除后，重新登录或恢复源群组不会自动恢复产品权限。Nextcloud 的 admin 群组不会自动授予产品 admin；初始配置也不会在后续登录时覆盖产品角色。
 
@@ -81,4 +81,4 @@ bash scripts/ci/nextcloud-setup.sh
 npm run test:nextcloud
 ```
 
-新增 8 项身份数据库测试覆盖角色/UID、多设备隔离、浏览器绑定、流程重放/取消/过期、暂时故障重试、源群组与产品撤权、来源改绑拒绝、推理中撤权后停止写入。新增 2 项界面测试只使用明确的协议 fixture。真实服务 CI 另测 Login Flow v2 浏览器授权、持久化讨论、设备应用密码撤销、群组撤销及 Origin/Cookie 约束。真实公司 SSO/MFA、代理配置、目录映射和全量业务验收仍未验证。
+新增 9 项身份数据库测试覆盖角色/UID、多设备隔离、浏览器绑定、流程重放/取消/过期、暂时故障重试、源群组与产品撤权、来源改绑拒绝、推理中撤权后停止写入。新增 2 项界面测试只使用明确的协议 fixture。真实服务 CI 另测 Login Flow v2 浏览器授权、持久化讨论、设备应用密码撤销、群组撤销及 Origin/Cookie 约束。真实公司 SSO/MFA、代理配置、目录映射和全量业务验收仍未验证。

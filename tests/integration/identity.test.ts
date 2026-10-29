@@ -393,3 +393,20 @@ test("Queued runs retain the initiating device identity and stop before business
     0,
   );
 });
+
+test("Group removal observed by a new login also revokes existing devices", async () => {
+  const a = account(),
+    prior = await complete(a.login);
+  a.remote.groups = [];
+  const next = await start(a.login);
+  await assert.rejects(
+    identity.poll(next.flowId, next.binding),
+    /允许的企业群组/,
+  );
+  a.remote.groups = ["hyper-members"];
+  await assert.rejects(authenticate(db, prior.session));
+  await assert.rejects(
+    identity.poll(next.flowId, next.binding),
+    /产品权限已撤销/,
+  );
+});

@@ -11,6 +11,8 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     channel: "chromium",
     trace: "off",
+    actionTimeout: 15000,
+    navigationTimeout: 30000,
   },
   webServer: {
     command: "npm run dev",

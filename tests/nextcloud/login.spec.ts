@@ -19,16 +19,37 @@ test.afterAll(async () => {
   await db.close();
 });
 async function grant(popup: Page, uid: string) {
-  await popup.getByRole("link", { name: "Log in", exact: true }).click();
-  await popup.locator('input[name="user"]').fill(uid);
-  await popup.locator('input[name="password"]').fill(password);
-  await popup
-    .locator('form[name="login"]')
-    .locator('button[type="submit"]')
-    .click();
-  await popup
-    .getByRole("button", { name: "Grant access", exact: true })
-    .click();
+  const errors: string[] = [];
+  popup.on("pageerror", (error) =>
+    errors.push(error.message.replaceAll(password, "[redacted]").slice(0, 300)),
+  );
+  try {
+    await popup
+      .getByRole("link", { name: "Log in", exact: true })
+      .or(popup.getByRole("button", { name: "Log in", exact: true }))
+      .click();
+    await popup.locator('input[name="user"]').fill(uid);
+    await popup.locator('input[name="password"]').fill(password);
+    await popup
+      .locator('form[name="login"]')
+      .locator('button[type="submit"]')
+      .click();
+    await popup
+      .getByRole("button", { name: "Grant access", exact: true })
+      .click();
+  } catch (error) {
+    // Synthetic CI accounts only. Never dump cookies, form values, page HTML or request bodies.
+    const text = await popup
+      .locator("body")
+      .innerText({ timeout: 2000 })
+      .catch(() => "Page unavailable");
+    console.error(
+      "Nextcloud authorization UI:",
+      text.replaceAll(password, "[redacted]").slice(0, 3000),
+    );
+    console.error("Nextcloud page errors:", JSON.stringify(errors));
+    throw error;
+  }
 }
 async function login(browser: Browser, uid: string) {
   const context = await browser.newContext({ locale: "en-US" });

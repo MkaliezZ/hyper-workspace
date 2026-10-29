@@ -5,6 +5,7 @@ import { Vault } from "./credentials.js";
 import {
   requireNextcloud,
   NextcloudIdentityProvider,
+  type NextcloudConfig,
 } from "../providers/nextcloud.js";
 
 /** Revalidate source membership at product boundaries, including the worker before each action. */
@@ -46,20 +47,7 @@ export async function verifySourceAccess(db: Database, subject: Subject) {
     throw error;
   }
   if (!remote.groups.includes(config.memberGroup)) {
-    await db.tx(async (c) => {
-      await c.query(
-        "DELETE FROM cw_members WHERE workspace_id=$1 AND user_id=$2",
-        [subject.workspaceId, subject.id],
-      );
-      await c.query(
-        "DELETE FROM cw_sessions WHERE workspace_id=$1 AND user_id=$2",
-        [subject.workspaceId, subject.id],
-      );
-      await c.query(
-        "UPDATE cw_identity_credentials SET disabled_at=now(),credential_enc='' WHERE identity_id=$1",
-        [credential.identity_id],
-      );
-    });
+    await revokeMappedMembership(db, config, remote.uid);
     throw new ForbiddenException(
       "企业工作区成员资格已撤销，请联系管理员重新授权。",
     );
@@ -74,4 +62,36 @@ export async function verifySourceAccess(db: Database, subject: Subject) {
     [credential.id],
   );
   if (!live.rowCount) throw new UnauthorizedException("此登录凭据已撤销。");
+}
+
+/** Used for negative source membership observations from either login or existing sessions. */
+export async function revokeMappedMembership(
+  db: Database,
+  config: NextcloudConfig,
+  remoteUid: string,
+) {
+  await db.tx(async (c) => {
+    await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+      config.providerKey + config.workspaceId + remoteUid,
+    ]);
+    const identity = (
+      await c.query(
+        "SELECT id,user_id FROM cw_external_identities WHERE provider_key=$1 AND workspace_id=$2 AND remote_uid=$3",
+        [config.providerKey, config.workspaceId, remoteUid],
+      )
+    ).rows[0];
+    if (!identity) return;
+    await c.query(
+      "DELETE FROM cw_members WHERE workspace_id=$1 AND user_id=$2",
+      [config.workspaceId, identity.user_id],
+    );
+    await c.query(
+      "DELETE FROM cw_sessions WHERE workspace_id=$1 AND user_id=$2",
+      [config.workspaceId, identity.user_id],
+    );
+    await c.query(
+      "UPDATE cw_identity_credentials SET disabled_at=now(),credential_enc='' WHERE identity_id=$1",
+      [identity.id],
+    );
+  });
 }

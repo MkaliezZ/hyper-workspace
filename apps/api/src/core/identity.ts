@@ -7,12 +7,19 @@ import {
 } from "@nestjs/common";
 import { DEMO, type Database } from "../db/database.js";
 import { digest, Vault } from "./credentials.js";
+import { revokeMappedMembership } from "./identity-access.js";
 import { issueSession } from "./security.js";
 import {
   requireNextcloud,
   NextcloudIdentityProvider,
   type SourceCredentials,
 } from "../providers/nextcloud.js";
+
+class SourceMembershipDenied extends ForbiddenException {
+  constructor(readonly remoteUid: string) {
+    super("此账号不在工作区允许的企业群组内。");
+  }
+}
 
 export class IdentityService {
   constructor(private db: Database) {}
@@ -112,102 +119,112 @@ export class IdentityService {
       return !!credentials;
     });
     if (!ready) return { state: "pending" };
-    return this.db.tx(async (c) => {
-      const flow = await this.flow(c, id, binding);
-      if (flow.session_token_enc) {
-        const session = vault.decrypt(flow.session_token_enc);
-        const live = await c.query(
-          "SELECT token_hash FROM cw_sessions WHERE token_hash=$1 AND expires_at>now()",
-          [digest(session)],
+    try {
+      return await this.db.tx(async (c) => {
+        const flow = await this.flow(c, id, binding);
+        if (flow.session_token_enc) {
+          const session = vault.decrypt(flow.session_token_enc);
+          const live = await c.query(
+            "SELECT token_hash FROM cw_sessions WHERE token_hash=$1 AND expires_at>now()",
+            [digest(session)],
+          );
+          if (!live.rowCount)
+            throw new GoneException("此登录已注销，请重新发起。");
+          return { state: "complete" as const, session };
+        }
+        const credentials = JSON.parse(
+          vault.decrypt(flow.upstream_credentials_enc),
+        ) as SourceCredentials;
+        provider.validateServer(credentials.server);
+        const remote = await provider.current(credentials);
+        if (!remote.groups.includes(config.memberGroup))
+          throw new SourceMembershipDenied(remote.uid);
+        // All concurrent first logins for this source identity share one product user.
+        await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+          config.providerKey + config.workspaceId + remote.uid,
+        ]);
+        let identity = (
+          await c.query(
+            "SELECT * FROM cw_external_identities WHERE provider_key=$1 AND workspace_id=$2 AND remote_uid=$3",
+            [config.providerKey, config.workspaceId, remote.uid],
+          )
+        ).rows[0];
+        if (!identity) {
+          const userId = randomUUID(),
+            identityId = randomUUID();
+          await c.query("INSERT INTO cw_users(id,name) VALUES($1,$2)", [
+            userId,
+            remote.name,
+          ]);
+          await c.query(
+            "INSERT INTO cw_external_identities(id,provider_key,workspace_id,remote_uid,user_id) VALUES($1,$2,$3,$4,$5)",
+            [
+              identityId,
+              config.providerKey,
+              config.workspaceId,
+              remote.uid,
+              userId,
+            ],
+          );
+          await c.query(
+            "INSERT INTO cw_members(workspace_id,user_id,role) VALUES($1,$2,$3)",
+            [
+              config.workspaceId,
+              userId,
+              config.bootstrapAdminIds.includes(remote.uid)
+                ? "admin"
+                : "member",
+            ],
+          );
+          identity = { id: identityId, user_id: userId };
+        }
+        const member = await c.query(
+          "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+          [config.workspaceId, identity.user_id],
         );
-        if (!live.rowCount)
-          throw new GoneException("此登录已注销，请重新发起。");
-        return { state: "complete" as const, session };
-      }
-      const credentials = JSON.parse(
-        vault.decrypt(flow.upstream_credentials_enc),
-      ) as SourceCredentials;
-      provider.validateServer(credentials.server);
-      const remote = await provider.current(credentials);
-      if (!remote.groups.includes(config.memberGroup))
-        throw new ForbiddenException("此账号不在工作区允许的企业群组内。");
-      // All concurrent first logins for this source identity share one product user.
-      await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
-        config.providerKey + config.workspaceId + remote.uid,
-      ]);
-      let identity = (
-        await c.query(
-          "SELECT * FROM cw_external_identities WHERE provider_key=$1 AND workspace_id=$2 AND remote_uid=$3",
-          [config.providerKey, config.workspaceId, remote.uid],
-        )
-      ).rows[0];
-      if (!identity) {
-        const userId = randomUUID(),
-          identityId = randomUUID();
-        await c.query("INSERT INTO cw_users(id,name) VALUES($1,$2)", [
-          userId,
+        if (!member.rowCount)
+          throw new ForbiddenException(
+            "此账号的产品权限已撤销，请联系管理员恢复。",
+          );
+        await c.query("UPDATE cw_users SET name=$2 WHERE id=$1", [
+          identity.user_id,
           remote.name,
         ]);
         await c.query(
-          "INSERT INTO cw_external_identities(id,provider_key,workspace_id,remote_uid,user_id) VALUES($1,$2,$3,$4,$5)",
+          "UPDATE cw_external_identities SET verified_at=now() WHERE id=$1",
+          [identity.id],
+        );
+        const credentialId = randomUUID();
+        await c.query(
+          "INSERT INTO cw_identity_credentials(id,identity_id,login_name,credential_enc) VALUES($1,$2,$3,$4)",
           [
-            identityId,
-            config.providerKey,
-            config.workspaceId,
-            remote.uid,
-            userId,
+            credentialId,
+            identity.id,
+            credentials.loginName,
+            vault.encrypt(credentials.appPassword),
           ],
+        );
+        const session = await issueSession(
+          this.db,
+          identity.user_id,
+          config.workspaceId,
+          false,
+          credentialId,
+          c,
         );
         await c.query(
-          "INSERT INTO cw_members(workspace_id,user_id,role) VALUES($1,$2,$3)",
-          [
-            config.workspaceId,
-            userId,
-            config.bootstrapAdminIds.includes(remote.uid) ? "admin" : "member",
-          ],
+          "UPDATE cw_login_flows SET session_token_enc=$2,identity_credential_id=$3,upstream_credentials_enc=NULL,poll_token_enc=NULL WHERE id=$1",
+          [id, vault.encrypt(session), credentialId],
         );
-        identity = { id: identityId, user_id: userId };
-      }
-      const member = await c.query(
-        "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
-        [config.workspaceId, identity.user_id],
-      );
-      if (!member.rowCount)
-        throw new ForbiddenException(
-          "此账号的产品权限已撤销，请联系管理员恢复。",
-        );
-      await c.query("UPDATE cw_users SET name=$2 WHERE id=$1", [
-        identity.user_id,
-        remote.name,
-      ]);
-      await c.query(
-        "UPDATE cw_external_identities SET verified_at=now() WHERE id=$1",
-        [identity.id],
-      );
-      const credentialId = randomUUID();
-      await c.query(
-        "INSERT INTO cw_identity_credentials(id,identity_id,login_name,credential_enc) VALUES($1,$2,$3,$4)",
-        [
-          credentialId,
-          identity.id,
-          credentials.loginName,
-          vault.encrypt(credentials.appPassword),
-        ],
-      );
-      const session = await issueSession(
-        this.db,
-        identity.user_id,
-        config.workspaceId,
-        false,
-        credentialId,
-        c,
-      );
-      await c.query(
-        "UPDATE cw_login_flows SET session_token_enc=$2,identity_credential_id=$3,upstream_credentials_enc=NULL,poll_token_enc=NULL WHERE id=$1",
-        [id, vault.encrypt(session), credentialId],
-      );
-      return { state: "complete" as const, session };
-    });
+        return { state: "complete" as const, session };
+      });
+    } catch (error) {
+      // Persist revocation after the failed login transaction rolls back. This also handles
+      // group removal first observed on a new device, before any old device makes a request.
+      if (error instanceof SourceMembershipDenied)
+        await revokeMappedMembership(this.db, config, error.remoteUid);
+      throw error;
+    }
   }
   async cancel(id: string, binding?: string) {
     return this.db.tx(async (c) => {
