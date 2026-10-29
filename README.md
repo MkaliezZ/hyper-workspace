@@ -123,6 +123,8 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 当前仅为基础文本成果和短文本资料阅读，尚无富文本、多人实时协作、批注评论、PDF/Office 解析或 Word/Excel/PPT 编辑。个人文件解读与项目成果分别保留权限范围。
 
+PDF/Office 接入开发中：[独立解析组件](runtime/documents/README.md) 已通过首轮 8 项本地解析测试，依赖按版本与哈希锁定；产品导入、预览、AI 阅读和容器尚未接入，当前界面仍只开放文本/Markdown。
+
 ![员工对确切版本的验收（演示资料）](docs/images/artifact-review-desktop.png)
 
 [移动端验收](docs/images/artifact-review-mobile.png)

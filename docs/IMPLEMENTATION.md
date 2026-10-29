@@ -145,6 +145,8 @@
 
 ## 本地环境证据
 
+文档接入正在实现：新增 `runtime/documents` 独立提取组件，锁定 pypdf/python-docx/openpyxl/python-pptx/defusedxml 及全部传递依赖哈希；本机独立 Python 3.14.6 环境已安装，8 项格式提取、定位、错误和资源限额测试通过。尚未接入 StorageProvider、产品预览/AI 或生产容器，不能称为 PDF/Office 产品支持。后续按 [组件接续要求](../runtime/documents/README.md) 完成 TypeScript 受限进程、源版本/解析元数据、撤权失效和业务端到端验证。CI 新增 Linux 解析器测试，结果以对应提交为准。
+
 这台机器缺少 Docker/PostgreSQL，Homebrew 公式元数据与本机 Homebrew 不兼容。因此在被 Git 忽略的 .runtime 中使用官方源包与 SHA-256 校验构建 PostgreSQL 17.11，安装 pgvector 0.8.7，并实际启动本地数据库。没有用 SQLite 或内存数据库代替既定生产存储。
 
 开发库和演示资料仅在本机；配置文件为 .env，不提交。此本地数据库编译方式不是正式部署教程；公开部署以之后提供的 Compose 和经过验证的版本组合为准。
