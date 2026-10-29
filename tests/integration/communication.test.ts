@@ -14,6 +14,9 @@ import { CommunicationService } from "../../apps/api/src/core/communication.js";
 import { ReplyDraftService } from "../../apps/api/src/core/reply-drafts.js";
 import { SourceFileService } from "../../apps/api/src/core/source-files.js";
 import { DavFixture } from "../fixtures/dav.js";
+import { FileReadingService } from "../../apps/api/src/core/file-readings.js";
+import { mkdir, writeFile, access } from "node:fs/promises";
+import { resolve } from "node:path";
 const url = process.env.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.endsWith("_test"))
   throw new Error("Use an isolated TEST_DATABASE_URL ending in _test.");
@@ -445,7 +448,7 @@ function scopedWorkspace(execute: any) {
     id: "dsh",
     describeCapabilities: () => ({
       configured: true,
-      operations: ["discussion_to_minutes"],
+      operations: ["discussion_to_minutes", "read_file"],
       evidence: "protocol-fixture",
     }),
     execute,
@@ -1194,4 +1197,275 @@ test("A torn file read never becomes an active asset", async () => {
     ).rowCount,
     0,
   );
+});
+
+async function preparedFileReading(execute?: any) {
+  const source = dav.add(
+    "alice",
+    ["reading-" + randomUUID() + ".md"],
+    "selected-file-reading-sentinel",
+  );
+  const files = new SourceFileService(db),
+    file = await files.import(s(), source.path, source.id, source.etag);
+  const work = scopedWorkspace(
+    execute ??
+      (async (r: any) => {
+        assert.ok(r.context.includes("selected-file-reading-sentinel"));
+        assert.ok(!r.context.includes("never-selected-file-sentinel"));
+        await r.onProgress("private-model-progress-sentinel");
+        return {
+          text: "raw-model-summary-sentinel",
+          evidence: "fixture",
+          actions: [
+            {
+              tool: "file.reading.save",
+              args: { content: "private-file-reading-result" },
+            },
+          ],
+        };
+      }),
+  );
+  await chatProfile(work);
+  const input = {
+    engine: "dsh" as const,
+    instruction: "Explain the selected version",
+    expectedSourceVersion: file.sourceVersion,
+    idempotencyKey: randomUUID(),
+  };
+  const started = await work.startFileRun(s(), file.id, input);
+  return { source, files, file, work, input, started };
+}
+test("Private file reading binds exactly one selected version and never publishes model output to shared assets or messages", async () => {
+  dav.add("alice", ["not-selected.md"], "never-selected-file-sentinel");
+  const f = await preparedFileReading();
+  const replay = await f.work.startFileRun(s(), f.file.id, f.input);
+  assert.equal(replay.id, f.started.id);
+  assert.equal(replay.created, false);
+  await new RunProcessor(f.work).process(f.started.id);
+  const run = await f.work.getRun(s(), f.started.id);
+  assert.equal(run.state, "succeeded", run.error);
+  assert.equal(run.result.text, "个人文件解读已保存。");
+  const id = run.result.receipts[0].id,
+    reading = await new FileReadingService(db).get(s(), id);
+  assert.equal(reading.content, "private-file-reading-result");
+  assert.equal(reading.version, 1);
+  assert.deepEqual(run.contextRefs, [
+    "file:" + f.file.id + "@" + f.file.sourceVersion,
+  ]);
+  await assert.rejects(new FileReadingService(db).get(s("bob"), id));
+  await assert.rejects(f.work.getRun(s("bob"), run.id));
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_messages WHERE metadata->>'runId'=$1",
+        [run.id],
+      )
+    ).rowCount,
+    0,
+  );
+  assert.equal(
+    (await f.work.search(s(), "private-file-reading-result")).length,
+    0,
+  );
+  const events = await f.work.events(s(), run.id);
+  assert.ok(
+    !JSON.stringify(events).includes("private-model-progress-sentinel"),
+  );
+  assert.ok(!JSON.stringify(events).includes("private-file-reading-result"));
+  await assert.rejects(
+    access(resolve(process.env.RUNTIME_DIR ?? ".runtime/runs", run.id)),
+  );
+});
+test("Personal reading revisions retain history and reject stale edits", async () => {
+  const f = await preparedFileReading();
+  await new RunProcessor(f.work).process(f.started.id);
+  const id = (await f.work.getRun(s(), f.started.id)).result.receipts[0].id,
+    readings = new FileReadingService(db);
+  assert.equal(
+    (
+      await readings.revise(s(), id, {
+        content: "human-corrected-file-reading",
+        expectedVersion: 1,
+      })
+    ).version,
+    2,
+  );
+  await assert.rejects(
+    readings.revise(s(), id, { content: "stale", expectedVersion: 1 }),
+    /版本/,
+  );
+  const value = await readings.get(s(), id);
+  assert.equal(value.content, "human-corrected-file-reading");
+  assert.deepEqual(
+    value.versions.map((v: any) => v.version),
+    [1, 2],
+  );
+  await assert.rejects(
+    readings.revise(s("bob"), id, { content: "steal", expectedVersion: 2 }),
+  );
+});
+test("File updates redact every dependent reading version and private question without restoring old output after refresh", async () => {
+  const f = await preparedFileReading();
+  await new RunProcessor(f.work).process(f.started.id);
+  const readings = new FileReadingService(db),
+    id = (await f.work.getRun(s(), f.started.id)).result.receipts[0].id;
+  await readings.revise(s(), id, {
+    content: "second-private-reading-version",
+    expectedVersion: 1,
+  });
+  f.source.etag = '"reading-version-two"';
+  f.source.content = Buffer.from("new-selected-file-version");
+  await assert.rejects(readings.get(s(), id));
+  assert.ok(
+    (
+      await db.pool.query(
+        "SELECT content FROM cw_file_reading_versions WHERE reading_id=$1",
+        [id],
+      )
+    ).rows.every((r) => r.content === ""),
+  );
+  const redacted = (
+    await db.pool.query("SELECT instruction,result FROM cw_runs WHERE id=$1", [
+      f.started.id,
+    ])
+  ).rows[0];
+  assert.equal(redacted.instruction, "");
+  assert.equal(redacted.result, null);
+  await f.files.refresh(s(), f.file.id);
+  await assert.rejects(readings.get(s(), id));
+  assert.deepEqual((await readings.list(s(), f.file.id)).readings, []);
+  f.source.etag = '"v1"';
+  f.source.content = Buffer.from("selected-file-reading-sentinel");
+  await f.files.refresh(s(), f.file.id);
+  await assert.rejects(f.work.getRun(s(), f.started.id));
+  await assert.rejects(readings.get(s(), id));
+});
+test("Revocation during model work blocks private reading persistence and cleans runtime inputs", async () => {
+  let selected: any;
+  const f = await preparedFileReading(async (r: any) => {
+    await r.onProgress("do-not-persist-source-text");
+    selected.blockedDownloads.add("alice");
+    return {
+      text: "claimed done",
+      evidence: "fixture",
+      actions: [
+        { tool: "file.reading.save", args: { content: "revoked-answer" } },
+      ],
+    };
+  });
+  selected = f.source;
+  await new RunProcessor(f.work).process(f.started.id);
+  assert.equal(
+    (
+      await db.pool.query("SELECT state FROM cw_runs WHERE id=$1", [
+        f.started.id,
+      ])
+    ).rows[0].state,
+    "failed",
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_file_readings WHERE source_run_id=$1",
+        [f.started.id],
+      )
+    ).rowCount,
+    0,
+  );
+  await assert.rejects(
+    access(resolve(process.env.RUNTIME_DIR ?? ".runtime/runs", f.started.id)),
+  );
+});
+test("File execution rejects scope overrides, cross-employee starts and shared project actions", async () => {
+  const f = await preparedFileReading(async () => ({
+    text: "attempt",
+    evidence: "fixture",
+    actions: [
+      {
+        tool: "artifact.create",
+        args: { title: "leak", content: "private-file-leak" },
+      },
+    ],
+  }));
+  await assert.rejects(f.work.startFileRun(s("bob"), f.file.id, f.input));
+  await assert.rejects(
+    f.work.startFileRun(s(), f.file.id, {
+      ...f.input,
+      expectedSourceVersion: "wrong",
+    }),
+  );
+  const view = await f.work.view(s());
+  await assert.rejects(
+    f.work.startRun(s(), {
+      conversationId: view.project.conversationId,
+      workflow: "read_file",
+      engine: "dsh",
+      instruction: "bypass",
+      idempotencyKey: randomUUID(),
+    }),
+  );
+  await new RunProcessor(f.work).process(f.started.id);
+  assert.equal((await f.work.getRun(s(), f.started.id)).state, "failed");
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_assets WHERE workspace_id=$1 AND content='private-file-leak'",
+        [s().workspaceId],
+      )
+    ).rowCount,
+    0,
+  );
+  const bad = await preparedFileReading(async () => ({
+    text: "attempt",
+    evidence: "fixture",
+    actions: [
+      { tool: "file.reading.save", args: { content: "body", actorId: "bob" } },
+    ],
+  }));
+  await new RunProcessor(bad.work).process(bad.started.id);
+  assert.equal((await bad.work.getRun(s(), bad.started.id)).state, "failed");
+});
+test("File cancellation and expired-lease reconciliation retain no runtime input directory", async () => {
+  let cancel: any;
+  const f = await preparedFileReading(async () => {
+    await cancel();
+    return {
+      text: "late",
+      evidence: "fixture",
+      actions: [
+        { tool: "file.reading.save", args: { content: "late-answer" } },
+      ],
+    };
+  });
+  cancel = () => f.work.cancel(s(), f.started.id);
+  await new RunProcessor(f.work).process(f.started.id);
+  assert.equal((await f.work.getRun(s(), f.started.id)).state, "cancelled");
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_file_readings WHERE source_run_id=$1",
+        [f.started.id],
+      )
+    ).rowCount,
+    0,
+  );
+  const interrupted = await preparedFileReading();
+  const path = resolve(
+    process.env.RUNTIME_DIR ?? ".runtime/runs",
+    interrupted.started.id,
+  );
+  await mkdir(path, { recursive: true, mode: 0o700 });
+  await writeFile(resolve(path, "private-input.txt"), "private-orphan-input");
+  await db.pool.query(
+    "UPDATE cw_runs SET state='running',lease_expires_at=now()-interval '1 second' WHERE id=$1",
+    [interrupted.started.id],
+  );
+  const processor = new RunProcessor(interrupted.work);
+  processor.enqueue = async () => {};
+  await processor.reconcile();
+  assert.equal(
+    (await interrupted.work.getRun(s(), interrupted.started.id)).state,
+    "recovery_required",
+  );
+  await assert.rejects(access(path));
 });

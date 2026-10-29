@@ -535,6 +535,7 @@ export function App() {
             act={act}
             demo={view.user.demo}
             filesEnabled={!!status?.filesEnabled}
+            engines={view.engines}
           />
         ) : null}
         {section === "settings" ? (

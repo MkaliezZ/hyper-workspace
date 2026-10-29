@@ -10,6 +10,7 @@ import type { Database } from "../db/database.js";
 import { assertMember } from "./security.js";
 import { sourceConnection } from "./source-connection.js";
 import { digest } from "./credentials.js";
+import { invalidateFileDependents } from "./file-lifecycle.js";
 import {
   FileSourceRejected,
   NextcloudFilesProvider,
@@ -49,10 +50,14 @@ export class SourceFileService {
     );
   }
   private async invalidate(row: any, validity: string) {
-    await this.db.pool.query(
-      `UPDATE cw_assets SET content='',validity=$2,${CLEAR_INDEX},updated_at=clock_timestamp() WHERE id=$1 AND source_version=$3`,
-      [row.asset_id, validity, row.source_version],
-    );
+    await this.db.tx(async (c) => {
+      const changed = await c.query(
+        `UPDATE cw_assets SET content='',validity=$2,${CLEAR_INDEX},updated_at=clock_timestamp() WHERE id=$1 AND source_version=$3 RETURNING id`,
+        [row.asset_id, validity, row.source_version],
+      );
+      if (changed.rowCount)
+        await invalidateFileDependents(c, row.asset_id, row.source_version);
+    });
   }
   /** Fresh metadata plus an actual content-read probe; no positive permission cache. */
   async verify(s: Subject, ids?: string[]): Promise<FileValidation> {
@@ -135,6 +140,18 @@ export class SourceFileService {
           : "unavailable",
       sourceVersion: checked.allowed.get(row.asset_id),
     }));
+  }
+  async assertVersion(s: Subject, id: string, version: string) {
+    await assertMember(this.db, s);
+    const checked = await this.verify(s, [id]);
+    if (checked.allowed.get(id) !== version)
+      throw new NotFoundException("文件来源或版本已失效。");
+    const current = await this.db.pool.query(
+      "SELECT id FROM cw_assets WHERE id=$1 AND workspace_id=$2 AND owner_id=$3 AND source_version=$4 AND validity='active' AND deleted_at IS NULL",
+      [id, s.workspaceId, s.id, version],
+    );
+    if (!current.rowCount)
+      throw new NotFoundException("文件来源或版本已失效。");
   }
   async get(s: Subject, id: string) {
     await assertMember(this.db, s);
@@ -231,11 +248,14 @@ export class SourceFileService {
         existing.validity !== "active" ||
         existing.title !== current.name ||
         existing.visibility !== "private"
-      )
+      ) {
+        await c.query("SELECT id FROM cw_assets WHERE id=$1 FOR UPDATE", [id]);
+        await invalidateFileDependents(c, id, existing.source_version);
         await c.query(
           `UPDATE cw_assets SET title=$2,content=$3,source_version=$4,validity='active',visibility='private',${CLEAR_INDEX},updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$5 AND owner_id=$6`,
           [id, current.name, content, version, s.workspaceId, s.id],
         );
+      }
       await c.query(
         `INSERT INTO cw_source_files(asset_id,workspace_id,actor_id,provider_key,remote_file_id,path,source_etag,size_bytes,content_mime,content_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         ON CONFLICT(asset_id) DO UPDATE SET path=EXCLUDED.path,source_etag=EXCLUDED.source_etag,size_bytes=EXCLUDED.size_bytes,content_mime=EXCLUDED.content_mime,content_sha256=EXCLUDED.content_sha256,imported_at=clock_timestamp(),checked_at=clock_timestamp()`,

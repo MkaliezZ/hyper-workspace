@@ -1498,3 +1498,62 @@ p {
     flex-basis: calc(100% - 32px);
   }
 }
+
+.file-reader {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8faff;
+}
+.file-reader form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.file-reader label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.file-reader select,
+.file-reader textarea {
+  width: 100%;
+  min-width: 0;
+}
+.file-reading-question {
+  grid-column: 1/-1;
+}
+.file-reader textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.file-reader [aria-label="个人文件解读"] textarea {
+  min-height: 180px;
+}
+.file-reading-history {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.file-reader pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+}
+.file-reader button {
+  margin: 4px 4px 4px 0;
+}
+.source-file-preview .file-reader button.primary {
+  color: #fff;
+}
+@media (max-width: 640px) {
+  .file-reader form {
+    grid-template-columns: 1fr;
+  }
+  .file-reader {
+    padding: 10px;
+  }
+}

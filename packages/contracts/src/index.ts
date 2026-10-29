@@ -35,6 +35,7 @@ export const Workflow = z.enum([
   "follow_up",
   "chat",
   "draft_reply",
+  "read_file",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
 export const RunInput = z
@@ -146,7 +147,8 @@ export interface PlannedAction {
     | "task.create"
     | "project.report"
     | "follow_up.check"
-    | "communication.draft";
+    | "communication.draft"
+    | "file.reading.save";
   args: Record<string, unknown>;
 }
 export interface EngineRequest {
@@ -184,6 +186,8 @@ export function toolsForWorkflow(
       return [];
     case "draft_reply":
       return ["communication.draft"];
+    case "read_file":
+      return ["file.reading.save"];
   }
 }
 export interface EngineResult {
@@ -319,3 +323,20 @@ export interface SourceFile {
   mime: string;
   importable: boolean;
 }
+
+export const FileReadingInput = z
+  .object({
+    engine: z.enum(["dsh", "hermes"]).default("dsh"),
+    instruction: z.string().trim().min(1).max(4000),
+    expectedSourceVersion: z.string().min(1).max(512),
+    modelProfileId: z.uuid().optional(),
+    idempotencyKey: z.uuid(),
+  })
+  .strict();
+export type FileReadingInput = z.infer<typeof FileReadingInput>;
+export const FileReadingRevision = z
+  .object({
+    content: z.string().trim().min(1).max(20000),
+    expectedVersion: z.number().int().positive(),
+  })
+  .strict();

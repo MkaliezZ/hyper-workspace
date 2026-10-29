@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type {
   Subject,
+  FileReadingInput,
   RunInput,
   EngineId,
   EngineAdapter,
@@ -299,23 +300,82 @@ export class WorkspaceService {
     );
     return { id, name: input.name, verifiedAt: null };
   }
+  private async runModel(
+    s: Subject,
+    engineId: EngineId,
+    modelProfileId?: string,
+  ) {
+    if (engineId === "fixture" && (!s.demo || process.env.DEMO_MODE !== "true"))
+      throw new ForbiddenException("演示执行仅用于演示会话。");
+    const engine = this.engines.get(engineId);
+    if (!engine?.describeCapabilities().configured)
+      throw new BadRequestException(
+        engineId + " 执行器尚未配置；不能将演示流程作为真实引擎。",
+      );
+    const model =
+      engineId === "fixture"
+        ? undefined
+        : await new ModelService(this.db).resolve(s, "chat", modelProfileId);
+    const providers = engine.describeCapabilities().modelProviders;
+    if (model && providers && !providers.includes(model.provider))
+      throw new BadRequestException(
+        "所选执行器当前不支持这条连接的 API 类型，请选择兼容连接。",
+      );
+    return model;
+  }
+  async startFileRun(s: Subject, assetId: string, input: FileReadingInput) {
+    const files = new SourceFileService(this.db);
+    await files.assertVersion(s, assetId, input.expectedSourceVersion);
+    if (
+      !this.engines
+        .get(input.engine)
+        ?.describeCapabilities()
+        .operations.includes("read_file")
+    )
+      throw new BadRequestException("执行器尚未声明文件阅读能力。");
+    const model = await this.runModel(s, input.engine, input.modelProfileId);
+    const inputHash = stableDigest({
+      ...input,
+      assetId,
+      workflow: "read_file",
+      idempotencyKey: undefined,
+    });
+    const r = await this.db.pool.query(
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,idempotency_key,input_hash,demo,model_profile_id,identity_credential_id,source_file_asset_id,expected_file_version) VALUES($1,$2,$3,NULL,$4,'read_file',$5,$6,$7,false,$8,$9,$10,$11) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      [
+        randomUUID(),
+        s.workspaceId,
+        s.id,
+        input.engine,
+        input.instruction,
+        input.idempotencyKey,
+        inputHash,
+        model?.id,
+        s.identityCredentialId,
+        assetId,
+        input.expectedSourceVersion,
+      ],
+    );
+    if (r.rowCount) return { ...r.rows[0], created: true };
+    const old = (
+      await this.db.pool.query(
+        "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+        [s.workspaceId, s.id, input.idempotencyKey],
+      )
+    ).rows[0];
+    if (old.input_hash !== inputHash)
+      throw new ConflictException("相同幂等键不能用于不同任务。");
+    return { id: old.id, state: old.state, created: false };
+  }
   async startRun(s: Subject, input: RunInput) {
+    if (input.workflow === "read_file")
+      throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
     if (
       input.workflow === "draft_reply" &&
       !(await this.access.binding(s, conversation.project_id))
     )
       throw new BadRequestException("请先从企业会话创建关联项目，再起草回复。");
-    if (
-      input.engine === "fixture" &&
-      (!s.demo || process.env.DEMO_MODE !== "true")
-    )
-      throw new ForbiddenException("演示执行仅用于演示会话。");
-    const engine = this.engines.get(input.engine);
-    if (!engine?.describeCapabilities().configured)
-      throw new BadRequestException(
-        input.engine + " 执行器尚未配置；不能将演示流程作为真实引擎。",
-      );
     let expectedVersion: number | null = null;
     if (input.workflow === "revise_artifact") {
       if (!input.artifactId)
@@ -329,19 +389,7 @@ export class WorkspaceService {
       if (!artifact) throw new NotFoundException("成果不在当前项目中。");
       expectedVersion = artifact.current_version;
     }
-    const model =
-      input.engine === "fixture"
-        ? undefined
-        : await new ModelService(this.db).resolve(
-            s,
-            "chat",
-            input.modelProfileId,
-          );
-    const providers = engine.describeCapabilities().modelProviders;
-    if (model && providers && !providers.includes(model.provider))
-      throw new BadRequestException(
-        "所选执行器当前不支持这条连接的 API 类型，请选择兼容连接。",
-      );
+    const model = await this.runModel(s, input.engine, input.modelProfileId);
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
@@ -378,12 +426,20 @@ export class WorkspaceService {
     await assertMember(this.db, s);
     const target = (
       await this.db.pool.query(
-        "SELECT conversation_id FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
+        "SELECT conversation_id,source_file_asset_id,expected_file_version,(instruction='') AS source_redacted FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
         [id, s.workspaceId, s.id],
       )
     ).rows[0];
     if (!target) throw new NotFoundException("执行不存在或无权访问。");
-    await this.conversation(s, target.conversation_id);
+    if (target.source_file_asset_id && target.source_redacted)
+      throw new NotFoundException("文件执行已因来源失效而清理。");
+    if (target.source_file_asset_id)
+      await new SourceFileService(this.db).assertVersion(
+        s,
+        target.source_file_asset_id,
+        target.expected_file_version,
+      );
+    else await this.conversation(s, target.conversation_id);
     const r = await this.db.pool.query(
       'SELECT id,state,engine,workflow,instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],

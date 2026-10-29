@@ -46,3 +46,5 @@ Files 增量已增加用户显式选择的个人短文本副本，在关键词/�
 真实 PostgreSQL/pgvector + 本地确定性 HTTP 服务验证了隔离、向量读写、版本失效和删除过滤。该 HTTP 服务是协议测试用例，不是真实 embedding 模型；真实供应商质量、召回率、中文分块和并发容量均未验收。
 
 协议参考：[DeepSeek Chat](https://api-docs.deepseek.com/api/create-chat-completion/)、[Anthropic Messages](https://docs.anthropic.com/en/api/messages)。API 类型和具体模型能力仍须用实际服务验证。
+
+个人文件的 `read_file` 使用固定的 chat 连接与所选单文件原文，经 DSH/Hermes 生成本人可修订解读；它无需 embedding，也不执行跨文件 RAG。输出暂不加入通用索引，源版本/权限失效会清理其全部版本。见 [FILE-AI-READING.md](FILE-AI-READING.md)。

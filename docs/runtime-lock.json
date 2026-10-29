@@ -89,7 +89,15 @@
       "scope": "Authenticated personal file metadata and explicit short UTF-8 text/Markdown snapshots; private retrieval/indexing with live content permission and version checks; PDF/Office, chunking and agent tool entry pending",
       "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40863698233",
       "evidenceCommit": "10742f3c2e1b4ef9dc6b7419f85d76bf96edebd5",
-      "evidenceScope": "Explicit private shared-file import, source updates, stable-ID refresh, pgvector and share revocation; synthetic users and local embedding protocol service"
+      "evidenceScope": "Explicit private shared-file import, source updates, stable-ID refresh, pgvector and share revocation; synthetic users and local embedding protocol service",
+      "personalReadings": {
+        "status": "implemented-real-service-ci-pending",
+        "contract": "docs/FILE-AI-READING.md",
+        "migration": "db/migrations/010_file_readings.sql",
+        "engineCapability": "EngineAdapter 1.0 additive read_file / file.reading.save",
+        "scope": "Single explicit private file version; personal reading objects and manual versions; dependent text redacted on source invalidation; no shared project publication or cross-file retrieval",
+        "modelEvidence": "Local protocol model only; real-source native-engine joint assertions pending this commit CI"
+      }
     }
   },
   "note": "Implemented dependency pins do not claim a fully validated production runtime combination.",

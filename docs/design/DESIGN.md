@@ -54,3 +54,5 @@ This initial comparison verifies only the first-stage UI surface. Native engine 
 ### Files 个人资料增量
 
 知识库增加“知识检索/企业文件”标签，沿用蓝白黑与既有组件。文件选择显示支持范围和个人可见性，导入与向量索引分开；当前版本/来源不可用状态有明确提示。已检查 [1504×1045 桌面](../images/files-desktop.png) 与 [390×844 手机](../images/files-mobile.png)，文件名和按钮可换行，无横向溢出，手机滚动后可访问预览及索引动作。资料为 UI 协议 fixture，截图不证明真实公司来源或模型质量。权限与源版本变化会清理文本预览及文件检索片段，旧异步响应受范围/版本约束。
+
+个人文件 AI 阅读的目标流程：企业文件 → 查看所选文本 → 选择执行器/模型并提问 → 保存个人解读 → 人工修订和版本记录；另验证慢来源撤权与迟到内容不重现。Browser plugin not available，沿用仓库 Playwright；检查标题、非空页面、Vite overlay、控制台、桌面 1504×1045 和手机 390×844 无横向溢出。首轮可见性核对发现主按钮文字与背景同色，已增加局部文字颜色规则并复核。截图为合成 UI 协议数据：[桌面个人阅读](../images/file-reading-desktop.png)、[手机个人阅读](../images/file-reading-mobile.png)。

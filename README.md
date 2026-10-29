@@ -82,13 +82,22 @@ npm run dev
 
 ## 企业文件与个人资料
 
-新增 Nextcloud Files/WebDAV 浏览与显式导入，在“知识库 → 企业文件”选择短文本/Markdown，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。真实来源分享、更新、刷新与撤权联合用例已通过 CI。PDF/Office、长文分块、文件到项目 AI 成果的权限传播和 Calendar 仍待完成。[配置、数据契约与回退](docs/NEXTCLOUD-FILES.md)。
+新增 Nextcloud Files/WebDAV 浏览与显式导入，在“知识库 → 企业文件”选择短文本/Markdown，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。真实来源分享、更新、刷新与撤权联合用例已通过 CI。PDF/Office、长文分块、文件到共享项目成果的权限传播和 Calendar 仍待完成。[配置、数据契约与回退](docs/NEXTCLOUD-FILES.md)。
 
 下图使用明确 UI 协议测试资料，非真实公司文件。
 
 ![企业文件导入](docs/images/files-desktop.png)
 
 [移动端文件预览](docs/images/files-mobile.png)
+
+新增个人“AI 阅读此文件”：选择 DSH/Hermes 与 chat 模型，基于所选当前版本生成个人解读，可人工修改并保留版本；源变更/撤权清理相关解读。该流程保持个人范围，完整共享发布与多文件 RAG 仍待实现。[范围、运行清理与迁移](docs/FILE-AI-READING.md)。
+
+下图为 UI 协议测试资料，非真实公司资料或模型质量证据。
+
+![个人 AI 文件阅读与修订](docs/images/file-reading-desktop.png)
+
+[移动端个人解读](docs/images/file-reading-mobile.png)
+
 
 ## 检查与验证
 
@@ -102,11 +111,11 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、12 项单元/Provider 测试、43 项数据库集成测试、16 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过类型检查、构建、12 项单元/Provider 测试、49 项数据库集成测试、18 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
-GitHub Actions 使用真实 PostgreSQL/pgvector 及固定 Nextcloud 33.0.10/Talk 23.0.12；来源 job 当前为 8 项，主 job 为 74 项。绿色状态只证明工作流实际覆盖的测试，不代表真实模型质量或原始 E01–E10 已全部完成。
+GitHub Actions 使用真实 PostgreSQL/pgvector 及固定 Nextcloud 33.0.10/Talk 23.0.12；来源 job 当前为 8 项；新增个人阅读的主 job 为 82 项，真实来源联合验证待本次 CI。绿色状态只证明工作流实际覆盖的测试，不代表真实模型质量或原始 E01–E10 已全部完成。
 
-Files 实现提交 `10742f3` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40863698233) 两个 job 成功，共 82 项测试（12 单元/Provider、43 数据库、16 浏览器、3 原生执行器、8 真实来源），另含类型、构建和冻结包校验。新增用例验证个人文件范围、精确版本、实际读取权限、pgvector 与撤权清理；模型仍为协议测试服务。后续提交以各自 Actions 为准。
+Files 实现提交 `10742f3` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40863698233) 两个 job 成功，共 82 项测试（12 单元/Provider、43 数据库、16 浏览器、3 原生执行器、8 真实来源），另含类型、构建和冻结包校验。新增用例验证个人文件范围、精确版本、实际读取权限、pgvector 与撤权清理；模型仍为协议测试服务。后续提交以各自 Actions 为准。本次个人文件阅读扩展需独立 CI，不以此旧结果代替。
 
 ## 开发依据与进展
 

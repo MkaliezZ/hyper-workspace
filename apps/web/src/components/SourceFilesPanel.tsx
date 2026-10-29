@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Folder, FileText, RefreshCw } from "lucide-react";
 import type { SourceFile } from "@hyper/contracts";
+import { FileReaderPanel } from "./FileReaderPanel";
 import { api, mutation } from "../api";
 interface Imported {
   id: string;
@@ -19,7 +20,9 @@ export function SourceFilesPanel({
   demo,
   busy,
   act,
+  engines,
 }: {
+  engines: Record<string, import("@hyper/contracts").EngineCapabilities>;
   enabled: boolean;
   demo: boolean;
   busy: boolean;
@@ -37,7 +40,8 @@ export function SourceFilesPanel({
     previewVersion = useRef(0),
     libraryVersion = useRef(0),
     allowedVersions = useRef(new Map<string, string>()),
-    alive = useRef(true);
+    alive = useRef(true),
+    libraryRequest = useRef<Promise<void> | undefined>(undefined);
   async function loadFolder(next: string[]) {
     const version = ++browseVersion.current;
     setLoading(true);
@@ -58,7 +62,7 @@ export function SourceFilesPanel({
       if (alive.current && version === browseVersion.current) setLoading(false);
     }
   }
-  async function loadImports() {
+  async function refreshImports() {
     const version = ++libraryVersion.current;
     try {
       const values = await api<Imported[]>("/files/imports");
@@ -97,6 +101,21 @@ export function SourceFilesPanel({
         setImports([]);
         setPreview(undefined);
       }
+    }
+  }
+  async function loadImports(fresh = false): Promise<void> {
+    if (libraryRequest.current) {
+      await libraryRequest.current;
+      if (fresh && alive.current) await loadImports();
+      return;
+    }
+    const request = refreshImports();
+    libraryRequest.current = request;
+    try {
+      await request;
+    } finally {
+      if (libraryRequest.current === request)
+        libraryRequest.current = undefined;
     }
   }
   useEffect(() => {
@@ -215,7 +234,7 @@ export function SourceFilesPanel({
                       setNotice(
                         "已加入个人资料。建立语义索引时才会调用所选向量模型。",
                       );
-                      await loadImports();
+                      await loadImports(true);
                     })
                   }
                 >
@@ -234,7 +253,7 @@ export function SourceFilesPanel({
         <button
           aria-label="刷新文件权限"
           disabled={busy}
-          onClick={() => void loadImports()}
+          onClick={() => void loadImports(true)}
         >
           <RefreshCw size={17} />
         </button>
@@ -285,7 +304,7 @@ export function SourceFilesPanel({
                   await mutation("/files/imports/" + row.id + "/refresh", {});
                   if (alive.current) {
                     setNotice("已核验并刷新当前文件；如内容变化，请重建索引。");
-                    await loadImports();
+                    await loadImports(true);
                   }
                 })
               }
@@ -298,6 +317,13 @@ export function SourceFilesPanel({
       {preview ? (
         <section className="source-file-preview" aria-label="文件文本预览">
           <h4>{preview.title}</h4>
+          <FileReaderPanel
+            key={preview.id + preview.sourceVersion}
+            file={preview}
+            engines={engines}
+            busy={busy}
+            act={act}
+          />
           <p>{preview.content}</p>
           <button
             disabled={busy}

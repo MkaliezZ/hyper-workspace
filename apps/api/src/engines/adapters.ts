@@ -21,6 +21,7 @@ const resultSchema = z.object({
           "project.report",
           "follow_up.check",
           "communication.draft",
+          "file.reading.save",
         ]),
         args: z.record(z.string(), z.unknown()),
       }),
@@ -28,7 +29,7 @@ const resultSchema = z.object({
     .max(30),
 });
 const instruction =
-  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|task.create|project.report|follow_up.check|communication.draft","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Use only content for communication.draft (max 20000 characters); it saves a personal draft for review, never sends a message. Never choose a recipient or room. Never invent project facts. No native shell or business tools are needed.';
+  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|task.create|project.report|follow_up.check|communication.draft|file.reading.save","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Use only content for communication.draft (max 20000 characters); it saves a personal draft for review, never sends a message. Use only content for file.reading.save (max 20000 characters); it saves one personal file reading bound by the host to the selected file and version. Never choose a file, recipient or room. Never invent project facts. No native shell or business tools are needed.';
 function parseResult(text: string): EngineResult {
   const clean = text
     .trim()
@@ -162,6 +163,7 @@ export class DshAdapter implements EngineAdapter {
         "follow_up",
         "chat",
         "draft_reply",
+        "read_file",
       ],
       evidence: this.command ? "configured-unverified" : "not-configured",
     };
@@ -267,6 +269,7 @@ export class HermesAdapter implements EngineAdapter {
         "follow_up",
         "chat",
         "draft_reply",
+        "read_file",
       ],
       evidence: this.command ? "configured-unverified" : "not-configured",
     };

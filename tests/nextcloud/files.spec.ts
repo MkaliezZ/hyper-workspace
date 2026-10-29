@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import { modelFixture } from "../runtime/business-contract";
 import { Database } from "../../apps/api/src/db/database.js";
 import { origin, source, password, login } from "./helpers";
 const db = new Database(process.env.TEST_DATABASE_URL);
@@ -57,7 +58,7 @@ async function share(uid: string, path: string, method = "POST", id?: string) {
 test("Real Files imports and pgvector retain employee scope and reject changed or revoked shared content", async ({
   browser,
 }) => {
-  test.setTimeout(240000);
+  test.setTimeout(300000);
   const filename = "Hyper-source-" + randomUUID() + ".md",
     v1 = "synthetic-enterprise-file-version-one",
     v2 = "synthetic-enterprise-file-version-two";
@@ -88,6 +89,18 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     );
   });
   await new Promise<void>((resolve) => model.listen(0, "127.0.0.1", resolve));
+  let currentEngine = "dsh";
+  const enginesSeen = new Set<string>();
+  const fixture = modelFixture(["synthetic-file-reading-key"], (body) => {
+    const text = JSON.stringify(body.messages);
+    expect(text).toContain("native-file-reading-fixture");
+    expect(text).toContain(currentEngine === "dsh" ? v1 : v2);
+    expect(text).toContain("Employee-selected private file");
+    enginesSeen.add(currentEngine);
+  });
+  await new Promise<void>((resolve) =>
+    fixture.server.listen(0, "127.0.0.1", resolve),
+  );
   const bob = await login(browser, "talk-bob"),
     alice = await login(browser, "talk-alice");
   try {
@@ -114,6 +127,84 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     });
     expect(profile.status()).toBe(201);
     const profileId = (await profile.json()).id;
+    const chat = await bob.context.request.post(origin + "/api/models", {
+      headers: { Origin: origin },
+      data: {
+        name: "Synthetic file reading",
+        provider: "openai-compatible",
+        endpoint:
+          "http://127.0.0.1:" +
+          (fixture.server.address() as { port: number }).port +
+          "/v1",
+        model: "native-test-model",
+        purpose: "chat",
+        scope: "personal",
+        apiKey: "synthetic-file-reading-key",
+      },
+    });
+    expect(chat.status()).toBe(201);
+    const chatId = (await chat.json()).id;
+    async function read(engine: string) {
+      currentEngine = engine;
+      await bob.page
+        .getByRole("button", { name: "AI 阅读此文件", exact: true })
+        .click();
+      await bob.page
+        .getByRole("combobox", { name: "执行器", exact: true })
+        .selectOption(engine);
+      await bob.page
+        .getByRole("combobox", { name: "阅读模型", exact: true })
+        .selectOption(chatId);
+      await bob.page
+        .getByRole("textbox", { name: "阅读问题", exact: true })
+        .fill(
+          "native-file-reading-fixture: Explain only the selected version.",
+        );
+      await bob.page
+        .getByRole("button", { name: "开始个人阅读", exact: true })
+        .click();
+      await expect(
+        bob.page.getByRole("textbox", { name: "修改解读", exact: true }),
+      ).toHaveValue("private-native-file-reading-0", { timeout: 75000 });
+      const library = await (
+        await bob.context.request.get(
+          origin + "/api/files/imports/" + asset.id + "/readings",
+        )
+      ).json();
+      expect(library.readings).toHaveLength(1);
+      const reading = await (
+        await bob.context.request.get(
+          origin + "/api/files/readings/" + library.readings[0].id,
+        )
+      ).json();
+      expect(reading.assetId).toBe(asset.id);
+      expect(
+        (
+          await alice.context.request.get(
+            origin + "/api/files/readings/" + reading.id,
+          )
+        ).status(),
+      ).toBe(404);
+      expect(
+        (
+          await alice.context.request.get(origin + "/api/runs/" + reading.runId)
+        ).status(),
+      ).toBe(404);
+      await expect
+        .poll(
+          async () =>
+            (
+              await db.pool.query(
+                "SELECT runtime_cleaned_at FROM cw_runs WHERE id=$1",
+                [reading.runId],
+              )
+            ).rows[0].runtime_cleaned_at,
+          { timeout: 10000 },
+        )
+        .toBeTruthy();
+      return reading;
+    }
+
     await bob.page
       .getByRole("navigation", { name: "工作区导航" })
       .getByRole("button", { name: "知识库", exact: true })
@@ -161,6 +252,7 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     expect((await semantic.json()).some((r: any) => r.id === asset.id)).toBe(
       true,
     );
+    const firstReading = await read("dsh");
     await upload("talk-alice", filename, v2);
     expect(
       await (
@@ -176,6 +268,22 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     expect(stale.content).toBe("");
     expect(stale.embedding).toBe(null);
     expect(stale.validity).toBe("stale");
+    expect(
+      (
+        await bob.context.request.get(
+          origin + "/api/files/readings/" + firstReading.id,
+        )
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT content FROM cw_file_reading_versions WHERE reading_id=$1",
+          [firstReading.id],
+        )
+      ).rows.every((r) => r.content === ""),
+    ).toBe(true);
+
     const refresh = await bob.context.request.post(
       origin + "/api/files/imports/" + asset.id + "/refresh",
       { headers: { Origin: origin }, data: {} },
@@ -191,7 +299,35 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     await expect(
       bob.page.getByRole("region", { name: "文件文本预览" }),
     ).toContainText(v2);
+    const secondReading = await read("hermes");
+    await bob.page
+      .getByRole("textbox", { name: "修改解读", exact: true })
+      .fill("human-reviewed-private-file-reading");
+    await bob.page
+      .getByRole("button", { name: "保存解读修订", exact: true })
+      .click();
+    await expect(
+      bob.page.getByText("当前修订 v2", { exact: false }),
+    ).toBeVisible();
     await share("talk-alice", filename, "DELETE", String(sharing.id));
+    expect(
+      (
+        await bob.context.request.get(
+          origin + "/api/files/readings/" + secondReading.id,
+        )
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT content FROM cw_file_reading_versions WHERE reading_id=$1",
+          [secondReading.id],
+        )
+      ).rows.every((r) => r.content === ""),
+    ).toBe(true);
+    expect(fixture.violations).toEqual([]);
+    expect([...enginesSeen].sort()).toEqual(["dsh", "hermes"]);
+
     expect(
       (
         await bob.context.request.get(origin + "/api/files/imports/" + asset.id)
@@ -215,6 +351,8 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     ).toEqual({ content: "", embedding: null });
     expect(inputs.flat().some((value) => value.includes(v1))).toBe(true);
   } finally {
+    fixture.server.closeAllConnections();
+    await new Promise<void>((resolve) => fixture.server.close(() => resolve()));
     model.closeAllConnections();
     await new Promise<void>((resolve) => model.close(() => resolve()));
     await bob.context.close();

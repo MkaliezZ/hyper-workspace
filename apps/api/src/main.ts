@@ -42,7 +42,12 @@ import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
 import { ReplyDraftService } from "./core/reply-drafts.js";
 import { SourceFileService } from "./core/source-files.js";
-import { FilePath } from "@hyper/contracts";
+import {
+  FilePath,
+  FileReadingInput,
+  FileReadingRevision,
+} from "@hyper/contracts";
+import { FileReadingService } from "./core/file-readings.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
@@ -294,6 +299,42 @@ class ApiController {
   }
   @Get("knowledge") async knowledge(@Req() req: Request, @Query("q") q = "") {
     return service.search(await subject(req), q.slice(0, 500));
+  }
+  @Post("files/imports/:id/readings") async readFile(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const r = await service.startFileRun(
+      await subject(req),
+      uuid(id),
+      FileReadingInput.parse(body),
+    );
+    await queue.enqueue(r.id);
+    return r;
+  }
+  @Get("files/imports/:id/readings") async fileReadings(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new FileReadingService(db).list(await subject(req), uuid(id));
+  }
+  @Get("files/readings/:id") async fileReading(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new FileReadingService(db).get(await subject(req), uuid(id));
+  }
+  @Patch("files/readings/:id") async reviseFileReading(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    return new FileReadingService(db).revise(
+      await subject(req),
+      uuid(id),
+      FileReadingRevision.parse(body),
+    );
   }
   @Post("files/list") async sourceFiles(
     @Req() req: Request,

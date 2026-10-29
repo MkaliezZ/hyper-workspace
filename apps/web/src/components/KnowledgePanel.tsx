@@ -15,11 +15,13 @@ export function KnowledgePanel({
   act,
   demo,
   filesEnabled,
+  engines,
 }: {
   busy: boolean;
   act: (fn: () => Promise<void>) => Promise<boolean>;
   demo: boolean;
   filesEnabled: boolean;
+  engines: Record<string, import("@hyper/contracts").EngineCapabilities>;
 }) {
   const [query, setQuery] = useState(""),
     [mode, setMode] = useState("keyword");
@@ -96,6 +98,7 @@ export function KnowledgePanel({
           demo={demo}
           busy={busy}
           act={act}
+          engines={engines}
         />
       ) : (
         <>
