@@ -214,7 +214,12 @@ class ApiController {
     @Req() req: Request,
     @Param("token") token: string,
   ) {
-    return service.talkProject(await subject(req), TalkToken.parse(token));
+    return {
+      project: await service.talkProject(
+        await subject(req),
+        TalkToken.parse(token),
+      ),
+    };
   }
   @Post("projects/from-talk") async projectFromTalk(
     @Req() req: Request,

@@ -272,6 +272,11 @@ test("Source project scope survives both real engines and blocks results after r
     await actor.page
       .getByRole("button", { name: "Hyper AI Scoped Room", exact: true })
       .click();
+    const unbound = await actor.context.request.get(
+      origin + "/api/talk/rooms/" + room.token + "/project",
+    );
+    expect(unbound.status()).toBe(200);
+    expect(await unbound.json()).toEqual({ project: null });
     await actor.page
       .getByRole("button", { name: "项目空间", exact: true })
       .click();
@@ -298,7 +303,7 @@ test("Source project scope survives both real engines and blocks results after r
             await actor.context.request
               .get(origin + "/api/talk/rooms/" + room.token + "/project")
               .then((r) => r.json())
-          ).id,
+          ).project.id,
       )
     ).json();
     expect(workspace.project.source.roomId).toBe(room.token);
@@ -361,7 +366,10 @@ test("Source project scope survives both real engines and blocks results after r
               origin + "/api/runs/" + run.id,
             );
             if (response.status() !== 200) return "unavailable";
-            return (await response.json()).state;
+            const body = await response.json();
+            return ["failed", "recovery_required"].includes(body.state)
+              ? body.state + ": " + body.error
+              : body.state;
           },
           { timeout: 60000, intervals: [700] },
         )

@@ -47,7 +47,7 @@ test("A source room opens a new scoped project and makes the AI input scope visi
     route.fulfill({ json: [] }),
   );
   await page.route("**/api/talk/rooms/*/project", (route) =>
-    route.fulfill({ json: created ? scoped : null }),
+    route.fulfill({ json: { project: created ? scoped : null } }),
   );
   await page.route("**/api/projects/from-talk", (route) => {
     expect(route.request().postDataJSON()).toEqual({
@@ -92,6 +92,24 @@ test("A source room opens a new scoped project and makes the AI input scope visi
   await expect(page.getByRole("dialog")).toContainText(
     "不会自动发布到企业会话",
   );
+  await page
+    .getByRole("textbox", { name: "工作要求", exact: true })
+    .fill("private-run-draft");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
+  await page.setViewportSize({ width: 1504, height: 1045 });
+  await page
+    .getByRole("button", { name: base.project.name, exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: base.project.name, exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "发起任务", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "工作要求", exact: true }),
+  ).toHaveValue("请把当前讨论整理成纪要，保留明确分工与时间。");
 });
 test("Revoked source access closes private editors and prevents draft transfer into another project", async ({
   page,

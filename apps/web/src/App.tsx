@@ -43,6 +43,7 @@ export function App() {
   } | null>(null);
   const [initialRoomId, setInitialRoomId] = useState<string>();
   const loadVersion = useRef(0);
+  const loadedProject = useRef<string | undefined>(undefined);
   const [instruction, setInstruction] = useState(
       "请把当前讨论整理成纪要，保留明确分工与时间。",
     ),
@@ -62,9 +63,13 @@ export function App() {
       setFeedback("");
       setTitle("");
       setGoal("");
+      setAssignee("");
+      setDue("");
+      setQuery("");
       setSourceRoom(null);
       setRun(null);
       setInstruction("请把当前讨论整理成纪要，保留明确分工与时间。");
+      setWorkflow("discussion_to_minutes");
       setRunModels([]);
       setModelProfileId("");
     };
@@ -73,6 +78,9 @@ export function App() {
         "/workspace" + (projectId ? "?projectId=" + projectId : ""),
       );
       if (version !== loadVersion.current) return;
+      if (loadedProject.current && loadedProject.current !== value.project.id)
+        clearPrivateDrafts();
+      loadedProject.current = value.project.id;
       setView(value);
       setLogin(false);
       setError("");
@@ -86,6 +94,7 @@ export function App() {
         try {
           const fallback = await api<WorkspaceView>("/workspace");
           if (version !== loadVersion.current) return;
+          loadedProject.current = fallback.project.id;
           setView(fallback);
           setLogin(false);
           setSection("messages");
@@ -440,9 +449,9 @@ export function App() {
             query={query}
             initialRoomId={initialRoomId}
             onProject={async (room) => {
-              const existing = await api<Project | null>(
-                "/talk/rooms/" + room.id + "/project",
-              );
+              const { project: existing } = await api<{
+                project: Project | null;
+              }>("/talk/rooms/" + room.id + "/project");
               if (existing) {
                 setSection("messages");
                 setTab("discussion");
