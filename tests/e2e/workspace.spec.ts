@@ -104,3 +104,68 @@ test("failed message delivery keeps the draft", async ({ page }) => {
     "这份草稿应保留",
   );
 });
+test("engine switching preserves a compatible model selection and refuses unsupported API types", async ({
+  page,
+}) => {
+  const chat = "00000000-0000-4000-8000-000000000701",
+    anthropic = "00000000-0000-4000-8000-000000000702";
+  await page.route("**/api/models", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: chat,
+          name: "测试兼容连接",
+          provider: "openai-compatible",
+          purpose: "chat",
+          scope: "personal",
+        },
+        {
+          id: anthropic,
+          name: "测试 Messages 连接",
+          provider: "anthropic",
+          purpose: "chat",
+          scope: "personal",
+        },
+      ],
+    }),
+  );
+  const submitted: any[] = [];
+  await page.route("**/api/runs", (route) => {
+    submitted.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 400,
+      json: { message: "测试请求已拒绝，草稿保留。" },
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "展开导航", exact: true }).click();
+  await page.getByRole("button", { name: "发起任务", exact: true }).click();
+  const model = page.getByRole("combobox", { name: "模型连接", exact: true });
+  await model.selectOption(anthropic);
+  await page
+    .getByRole("combobox", { name: "执行服务", exact: true })
+    .selectOption("hermes");
+  await expect(
+    page.getByRole("button", { name: "开始执行", exact: true }),
+  ).toBeDisabled();
+  await model.selectOption(chat);
+  await page
+    .getByRole("combobox", { name: "执行服务", exact: true })
+    .selectOption("dsh");
+  await expect(model).toHaveValue(chat);
+  await page
+    .getByRole("combobox", { name: "执行服务", exact: true })
+    .selectOption("hermes");
+  await page
+    .getByRole("textbox", { name: "工作要求", exact: true })
+    .fill("保留这一条工作草稿");
+  await page.getByRole("button", { name: "开始执行", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "让 AI 帮你推进工作" }).getByRole("alert"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "工作要求", exact: true }),
+  ).toHaveValue("保留这一条工作草稿");
+  expect(submitted[0].modelProfileId).toBe(chat);
+  expect(submitted[0].engine).toBe("hermes");
+});

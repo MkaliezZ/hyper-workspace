@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import type { WorkspaceView } from "@hyper/contracts";
 import { api, mutation } from "../api";
 
-interface ModelSummary {
+export interface ModelSummary {
   id: string;
   name: string;
   model: string;
   purpose: string;
+  provider: string;
+  scope: string;
   keyHint: string | null;
   verifiedAt: string | null;
 }

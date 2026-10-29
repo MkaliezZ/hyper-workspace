@@ -665,6 +665,9 @@ p {
   justify-content: space-between;
   font-size: 13px;
 }
+.dialog .error-banner {
+  margin: 0 0 16px;
+}
 .run-strip {
   padding: 11px 24px;
   background: #eff5ff;

@@ -17,7 +17,7 @@ import type {
 } from "@hyper/contracts";
 import { Database } from "../db/database.js";
 import { assertMember, maskKey, stableDigest, Vault } from "./security.js";
-import { refreshArtifactIndex } from "./knowledge.js";
+import { reviseArtifactVersion } from "./artifacts.js";
 import { ModelService } from "./models.js";
 
 export class WorkspaceService {
@@ -142,28 +142,7 @@ export class WorkspaceService {
   }
   async revise(s: Subject, id: string, input: ArtifactRevision) {
     await assertMember(this.db, s);
-    return this.db.tx(async (c) => {
-      const a = (
-        await c.query(
-          "SELECT * FROM cw_artifacts WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
-          [id, s.workspaceId],
-        )
-      ).rows[0];
-      if (!a) throw new NotFoundException("成果不存在。");
-      if (a.current_version !== input.expectedVersion)
-        throw new ConflictException("成果已更新，请刷新后再修改。");
-      const version = a.current_version + 1;
-      await c.query(
-        "INSERT INTO cw_artifact_versions(artifact_id,version,content,feedback,created_by) VALUES($1,$2,$3,$4,$5)",
-        [id, version, input.content, input.feedback, s.id],
-      );
-      await c.query(
-        "UPDATE cw_artifacts SET current_version=$2,status='draft' WHERE id=$1",
-        [id, version],
-      );
-      await refreshArtifactIndex(c, s.workspaceId, id, input.content, version);
-      return { id, version };
-    });
+    return this.db.tx((c) => reviseArtifactVersion(c, s, id, input));
   }
   async search(s: Subject, query: string) {
     await assertMember(this.db, s);
@@ -249,6 +228,11 @@ export class WorkspaceService {
             "chat",
             input.modelProfileId,
           );
+    const providers = engine.describeCapabilities().modelProviders;
+    if (model && providers && !providers.includes(model.provider))
+      throw new BadRequestException(
+        "所选执行器当前不支持这条连接的 API 类型，请选择兼容连接。",
+      );
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(

@@ -12,7 +12,7 @@ import {
 import { Database } from "../db/database.js";
 import { WorkspaceService, appendEvent } from "./workspace.js";
 import { assertMember, stableDigest } from "./security.js";
-import { refreshArtifactIndex } from "./knowledge.js";
+import { reviseArtifactVersion } from "./artifacts.js";
 import { ModelService } from "./models.js";
 export class RunProcessor {
   readonly boss: PgBoss;
@@ -384,15 +384,11 @@ export class RunProcessor {
       } else if (action.tool === "artifact.revise") {
         const id = run.artifact_id;
         if (!id) throw new Error("No artifact was authorized for revision.");
-        const a = (
-          await c.query(
-            "SELECT * FROM cw_artifacts WHERE id=$1 AND workspace_id=$2 AND project_id=$3 FOR UPDATE",
-            [id, s.workspaceId, conv.project_id],
-          )
-        ).rows[0];
-        if (!a) throw new Error("成果不在本次授权项目。");
-        if (a.current_version !== run.expected_artifact_version)
-          throw new Error("成果已由他人修改，请基于最新版本重新发起。");
+        if (
+          action.args.artifactId !== undefined &&
+          action.args.artifactId !== id
+        )
+          throw new Error("修改目标不属于本次授权成果。");
         const content = action.args.content;
         if (
           typeof content !== "string" ||
@@ -400,17 +396,18 @@ export class RunProcessor {
           content.length > 100000
         )
           throw new Error("修订内容无效。");
-        const version = a.current_version + 1;
-        await c.query(
-          "INSERT INTO cw_artifact_versions(artifact_id,version,content,feedback,created_by) VALUES($1,$2,$3,$4,$5)",
-          [id, version, content, run.instruction, s.id],
+        const revision = await reviseArtifactVersion(
+          c,
+          s,
+          id,
+          {
+            content,
+            feedback: run.instruction,
+            expectedVersion: run.expected_artifact_version,
+          },
+          conv.project_id,
         );
-        await c.query(
-          "UPDATE cw_artifacts SET current_version=$2,status='draft' WHERE id=$1",
-          [id, version],
-        );
-        await refreshArtifactIndex(c, s.workspaceId, id, content, version);
-        receipt = { tool: action.tool, id, version };
+        receipt = { tool: action.tool, ...revision };
         await appendEvent(c, run.id, "artifact.updated", receipt);
       } else if (action.tool === "follow_up.check") {
         const pending = (

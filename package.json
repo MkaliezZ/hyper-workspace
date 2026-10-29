@@ -17,6 +17,8 @@
     "test": "tsx --test tests/*.test.ts",
     "test:integration": "tsx --test tests/integration/*.test.ts",
     "test:runtime:dsh": "tsx --test tests/runtime/dsh.test.ts",
+    "test:runtime:hermes": "tsx --test tests/runtime/hermes.test.ts",
+    "test:runtime": "tsx --test --test-concurrency=1 tests/runtime/*.test.ts",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm test && npm run build",
     "migrate": "npm run migrate -w @hyper/api",

@@ -10,7 +10,7 @@
 
 “验证连接”调用一次实际 endpoint。对话请求上限 64 个输出 token，向量请求使用短测试文本。成功只证明该次 HTTP 协议响应可用，不代表执行器工具能力、质量、费用或业务验收通过。服务端拒绝重定向，并隐藏上游错误正文，避免正文回显 Key。自部署者只应配置获准的模型服务地址。
 
-当前 HTTP 客户端支持 OpenAI 兼容 Chat Completions/embeddings、DeepSeek Chat 和 Anthropic Messages。Anthropic 不提供本实现要求的 embeddings 接口。DSH 已接入本次 Run 固定的模型配置；首次安装及实际模型兼容性需要单独验证。Hermes 的原生模型配置仍待接通，不能仅凭保存连接宣称已完成双执行器接入。
+当前 HTTP 客户端支持 OpenAI 兼容 Chat Completions/embeddings、DeepSeek Chat 和 Anthropic Messages。Anthropic 不提供本实现要求的 embeddings 接口。两个执行器均使用本次 Run 固定的模型配置；共同验证覆盖 Chat Completions 兼容协议。Hermes 的 Anthropic extra 尚未接入，界面禁用不兼容连接，服务端在创建 Run 前拒绝，不静默切换 Key。首次安装和真实供应商能力仍需分别验证。
 
 ## 知识索引
 

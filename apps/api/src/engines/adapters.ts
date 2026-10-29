@@ -5,7 +5,7 @@ import type {
   EngineId,
 } from "@hyper/contracts";
 import { toolsForWorkflow } from "@hyper/contracts";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { JsonRpcProcess, runtimeCommand } from "./rpc.js";
 import { z } from "zod";
@@ -42,6 +42,35 @@ function installedDshCommand(): string[] | undefined {
   )
     ? [process.execPath, fileURLToPath(new URL("launch.mjs", directory))]
     : undefined;
+}
+function installedHermesCommand(): string[] | undefined {
+  const root = new URL("../../../../", import.meta.url);
+  const receiptFile = new URL(".runtime/hermes-install.json", root);
+  if (!existsSync(receiptFile)) return;
+  try {
+    const receipt = JSON.parse(readFileSync(receiptFile, "utf8"));
+    const lock = JSON.parse(
+      readFileSync(new URL("runtime/hermes/lock.json", root), "utf8"),
+    );
+    if (
+      receipt.commit !== lock.commit ||
+      receipt.archiveSha256 !== lock.archiveSha256 ||
+      typeof receipt.python !== "string"
+    )
+      return;
+    const python = new URL(receipt.python, root);
+    if (
+      !python.pathname.startsWith(new URL(".runtime/", root).pathname) ||
+      !existsSync(python)
+    )
+      return;
+    return [
+      fileURLToPath(python),
+      fileURLToPath(new URL("runtime/hermes/launch.py", root)),
+    ];
+  } catch {
+    return;
+  }
 }
 export class FixtureAdapter implements EngineAdapter {
   readonly id = "fixture" as const;
@@ -221,10 +250,14 @@ export class DshAdapter implements EngineAdapter {
 }
 export class HermesAdapter implements EngineAdapter {
   readonly id = "hermes" as const;
-  constructor(private command = runtimeCommand(process.env.HERMES_COMMAND)) {}
+  constructor(
+    private command = runtimeCommand(process.env.HERMES_COMMAND) ??
+      installedHermesCommand(),
+  ) {}
   describeCapabilities() {
     return {
       configured: !!this.command,
+      modelProviders: ["openai-compatible", "deepseek"],
       operations: [
         "discussion_to_minutes",
         "project_report",
@@ -239,10 +272,22 @@ export class HermesAdapter implements EngineAdapter {
     r.signal.throwIfAborted();
     if (!this.command)
       throw new Error(
-        "Hermes 尚未配置。请在服务端设置 HERMES_COMMAND 并验证运行时。",
+        "Hermes 尚未安装。请运行 runtime/hermes/install.py，或设置经过验证的 HERMES_COMMAND。",
       );
     const rpc = new JsonRpcProcess(this.command, r.workdir, {
       HERMES_HOME: r.workdir,
+      HYPER_MODEL_PROVIDER: r.model?.provider,
+      HYPER_MODEL_ENDPOINT: r.model?.endpoint,
+      HYPER_MODEL_NAME: r.model?.model,
+      HYPER_MODEL_API_KEY: r.model?.apiKey,
+      HYPER_MODEL_POLICY:
+        r.policy +
+        "\n" +
+        instruction +
+        "\nAllowed actions: " +
+        toolsForWorkflow(r.workflow).join(","),
+      PYTHONDONTWRITEBYTECODE: "1",
+      PYTHONNOUSERSITE: "1",
     });
     const abort = () => {
       void rpc.close().catch(() => {});
@@ -267,6 +312,7 @@ export class HermesAdapter implements EngineAdapter {
         cwd_explicit: true,
         close_on_disconnect: true,
         idempotency_key: r.runId,
+        ...(r.model ? { model: r.model.model, provider: "custom:hyper" } : {}),
       });
       const sessionId = session.session_id ?? session.id;
       if (!sessionId)

@@ -10,7 +10,7 @@ import {
   ArtifactsPanel,
 } from "./components/WorkPanels";
 import { Dialog } from "./components/Dialog";
-import { ModelSettings } from "./components/ModelSettings";
+import { ModelSettings, type ModelSummary } from "./components/ModelSettings";
 import { KnowledgePanel } from "./components/KnowledgePanel";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
@@ -41,6 +41,8 @@ export function App() {
     [workflow, setWorkflow] = useState("discussion_to_minutes"),
     [engine, setEngine] = useState("dsh"),
     [run, setRun] = useState<any>(null);
+  const [runModels, setRunModels] = useState<ModelSummary[]>([]),
+    [modelProfileId, setModelProfileId] = useState("");
   const [edit, setEdit] = useState(""),
     [feedback, setFeedback] = useState("");
   const load = useCallback(async (projectId?: string) => {
@@ -61,6 +63,26 @@ export function App() {
       .then(setStatus)
       .catch(() => {});
   }, [load]);
+  useEffect(() => {
+    if (dialog !== "run") return;
+    let alive = true;
+    void api<ModelSummary[]>("/models")
+      .then((models) => {
+        if (alive) {
+          const chat = models.filter((model) => model.purpose === "chat");
+          setRunModels(chat);
+          setModelProfileId((current) =>
+            chat.some((model) => model.id === current) ? current : "",
+          );
+        }
+      })
+      .catch((error) => {
+        if (alive) setError(error.message);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [dialog, view?.user.id]);
   useEffect(() => {
     if (
       !run ||
@@ -112,12 +134,14 @@ export function App() {
     await load(view?.project.id);
   }
   function openTask(t = "") {
+    setError("");
     setTitle(t);
     setAssignee("");
     setDue("");
     setDialog("task");
   }
   function openArtifact(a: Artifact) {
+    setError("");
     setSelectedArtifact(a);
     setEdit(a.content);
     setFeedback("");
@@ -174,6 +198,14 @@ export function App() {
       : section === "settings"
         ? "设置"
         : view.project.name;
+  const selectedRunModel = runModels.find(
+    (model) => model.id === modelProfileId,
+  );
+  const incompatibleRunModel =
+    engine !== "fixture" &&
+    selectedRunModel &&
+    view.engines[engine]?.modelProviders &&
+    !view.engines[engine]!.modelProviders!.includes(selectedRunModel.provider);
   return (
     <div className="app-shell">
       <Navigation
@@ -182,10 +214,12 @@ export function App() {
         onSection={navigate}
         onProject={selectProject}
         onRun={() => {
+          setError("");
           setDialog("run");
           setEngine("dsh");
         }}
         onNewProject={() => {
+          setError("");
           setTitle("");
           setGoal("");
           setDialog("project");
@@ -207,7 +241,7 @@ export function App() {
           onMenu={() => setNavOpen((v) => !v)}
           onContext={() => setContextOpen((v) => !v)}
         />
-        {error ? (
+        {error && !dialog ? (
           <div role="alert" className="error-banner">
             <span>{error}</span>
             <button
@@ -346,7 +380,7 @@ export function App() {
         }
       />
       {dialog === "task" ? (
-        <Dialog title="新建待办" onClose={() => setDialog(null)}>
+        <Dialog title="新建待办" error={error} onClose={() => setDialog(null)}>
           <form
             className="dialog-form"
             onSubmit={(e) => {
@@ -397,7 +431,11 @@ export function App() {
         </Dialog>
       ) : null}
       {dialog === "project" ? (
-        <Dialog title="新建项目空间" onClose={() => setDialog(null)}>
+        <Dialog
+          title="新建项目空间"
+          error={error}
+          onClose={() => setDialog(null)}
+        >
           <form
             className="dialog-form"
             onSubmit={(e) => {
@@ -433,7 +471,11 @@ export function App() {
         </Dialog>
       ) : null}
       {dialog === "run" ? (
-        <Dialog title="让 AI 帮你推进工作" onClose={() => setDialog(null)}>
+        <Dialog
+          title="让 AI 帮你推进工作"
+          error={error}
+          onClose={() => setDialog(null)}
+        >
           <form
             className="dialog-form"
             onSubmit={(e) => {
@@ -445,6 +487,9 @@ export function App() {
                     workflow,
                     engine,
                     instruction,
+                    ...(engine !== "fixture" && modelProfileId
+                      ? { modelProfileId }
+                      : {}),
                     idempotencyKey: crypto.randomUUID(),
                     ...(workflow === "revise_artifact" && selectedArtifact
                       ? { artifactId: selectedArtifact.id }
@@ -496,12 +541,46 @@ export function App() {
                 ) : null}
               </select>
             </label>
+            {engine !== "fixture" ? (
+              <label>
+                模型连接
+                <select
+                  value={modelProfileId}
+                  onChange={(e) => setModelProfileId(e.target.value)}
+                >
+                  <option value="">自动选择（优先个人连接）</option>
+                  {runModels.map((model) => (
+                    <option
+                      key={model.id}
+                      value={model.id}
+                      disabled={
+                        !!view.engines[engine]?.modelProviders &&
+                        !view.engines[engine]!.modelProviders!.includes(
+                          model.provider,
+                        )
+                      }
+                    >
+                      {model.name} ·{" "}
+                      {model.scope === "personal" ? "个人" : "工作区"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <p className="muted small">
               {engine === "fixture"
                 ? "验证保存成果与业务回执，不代表模型执行效果。"
                 : "使用服务端配置的执行器；未连接时会明确报告。"}
             </p>
-            <button className="primary" disabled={busy}>
+            {incompatibleRunModel ? (
+              <p role="status" className="muted small">
+                请选择与执行服务兼容的模型连接。
+              </p>
+            ) : null}
+            <button
+              className="primary"
+              disabled={busy || !!incompatibleRunModel}
+            >
               {busy ? "正在提交…" : "开始执行"}
             </button>
           </form>
@@ -510,6 +589,7 @@ export function App() {
       {dialog === "artifact" && selectedArtifact ? (
         <Dialog
           title={selectedArtifact.title}
+          error={error}
           wide
           onClose={() => setDialog(null)}
         >
@@ -556,6 +636,7 @@ export function App() {
                 type="button"
                 className="secondary"
                 onClick={() => {
+                  setError("");
                   setWorkflow("revise_artifact");
                   setInstruction(
                     feedback || "请改进这份成果，保留原有事实与引用。",

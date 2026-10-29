@@ -140,6 +140,54 @@ test("Private knowledge is filtered before it reaches a model", async () => {
   ]);
   assert.equal((await service.search(s, "private-test-knowledge")).length, 0);
 });
+test("Unsupported model APIs are rejected before creating an executable Run", async () => {
+  const original = service.engines.get("hermes")!;
+  service.engines.set("hermes", {
+    id: "hermes",
+    describeCapabilities: () => ({
+      configured: true,
+      operations: ["chat"],
+      evidence: "test-only",
+      modelProviders: ["openai-compatible"],
+    }),
+    execute: async () => {
+      throw new Error("Must not execute");
+    },
+  });
+  try {
+    const model = await service.saveModel(s, {
+      name: "API mismatch test",
+      provider: "anthropic",
+      endpoint: "http://127.0.0.1:1/v1",
+      model: "test",
+      apiKey: "test-only",
+      purpose: "chat",
+      scope: "workspace",
+    });
+    const idempotencyKey = randomUUID();
+    await assert.rejects(
+      service.startRun(s, {
+        conversationId: conversation,
+        workflow: "chat",
+        engine: "hermes",
+        instruction: "Do not dispatch",
+        modelProfileId: model.id,
+        idempotencyKey,
+      }),
+      /API 类型/,
+    );
+    assert.equal(
+      (
+        await db.pool.query("SELECT id FROM cw_runs WHERE idempotency_key=$1", [
+          idempotencyKey,
+        ])
+      ).rowCount,
+      0,
+    );
+  } finally {
+    service.engines.set("hermes", original);
+  }
+});
 test("pgvector retrieval excludes private, revoked, stale and deleted assets across model spaces", async () => {
   const server = createServer(async (req, res) => {
     let raw = "";
@@ -267,6 +315,10 @@ test("Concurrent delivery creates one artifact and ordered events; revisions ret
   const updated = await service.artifact(s, receipts[0].id);
   assert.equal(updated.current.version, 2);
   assert.equal(updated.history.length, 2);
+  assert.deepEqual(
+    updated.current.sourceMessageIds,
+    artifact.current.sourceMessageIds,
+  );
   const asset = (
     await db.pool.query(
       "SELECT content,source_version,embedding FROM cw_assets WHERE source_ref=$1",

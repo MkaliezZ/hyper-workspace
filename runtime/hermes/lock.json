@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/NousResearch/hermes-agent",
+  "commit": "780d5a3313d7e1f64c0a0f3ec6b644d50f156e90",
+  "archiveUrl": "https://codeload.github.com/NousResearch/hermes-agent/tar.gz/780d5a3313d7e1f64c0a0f3ec6b644d50f156e90",
+  "archiveSha256": "0d1089e3b1cd2ecc8d5ca593624aebfd410c9687dc055f59d60a0d5cea44bff8",
+  "python": "3.14.6",
+  "dependencySource": "Upstream uv.lock, built through pm.build_environment with no extras"
+}

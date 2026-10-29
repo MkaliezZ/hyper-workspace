@@ -69,7 +69,7 @@ export const ArtifactRevision = z
   .object({
     content: z.string().trim().min(1).max(100000),
     expectedVersion: z.number().int().positive(),
-    feedback: z.string().trim().max(4000).default(""),
+    feedback: z.string().trim().max(20000).default(""),
   })
   .strict();
 export type ArtifactRevision = z.infer<typeof ArtifactRevision>;
@@ -186,13 +186,15 @@ export interface EngineResult {
   evidence: "fixture" | "runtime";
   usage?: { inputTokens: number; outputTokens: number };
 }
+export interface EngineCapabilities {
+  configured: boolean;
+  operations: string[];
+  evidence: string;
+  modelProviders?: string[];
+}
 export interface EngineAdapter {
   id: EngineId;
-  describeCapabilities(): {
-    configured: boolean;
-    operations: string[];
-    evidence: string;
-  };
+  describeCapabilities(): EngineCapabilities;
   execute(request: EngineRequest): Promise<EngineResult>;
 }
 export interface Message {
@@ -231,8 +233,5 @@ export interface WorkspaceView {
   messages: Message[];
   tasks: Task[];
   artifacts: Artifact[];
-  engines: Record<
-    string,
-    { configured: boolean; operations: string[]; evidence: string }
-  >;
+  engines: Record<string, EngineCapabilities>;
 }

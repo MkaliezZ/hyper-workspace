@@ -11,7 +11,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       postgres:
         image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
@@ -38,13 +38,17 @@ jobs:
         with:
           node-version: "24.14.1"
           cache: npm
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.6"
       - run: npm ci
       - run: python3 docs/handoff-v1/verify_package.py
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:integration
       - run: npm ci --prefix runtime/dsh
-      - run: npm run test:runtime:dsh
+      - run: python3 runtime/hermes/install.py
+      - run: npm run test:runtime
       - run: npm run build
       - run: npm run migrate && npm run seed
       - run: npx playwright install --with-deps chromium
