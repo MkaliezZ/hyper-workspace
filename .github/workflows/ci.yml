@@ -87,7 +87,12 @@ jobs:
         with:
           node-version: "24.14.1"
           cache: npm
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.6"
       - run: npm ci
+      - run: npm ci --prefix runtime/dsh
+      - run: python3 runtime/hermes/install.py
       - run: bash scripts/ci/nextcloud-setup.sh
       - run: npm run migrate && npm run workspace:init
       - run: npx playwright install --with-deps chromium

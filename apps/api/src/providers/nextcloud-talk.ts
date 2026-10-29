@@ -213,6 +213,9 @@ export class NextcloudTalkProvider implements CommunicationProvider {
       before: cursor && TalkCursor.safeParse(cursor).success ? cursor : null,
     };
   }
+  async assertReadable(id: string) {
+    await this.read(id, undefined, 1);
+  }
   async messages(id: string, before?: string) {
     await this.room(id);
     return this.read(id, before);

@@ -19,13 +19,17 @@ import { Database } from "../db/database.js";
 import { assertMember } from "./security.js";
 import { maskKey, stableDigest, Vault } from "./credentials.js";
 import { reviseArtifactVersion } from "./artifacts.js";
+import { ProjectAccess } from "./project-access.js";
 import { ModelService } from "./models.js";
 
 export class WorkspaceService {
   constructor(
     readonly db: Database,
     readonly engines: Map<EngineId, EngineAdapter>,
-  ) {}
+  ) {
+    this.access = new ProjectAccess(db);
+  }
+  readonly access: ProjectAccess;
   async conversation(s: Subject, id: string) {
     await assertMember(this.db, s);
     const r = await this.db.pool.query(
@@ -33,16 +37,13 @@ export class WorkspaceService {
       [id, s.workspaceId],
     );
     if (!r.rowCount) throw new NotFoundException("会话不存在或无权访问。");
+    await this.access.assert(s, r.rows[0].project_id);
     return r.rows[0];
   }
   async view(s: Subject, projectId?: string) {
     await assertMember(this.db, s);
-    const projects = (
-      await this.db.pool.query(
-        'SELECT p.id,p.name,p.goal,c.id AS "conversationId" FROM cw_projects p JOIN cw_conversations c ON c.project_id=p.id WHERE p.workspace_id=$1 ORDER BY p.name',
-        [s.workspaceId],
-      )
-    ).rows;
+    if (projectId) await this.access.assert(s, projectId);
+    const projects = await this.access.list(s);
     const project = projectId
       ? projects.find((p) => p.id === projectId)
       : (projects.find((p) => p.name === "产品共创") ?? projects[0]);
@@ -61,6 +62,7 @@ export class WorkspaceService {
         [project.id, s.workspaceId],
       ),
     ]);
+    await this.access.assert(s, project.id);
     return {
       user: {
         id: s.id,
@@ -91,6 +93,58 @@ export class WorkspaceService {
       await c.query(
         "INSERT INTO cw_conversations(id,workspace_id,project_id) VALUES($1,$2,$3)",
         [conversationId, s.workspaceId, id],
+      );
+      return { id, name, goal, conversationId };
+    });
+  }
+  async talkProject(s: Subject, roomId: string) {
+    const scope = await this.access.room(s, roomId);
+    return (
+      (
+        await this.db.pool.query(
+          'SELECT p.id,p.name,p.goal,c.id AS "conversationId" FROM cw_project_sources x JOIN cw_projects p ON p.id=x.project_id JOIN cw_conversations c ON c.project_id=p.id WHERE x.workspace_id=$1 AND x.provider_key=$2 AND x.conversation_ref=$3',
+          [s.workspaceId, scope.providerKey, roomId],
+        )
+      ).rows[0] ?? null
+    );
+  }
+  async createTalkProject(
+    s: Subject,
+    roomId: string,
+    name: string,
+    goal: string,
+  ) {
+    const scope = await this.access.room(s, roomId);
+    return this.db.tx(async (c) => {
+      await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+        s.workspaceId + scope.providerKey + roomId,
+      ]);
+      const existing = (
+        await c.query(
+          'SELECT p.id,p.name,p.goal,c.id AS "conversationId" FROM cw_project_sources x JOIN cw_projects p ON p.id=x.project_id JOIN cw_conversations c ON c.project_id=p.id WHERE x.workspace_id=$1 AND x.provider_key=$2 AND x.conversation_ref=$3',
+          [s.workspaceId, scope.providerKey, roomId],
+        )
+      ).rows[0];
+      if (existing) {
+        if (existing.name !== name || existing.goal !== goal)
+          throw new ConflictException(
+            "此会话已有关联项目，请返回后打开现有项目。",
+          );
+        return existing;
+      }
+      const id = randomUUID(),
+        conversationId = randomUUID();
+      await c.query(
+        "INSERT INTO cw_projects(id,workspace_id,name,goal) VALUES($1,$2,$3,$4)",
+        [id, s.workspaceId, name, goal],
+      );
+      await c.query(
+        "INSERT INTO cw_conversations(id,workspace_id,project_id) VALUES($1,$2,$3)",
+        [conversationId, s.workspaceId, id],
+      );
+      await c.query(
+        "INSERT INTO cw_project_sources(project_id,workspace_id,provider_key,source_kind,conversation_ref,created_by) VALUES($1,$2,$3,'nextcloud-talk',$4,$5)",
+        [id, s.workspaceId, scope.providerKey, roomId, s.id],
       );
       return { id, name, goal, conversationId };
     });
@@ -127,6 +181,14 @@ export class WorkspaceService {
     patch: { status?: string; title?: string },
   ) {
     await assertMember(this.db, s);
+    const target = (
+      await this.db.pool.query(
+        "SELECT project_id FROM cw_tasks WHERE id=$1 AND workspace_id=$2",
+        [id, s.workspaceId],
+      )
+    ).rows[0];
+    if (!target) throw new NotFoundException("待办不存在。");
+    await this.access.assert(s, target.project_id);
     const r = await this.db.pool.query(
       "UPDATE cw_tasks SET status=COALESCE($1,status),title=COALESCE($2,title) WHERE id=$3 AND workspace_id=$4 RETURNING id,title,assignee,status",
       [patch.status ?? null, patch.title ?? null, id, s.workspaceId],
@@ -136,6 +198,7 @@ export class WorkspaceService {
   }
   async artifact(s: Subject, id: string) {
     await assertMember(this.db, s);
+    await this.artifactProject(s, id);
     const r = await this.db.pool.query(
       'SELECT a.id,a.title,v.version AS version,a.status,v.content,v.feedback,v.source_message_ids AS "sourceMessageIds",v.created_at AS "createdAt" FROM cw_artifacts a JOIN cw_artifact_versions v ON v.artifact_id=a.id WHERE a.id=$1 AND a.workspace_id=$2 ORDER BY v.version DESC',
       [id, s.workspaceId],
@@ -149,16 +212,37 @@ export class WorkspaceService {
   }
   async revise(s: Subject, id: string, input: ArtifactRevision) {
     await assertMember(this.db, s);
-    return this.db.tx((c) => reviseArtifactVersion(c, s, id, input));
+    const projectId = await this.artifactProject(s, id);
+    return this.db.tx((c) => reviseArtifactVersion(c, s, id, input, projectId));
+  }
+  private async artifactProject(s: Subject, id: string) {
+    const target = (
+      await this.db.pool.query(
+        "SELECT project_id FROM cw_artifacts WHERE id=$1 AND workspace_id=$2",
+        [id, s.workspaceId],
+      )
+    ).rows[0];
+    if (!target) throw new NotFoundException("成果不存在。");
+    await this.access.assert(s, target.project_id);
+    return target.project_id as string;
   }
   async search(s: Subject, query: string) {
     await assertMember(this.db, s);
     if (!query.trim()) return [];
+    const projectIds = await this.access.visibleIds(s);
     const r = await this.db.pool.query(
-      "SELECT id,title,content,type,source_ref AS \"sourceRef\",source_version AS \"sourceVersion\" FROM cw_assets WHERE workspace_id=$1 AND deleted_at IS NULL AND validity='active' AND (visibility='workspace' OR owner_id=$2) AND (title ILIKE $3 OR content ILIKE $3) ORDER BY created_at DESC LIMIT 30",
-      [s.workspaceId, s.id, "%" + query.replace(/[\\%_]/g, "\\$&") + "%"],
+      "SELECT id,title,content,type,project_id,source_ref AS \"sourceRef\",source_version AS \"sourceVersion\" FROM cw_assets WHERE workspace_id=$1 AND deleted_at IS NULL AND validity='active' AND (visibility='workspace' OR owner_id=$2) AND (project_id IS NULL OR project_id=ANY($4::uuid[])) AND (title ILIKE $3 OR content ILIKE $3) ORDER BY created_at DESC LIMIT 30",
+      [
+        s.workspaceId,
+        s.id,
+        "%" + query.replace(/[\\%_]/g, "\\$&") + "%",
+        projectIds,
+      ],
     );
-    return r.rows;
+    const current = new Set(await this.access.visibleIds(s));
+    return r.rows
+      .filter((row) => !row.project_id || current.has(row.project_id))
+      .map(({ project_id, ...row }) => row);
   }
   async models(s: Subject) {
     await assertMember(this.db, s);
@@ -274,8 +358,16 @@ export class WorkspaceService {
   }
   async getRun(s: Subject, id: string) {
     await assertMember(this.db, s);
+    const target = (
+      await this.db.pool.query(
+        "SELECT conversation_id FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
+        [id, s.workspaceId, s.id],
+      )
+    ).rows[0];
+    if (!target) throw new NotFoundException("执行不存在或无权访问。");
+    await this.conversation(s, target.conversation_id);
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,instruction,result,error,created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");
@@ -291,7 +383,12 @@ export class WorkspaceService {
     ).rows;
   }
   async cancel(s: Subject, id: string) {
-    await this.getRun(s, id);
+    await assertMember(this.db, s);
+    const owned = await this.db.pool.query(
+      "SELECT id FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
+      [id, s.workspaceId, s.id],
+    );
+    if (!owned.rowCount) throw new NotFoundException("执行不存在或无权访问。");
     await this.db.tx(async (c) => {
       const r = await c.query(
         "UPDATE cw_runs SET state='cancelled',updated_at=now() WHERE id=$1 AND state IN ('queued','running','waiting_input','waiting_confirmation') RETURNING id",
@@ -302,7 +399,12 @@ export class WorkspaceService {
           message: "已停止后续执行；已完成操作保留。",
         });
     });
-    return this.getRun(s, id);
+    return (
+      await this.db.pool.query(
+        "SELECT id,state FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
+        [id, s.workspaceId, s.id],
+      )
+    ).rows[0];
   }
 }
 export async function appendEvent(

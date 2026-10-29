@@ -14,10 +14,14 @@ export function EnterpriseMessages({
   demo,
   query,
   onLogout,
+  initialRoomId,
+  onProject,
 }: {
   demo: boolean;
   query: string;
   onLogout: () => void;
+  initialRoomId?: string;
+  onProject?: (room: CommunicationRoom) => Promise<void>;
 }) {
   const [rooms, setRooms] = useState<CommunicationRoom[]>([]),
     [selected, setSelected] = useState("");
@@ -43,7 +47,11 @@ export function EnterpriseMessages({
       setRooms(values);
       setError("");
       if (!values.some((r) => r.id === current.current)) {
-        setSelected(values[0]?.id ?? "");
+        setSelected(
+          values.some((room) => room.id === initialRoomId)
+            ? initialRoomId!
+            : (values[0]?.id ?? ""),
+        );
         setMessages([]);
         setBefore(null);
       }
@@ -262,6 +270,20 @@ export function EnterpriseMessages({
                 </small>
               </div>
               <div className="enterprise-history-buttons">
+                {onProject ? (
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      setBusy(true);
+                      setError("");
+                      void onProject(room)
+                        .catch((error) => setError(error.message))
+                        .finally(() => setBusy(false));
+                    }}
+                  >
+                    项目空间
+                  </button>
+                ) : null}
                 {before ? (
                   <button
                     onClick={() => {

@@ -20,7 +20,10 @@ interface Employee {
 }
 
 /** Real engines and database; this model endpoint is explicitly a protocol fixture. */
-function modelFixture(keys: string[]) {
+export function modelFixture(
+  keys: string[],
+  observeRequest?: (body: any, employee: number) => void | Promise<void>,
+) {
   const observed = new Set<number>(),
     violations: string[] = [];
   let chatCalls = 0;
@@ -66,6 +69,7 @@ function modelFixture(keys: string[]) {
       res.end('{"error":"invalid fixture request"}');
       return;
     }
+    await observeRequest?.(body, employee);
     chatCalls++;
     observed.add(employee);
     const revision = JSON.stringify(body.messages).match(
@@ -233,7 +237,21 @@ async function verifySwitch(
       artifact.current.content,
       "protocol-fixture-revision " + version,
     );
-    assert.deepEqual(artifact.current.sourceMessageIds, originalSources);
+    assert.ok(
+      originalSources.every((ref: string) =>
+        artifact.current.sourceMessageIds.includes(ref),
+      ),
+    );
+    assert.ok(
+      result.contextRefs
+        .filter((ref: string) => !ref.startsWith("artifact:"))
+        .every((ref: string) =>
+          artifact.current.sourceMessageIds.includes(ref),
+        ),
+    );
+    assert.ok(
+      result.contextRefs.includes("artifact:" + id + "@" + (version - 1)),
+    );
     const asset = (
       await db.pool.query(
         "SELECT id,source_version FROM cw_assets WHERE source_ref=$1",

@@ -14,6 +14,7 @@ export async function reviseArtifactVersion(
   id: string,
   raw: ArtifactRevision,
   projectId?: string,
+  additionalSourceIds: string[] = [],
 ) {
   const input = ArtifactRevision.parse(raw);
   const member = await c.query(
@@ -46,7 +47,12 @@ export async function reviseArtifactVersion(
       version,
       input.content,
       input.feedback,
-      JSON.stringify(previous.source_message_ids),
+      JSON.stringify([
+        ...new Set([
+          ...(previous.source_message_ids as string[]),
+          ...additionalSourceIds,
+        ]),
+      ]),
       subject.id,
     ],
   );

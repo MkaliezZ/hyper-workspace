@@ -99,6 +99,11 @@ export function Login({
           {error || parentError}
         </p>
       ) : null}
+      {parentError && !flow ? (
+        <button disabled={busy} onClick={() => void onAuthenticated()}>
+          重试连接
+        </button>
+      ) : null}
       {!ready ? (
         <p>正在连接工作区…</p>
       ) : (

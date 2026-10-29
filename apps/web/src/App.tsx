@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Artifact, Task, Project, WorkspaceView } from "@hyper/contracts";
 import { Plus, ArrowRight, LoaderCircle, X } from "lucide-react";
 import { api, mutation, ApiError } from "./api";
@@ -37,6 +37,12 @@ export function App() {
     [assignee, setAssignee] = useState(""),
     [due, setDue] = useState(""),
     [goal, setGoal] = useState("");
+  const [sourceRoom, setSourceRoom] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [initialRoomId, setInitialRoomId] = useState<string>();
+  const loadVersion = useRef(0);
   const [instruction, setInstruction] = useState(
       "请把当前讨论整理成纪要，保留明确分工与时间。",
     ),
@@ -48,22 +54,70 @@ export function App() {
   const [edit, setEdit] = useState(""),
     [feedback, setFeedback] = useState("");
   const load = useCallback(async (projectId?: string) => {
+    const version = ++loadVersion.current;
+    const clearPrivateDrafts = () => {
+      setDialog(null);
+      setSelectedArtifact(null);
+      setEdit("");
+      setFeedback("");
+      setTitle("");
+      setGoal("");
+      setSourceRoom(null);
+      setRun(null);
+      setInstruction("请把当前讨论整理成纪要，保留明确分工与时间。");
+      setRunModels([]);
+      setModelProfileId("");
+    };
     try {
-      const v = await api<WorkspaceView>(
+      const value = await api<WorkspaceView>(
         "/workspace" + (projectId ? "?projectId=" + projectId : ""),
       );
-      setView(v);
+      if (version !== loadVersion.current) return;
+      setView(value);
       setLogin(false);
       setError("");
-    } catch (e) {
-      if (e instanceof ApiError && [401, 403].includes(e.status)) {
+    } catch (error) {
+      if (version !== loadVersion.current) return;
+      if (
+        projectId &&
+        !(error instanceof ApiError && [401, 403].includes(error.status))
+      ) {
+        clearPrivateDrafts();
+        try {
+          const fallback = await api<WorkspaceView>("/workspace");
+          if (version !== loadVersion.current) return;
+          setView(fallback);
+          setLogin(false);
+          setSection("messages");
+          setError("当前项目不可访问或来源暂不可用，已切换到可访问的项目。");
+          return;
+        } catch {
+          if (version !== loadVersion.current) return;
+          setView(null);
+          setLogin(true);
+          setError((error as Error).message);
+          return;
+        }
+      }
+      if (version !== loadVersion.current) return;
+      if (
+        error instanceof ApiError &&
+        [401, 403, 404, 503].includes(error.status)
+      ) {
+        clearPrivateDrafts();
         setView(null);
-        setRun(null);
         setLogin(true);
-        if (e.status === 403) setError(e.message);
-      } else setError((e as Error).message);
+        setError(error.status === 401 ? "" : error.message);
+      } else setError((error as Error).message);
     }
   }, []);
+  useEffect(() => {
+    if (!view?.project.source) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void load(view.project.id);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [view?.project.id, view?.project.source?.roomId, load]);
   useEffect(() => {
     void load();
     void api<typeof status>("/auth/status")
@@ -212,6 +266,7 @@ export function App() {
           setError("");
           setTitle("");
           setGoal("");
+          setSourceRoom(null);
           setDialog("project");
         }}
         open={navOpen}
@@ -249,6 +304,29 @@ export function App() {
               onClick={() => setError("")}
             >
               <X size={17} />
+            </button>
+          </div>
+        ) : null}
+        {view.project.source &&
+        section !== "enterprise" &&
+        section !== "settings" &&
+        section !== "knowledge" ? (
+          <div className="project-source-banner">
+            <span>
+              已关联「{view.project.source.name}
+              」，项目访问范围随来源会话成员变化。
+              <br />
+              <small>
+                本页工作记录留在项目，回复会话请使用“查看企业会话”。
+              </small>
+            </span>
+            <button
+              onClick={() => {
+                setInitialRoomId(view.project.source!.roomId);
+                setSection("enterprise");
+              }}
+            >
+              查看企业会话
             </button>
           </div>
         ) : null}
@@ -293,7 +371,7 @@ export function App() {
             <div className="tabs" role="tablist">
               {(
                 [
-                  ["discussion", "讨论"],
+                  ["discussion", view.project.source ? "工作记录" : "讨论"],
                   ["tasks", "任务"],
                   ["artifacts", "成果"],
                 ] as const
@@ -311,6 +389,7 @@ export function App() {
             </div>
             {tab === "discussion" ? (
               <Discussion
+                key={view.project.conversationId}
                 messages={view.messages}
                 artifacts={view.artifacts}
                 onArtifact={openArtifact}
@@ -359,6 +438,24 @@ export function App() {
           <EnterpriseMessages
             demo={view.user.demo}
             query={query}
+            initialRoomId={initialRoomId}
+            onProject={async (room) => {
+              const existing = await api<Project | null>(
+                "/talk/rooms/" + room.id + "/project",
+              );
+              if (existing) {
+                setSection("messages");
+                setTab("discussion");
+                setNavOpen(false);
+                await load(existing.id);
+              } else {
+                setSourceRoom({ id: room.id, name: room.name });
+                setTitle(room.name);
+                setGoal("");
+                setError("");
+                setDialog("project");
+              }
+            }}
             onLogout={() =>
               void act(async () => {
                 await mutation("/auth/logout", {});
@@ -445,16 +542,32 @@ export function App() {
       ) : null}
       {dialog === "project" ? (
         <Dialog
-          title="新建项目空间"
+          title={sourceRoom ? "创建关联项目" : "新建项目空间"}
           error={error}
           onClose={() => setDialog(null)}
         >
+          {sourceRoom ? (
+            <p className="source-scope-note">
+              关联「{sourceRoom.name}
+              」。只有当前来源会话成员能访问这个新项目，原始消息仍保留在企业会话。
+            </p>
+          ) : null}
           <form
             className="dialog-form"
             onSubmit={(e) => {
               e.preventDefault();
               void act(async () => {
-                const p = await mutation("/projects", { name: title, goal });
+                const p = await mutation(
+                  sourceRoom ? "/projects/from-talk" : "/projects",
+                  {
+                    name: title,
+                    goal,
+                    ...(sourceRoom ? { roomId: sourceRoom.id } : {}),
+                  },
+                );
+                setSourceRoom(null);
+                setSection("messages");
+                setTab("discussion");
                 setDialog(null);
                 await load(p.id);
               });
@@ -489,6 +602,12 @@ export function App() {
           error={error}
           onClose={() => setDialog(null)}
         >
+          {view.project.source ? (
+            <p className="source-scope-note">
+              此任务会读取「{view.project.source.name}」当前获准的最近至多 60
+              条普通消息，并交给所选模型连接处理。成果保存在当前项目，不会自动发布到企业会话。
+            </p>
+          ) : null}
           <form
             className="dialog-form"
             onSubmit={(e) => {

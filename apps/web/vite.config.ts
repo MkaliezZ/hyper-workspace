@@ -5,6 +5,16 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    fs: {
+      deny: [
+        ".env",
+        ".env.*",
+        "*.{crt,pem}",
+        "**/.git/**",
+        "**/.runtime/**",
+        "**/.data/**",
+      ],
+    },
     proxy: { "/api": { target: "http://127.0.0.1:3100", changeOrigin: true } },
   },
 });

@@ -227,6 +227,7 @@ export interface Project {
   name: string;
   goal: string;
   conversationId: string;
+  source?: { kind: "nextcloud-talk"; roomId: string; name: string };
 }
 export interface WorkspaceView {
   user: Subject;

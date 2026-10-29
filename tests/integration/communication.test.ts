@@ -6,6 +6,10 @@ import type { Subject } from "@hyper/contracts";
 import { Database } from "../../apps/api/src/db/database.js";
 import { Vault } from "../../apps/api/src/core/credentials.js";
 import { requireNextcloud } from "../../apps/api/src/providers/nextcloud.js";
+import { WorkspaceService } from "../../apps/api/src/core/workspace.js";
+import { RunProcessor } from "../../apps/api/src/core/processor.js";
+import { KnowledgeService } from "../../apps/api/src/core/knowledge.js";
+import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
 import { CommunicationService } from "../../apps/api/src/core/communication.js";
 const url = process.env.TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.endsWith("_test"))
@@ -43,10 +47,30 @@ function room(members = ["alice", "bob"]) {
   rooms.set(id, r);
   return r;
 }
+const embeddingInputs: string[][] = [];
+let revokeEmbeddingRoom: Room | undefined;
 const server = createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   let raw = "";
   for await (const chunk of req) raw += chunk;
+  if (req.url?.startsWith("/v1/embeddings")) {
+    const body = JSON.parse(raw);
+    embeddingInputs.push(body.input);
+    if (
+      revokeEmbeddingRoom &&
+      body.input.some((text: string) => text.includes("revoke-while-indexing"))
+    )
+      revokeEmbeddingRoom.members.delete("alice");
+    res.end(
+      JSON.stringify({
+        data: body.input.map((_: string, index: number) => ({
+          index,
+          embedding: [1, 0],
+        })),
+      }),
+    );
+    return;
+  }
   const parsed = new URL(req.url!, "http://127.0.0.1"),
     auth = Buffer.from(
       req.headers.authorization?.replace(/^Basic /, "") ?? "",
@@ -373,4 +397,304 @@ test("Stale sending intents require reconciliation; source removal immediately d
   await assert.rejects(service.receipt(s(), receipt.id));
   await assert.rejects(service.messages(s(), r.id));
   assert.equal(r.posts, 1);
+});
+
+function sourceMessage(r: Room, content: string) {
+  r.messages.push({
+    id: nextId++,
+    token: r.id,
+    actorType: "users",
+    actorId: "bob",
+    actorDisplayName: "Bob",
+    timestamp: Math.floor(Date.now() / 1000),
+    message: content,
+    messageType: "comment",
+    messageParameters: {},
+  });
+}
+function scopedWorkspace(execute: any) {
+  const engines = engineRegistry();
+  engines.set("dsh", {
+    id: "dsh",
+    describeCapabilities: () => ({
+      configured: true,
+      operations: ["discussion_to_minutes"],
+      evidence: "protocol-fixture",
+    }),
+    execute,
+  });
+  return new WorkspaceService(db, engines);
+}
+async function chatProfile(work: WorkspaceService) {
+  return work.saveModel(s(), {
+    name: "scope fixture",
+    provider: "openai-compatible",
+    endpoint: "http://127.0.0.1:1/v1",
+    model: "fixture",
+    purpose: "chat",
+    scope: "personal",
+    apiKey: "synthetic-chat-key",
+  });
+}
+
+test("Source project binding is stable and product admins cannot bypass room scope for direct object access", async () => {
+  const r = room(),
+    work = new WorkspaceService(db, engineRegistry());
+  const [project, same] = await Promise.all([
+    work.createTalkProject(s(), r.id, "Restricted project", "Restricted goal"),
+    work.createTalkProject(s(), r.id, "Restricted project", "Restricted goal"),
+  ]);
+  assert.equal(project.id, same.id);
+  await assert.rejects(
+    work.createTalkProject(s(), r.id, "Another goal", "different"),
+    /已有/,
+  );
+  await db.pool.query(
+    "UPDATE cw_members SET role='admin' WHERE workspace_id=$1 AND user_id=$2",
+    [workspace, s("outsider").id],
+  );
+  assert.ok(
+    !(await work.access.list(s("outsider"))).some((p) => p.id === project.id),
+  );
+  await assert.rejects(work.view(s("outsider"), project.id));
+  await assert.rejects(
+    work.message(s("outsider"), project.conversationId, "not allowed"),
+  );
+  const task = await work.createTask(s(), project.conversationId, {
+    title: "Scoped task",
+    assignee: "Bob",
+    dueDate: null,
+  });
+  await assert.rejects(
+    work.patchTask(s("outsider"), task.id, { status: "done" }),
+  );
+  const artifact = randomUUID();
+  await db.pool.query(
+    "INSERT INTO cw_artifacts(id,workspace_id,project_id,title,created_by)VALUES($1,$2,$3,'Restricted artifact',$4)",
+    [artifact, workspace, project.id, s().id],
+  );
+  await db.pool.query(
+    "INSERT INTO cw_artifact_versions(artifact_id,version,content,created_by)VALUES($1,1,'Private content',$2)",
+    [artifact, s().id],
+  );
+  await assert.rejects(work.artifact(s("outsider"), artifact));
+  await assert.rejects(
+    work.revise(s("outsider"), artifact, {
+      expectedVersion: 1,
+      content: "forbidden",
+      feedback: "",
+    }),
+  );
+  await work.revise(s("bob"), artifact, {
+    expectedVersion: 1,
+    content: "Authorized peer edit",
+    feedback: "",
+  });
+  r.readDenied = true;
+  await assert.rejects(work.artifact(s(), artifact));
+  assert.ok(!(await work.access.list(s())).some((p) => p.id === project.id));
+  r.readDenied = false;
+  r.members.delete("bob");
+  await assert.rejects(work.artifact(s("bob"), artifact));
+  assert.equal((await work.artifact(s(), artifact)).current.version, 2);
+});
+test("AI uses authorized source text with immutable references and stops business writes after room revocation", async () => {
+  const r = room();
+  sourceMessage(r, "source-private-sentinel");
+  let observed = "",
+    revoke = false;
+  const work = scopedWorkspace(async (request: any) => {
+    observed = request.context;
+    if (revoke) r.members.delete("alice");
+    return {
+      text: "fixture result",
+      evidence: "fixture",
+      actions:
+        request.workflow === "revise_artifact"
+          ? [
+              {
+                tool: "artifact.revise",
+                args: { content: "revised-with-new-source" },
+              },
+            ]
+          : [
+              {
+                tool: "artifact.create",
+                args: {
+                  title: "Scoped AI result",
+                  content: "source-derived-private-artifact",
+                },
+              },
+            ],
+    };
+  });
+  const project = await work.createTalkProject(
+    s(),
+    r.id,
+    "AI source project",
+    "Summarize the authorized room",
+  );
+  await chatProfile(work);
+  const input = {
+    conversationId: project.conversationId,
+    workflow: "discussion_to_minutes" as const,
+    engine: "dsh" as const,
+    instruction: "Summarize",
+    idempotencyKey: randomUUID(),
+  };
+  const processor = new RunProcessor(work),
+    first = await work.startRun(s(), input);
+  await processor.process(first.id);
+  assert.ok(observed.includes("source-private-sentinel"));
+  assert.ok(!observed.includes(people.get("alice")!.password));
+  const result = await work.getRun(s(), first.id);
+  assert.equal(result.state, "succeeded");
+  assert.match(result.contextRefs[0], /^talk:.*@[0-9]+:[a-f0-9]{64}$/);
+  const artifact = result.result.receipts[0].id;
+  assert.ok(
+    (await work.artifact(s(), artifact)).current.sourceMessageIds.includes(
+      result.contextRefs[0],
+    ),
+  );
+  await assert.rejects(work.getRun(s("outsider"), first.id));
+  await assert.rejects(work.events(s("outsider"), first.id));
+  sourceMessage(r, "new-source-fact-for-revision");
+  const revision = await work.startRun(s(), {
+    ...input,
+    workflow: "revise_artifact",
+    artifactId: artifact,
+    idempotencyKey: randomUUID(),
+  });
+  await processor.process(revision.id);
+  const revisionResult = await work.getRun(s(), revision.id);
+  assert.equal(revisionResult.state, "succeeded", revisionResult.error);
+  const revised = await work.artifact(s(), artifact);
+  assert.equal(revised.current.version, 2);
+  assert.ok(observed.includes("new-source-fact-for-revision"));
+  assert.ok(observed.includes("source-derived-private-artifact"));
+  const revisionRun = await work.getRun(s(), revision.id);
+  assert.ok(revisionRun.contextRefs.includes("artifact:" + artifact + "@1"));
+  assert.ok(
+    revisionRun.contextRefs
+      .filter((ref: string) => !ref.startsWith("artifact:"))
+      .every((ref: string) => revised.current.sourceMessageIds.includes(ref)),
+  );
+  const queued = await work.startRun(s(), {
+    ...input,
+    idempotencyKey: randomUUID(),
+  });
+  revoke = true;
+  const second = await work.startRun(s(), {
+    ...input,
+    idempotencyKey: randomUUID(),
+  });
+  await processor.process(second.id);
+  const state = (
+    await db.pool.query("SELECT state FROM cw_runs WHERE id=$1", [second.id])
+  ).rows[0].state;
+  assert.equal(state, "failed");
+  assert.equal(
+    (
+      await db.pool.query("SELECT id FROM cw_actions WHERE run_id=$1", [
+        second.id,
+      ])
+    ).rowCount,
+    0,
+  );
+  await assert.rejects(work.getRun(s(), first.id));
+  const cancelled = await work.cancel(s(), queued.id);
+  assert.equal(cancelled.state, "cancelled");
+  assert.deepEqual(Object.keys(cancelled).sort(), ["id", "state"]);
+});
+test("Keyword, indexing and pgvector queries inherit source project access and reject revoked writes", async () => {
+  const r = room(),
+    work = new WorkspaceService(db, engineRegistry()),
+    project = await work.createTalkProject(
+      s(),
+      r.id,
+      "Indexed private project",
+      "Keep scoped facts private",
+    );
+  const asset = randomUUID();
+  await db.pool.query(
+    "INSERT INTO cw_assets(id,workspace_id,project_id,owner_id,title,content,type,source_version)VALUES($1,$2,$3,$4,'scope-search-sentinel','source-private-knowledge','text','1')",
+    [asset, workspace, project.id, s().id],
+  );
+  assert.equal(
+    (await work.search(s("outsider"), "scope-search-sentinel")).length,
+    0,
+  );
+  assert.equal((await work.search(s(), "scope-search-sentinel")).length, 1);
+  const model = await work.saveModel(s("outsider"), {
+      name: "Shared embedding fixture",
+      provider: "openai-compatible",
+      endpoint: process.env.NEXTCLOUD_URL + "/v1",
+      model: "fixture-vector",
+      purpose: "embedding",
+      scope: "workspace",
+      apiKey: "synthetic-embedding",
+    }),
+    knowledge = new KnowledgeService(db);
+  const before = embeddingInputs.length;
+  await assert.rejects(knowledge.index(s("outsider"), [asset], model.id));
+  assert.equal(embeddingInputs.length, before);
+  assert.deepEqual((await knowledge.index(s(), [asset], model.id)).indexed, [
+    asset,
+  ]);
+  assert.equal(
+    (await knowledge.semantic(s("outsider"), "query", model.id)).some(
+      (row) => row.id === asset,
+    ),
+    false,
+  );
+  assert.equal(
+    (await knowledge.semantic(s(), "query", model.id)).some(
+      (row) => row.id === asset,
+    ),
+    true,
+  );
+  await db.pool.query(
+    "UPDATE cw_assets SET content='revoke-while-indexing',source_version='2',embedding=NULL WHERE id=$1",
+    [asset],
+  );
+  revokeEmbeddingRoom = r;
+  assert.deepEqual((await knowledge.index(s(), [asset], model.id)).indexed, []);
+  assert.equal(
+    (
+      await db.pool.query("SELECT embedding FROM cw_assets WHERE id=$1", [
+        asset,
+      ])
+    ).rows[0].embedding,
+    null,
+  );
+  assert.equal((await work.search(s(), "scope-search-sentinel")).length, 0);
+  revokeEmbeddingRoom = undefined;
+});
+test("Oversized authorized source context fails before dispatching a model request", async () => {
+  const r = room();
+  for (let i = 0; i < 4; i++) sourceMessage(r, "x".repeat(30000));
+  let calls = 0;
+  const work = scopedWorkspace(async () => {
+      calls++;
+      return { text: "unreachable", evidence: "fixture", actions: [] };
+    }),
+    project = await work.createTalkProject(
+      s(),
+      r.id,
+      "Long source project",
+      "Use a bounded context",
+    );
+  await chatProfile(work);
+  const run = await work.startRun(s(), {
+    conversationId: project.conversationId,
+    workflow: "discussion_to_minutes",
+    engine: "dsh",
+    instruction: "Summarize",
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(work).process(run.id);
+  const result = await work.getRun(s(), run.id);
+  assert.equal(calls, 0);
+  assert.equal(result.state, "failed");
+  assert.match(result.error, /100 KB/);
 });

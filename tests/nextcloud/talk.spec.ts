@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID, randomBytes } from "node:crypto";
+import { modelFixture } from "../runtime/business-contract";
 import { Database } from "../../apps/api/src/db/database.js";
 import { source, password, origin, login } from "./helpers";
 const db = new Database(process.env.TEST_DATABASE_URL);
@@ -208,5 +209,242 @@ test("Real one-to-one Talk messages are available without importing them into pr
     ).toBe(true);
   } finally {
     await user.context.close();
+  }
+});
+
+test("Source project scope survives both real engines and blocks results after real room revocation", async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const room = await talk("talk-alice", "v4/room", "POST", {
+    roomType: "2",
+    roomName: "Hyper AI Scoped Room",
+  });
+  await talk("talk-alice", "v4/room/" + room.token + "/participants", "POST", {
+    newParticipant: "talk-bob",
+    source: "users",
+  });
+  const sentinel = "synthetic-source-context-privacy-sentinel";
+  await talk("talk-alice", "v1/chat/" + room.token, "POST", {
+    message: sentinel,
+    referenceId: randomBytes(32).toString("hex"),
+  });
+  let currentEngine = "",
+    revoke = false;
+  const seen = new Set<string>();
+  const fixture = modelFixture(["synthetic-source-model-key"], async (body) => {
+    const text = JSON.stringify(body.messages);
+    if (text.includes(sentinel) && /talk:nextcloud:/.test(text))
+      seen.add(currentEngine);
+    if (revoke) {
+      revoke = false;
+      const participants = await talk(
+          "talk-alice",
+          "v4/room/" + room.token + "/participants",
+        ),
+        member = participants.find(
+          (p: any) => p.actorType === "users" && p.actorId === "talk-bob",
+        );
+      await talk(
+        "talk-alice",
+        "v4/room/" + room.token + "/attendees",
+        "DELETE",
+        { attendeeId: String(member.attendeeId) },
+      );
+    }
+  });
+  await new Promise<void>((resolve) =>
+    fixture.server.listen(0, "127.0.0.1", resolve),
+  );
+  const actor = await login(browser, "talk-bob"),
+    outside = await login(browser, "talk-outsider");
+  try {
+    await expect(
+      actor.page.getByRole("heading", { name: "团队讨论", exact: true }),
+    ).toBeVisible();
+    await expect(
+      outside.page.getByRole("heading", { name: "团队讨论", exact: true }),
+    ).toBeVisible();
+    await actor.page
+      .getByRole("navigation", { name: "工作区导航" })
+      .getByRole("button", { name: "企业消息", exact: true })
+      .click();
+    await actor.page
+      .getByRole("button", { name: "Hyper AI Scoped Room", exact: true })
+      .click();
+    await actor.page
+      .getByRole("button", { name: "项目空间", exact: true })
+      .click();
+    await actor.page
+      .getByLabel("项目名称", { exact: true })
+      .fill("Private source AI project");
+    await actor.page
+      .getByLabel("当前目标", { exact: true })
+      .fill("Summarize only the authorized source");
+    await actor.page
+      .getByRole("button", { name: "创建项目", exact: true })
+      .click();
+    await expect(
+      actor.page.getByRole("heading", {
+        name: "Private source AI project",
+        exact: true,
+      }),
+    ).toBeVisible();
+    const workspace = await (
+      await actor.context.request.get(
+        origin +
+          "/api/workspace?projectId=" +
+          (
+            await actor.context.request
+              .get(origin + "/api/talk/rooms/" + room.token + "/project")
+              .then((r) => r.json())
+          ).id,
+      )
+    ).json();
+    expect(workspace.project.source.roomId).toBe(room.token);
+    const outsideView = await (
+      await outside.context.request.get(origin + "/api/workspace")
+    ).json();
+    expect(
+      outsideView.projects.some((p: any) => p.id === workspace.project.id),
+    ).toBe(false);
+    expect(
+      (
+        await outside.context.request.get(
+          origin + "/api/workspace?projectId=" + workspace.project.id,
+        )
+      ).status(),
+    ).toBe(404);
+    const profileResponse = await actor.context.request.post(
+      origin + "/api/models",
+      {
+        headers: { Origin: origin },
+        data: {
+          name: "Synthetic source model",
+          provider: "openai-compatible",
+          endpoint:
+            "http://127.0.0.1:" +
+            (fixture.server.address() as { port: number }).port +
+            "/v1",
+          model: "native-test-model",
+          purpose: "chat",
+          scope: "personal",
+          apiKey: "synthetic-source-model-key",
+        },
+      },
+    );
+    expect(profileResponse.status()).toBe(201);
+    const profile = await profileResponse.json();
+    const start = async (engine: string) => {
+      const response = await actor.context.request.post(origin + "/api/runs", {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          engine,
+          workflow: "discussion_to_minutes",
+          instruction:
+            "Use authorized source messages to prepare a draft artifact.",
+          modelProfileId: profile.id,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(response.status()).toBe(201);
+      return response.json();
+    };
+    for (const engine of ["dsh", "hermes"]) {
+      currentEngine = engine;
+      const run = await start(engine);
+      await expect
+        .poll(
+          async () => {
+            const response = await actor.context.request.get(
+              origin + "/api/runs/" + run.id,
+            );
+            if (response.status() !== 200) return "unavailable";
+            return (await response.json()).state;
+          },
+          { timeout: 60000, intervals: [700] },
+        )
+        .toBe("succeeded");
+      const result = await (
+        await actor.context.request.get(origin + "/api/runs/" + run.id)
+      ).json();
+      expect(
+        result.contextRefs.some((ref: string) => ref.startsWith("talk:")),
+      ).toBe(true);
+      const artifactId = result.result.receipts[0].id;
+      expect(
+        (
+          await outside.context.request.get(
+            origin + "/api/artifacts/" + artifactId,
+          )
+        ).status(),
+      ).toBe(404);
+      const artifact = await (
+        await actor.context.request.get(origin + "/api/artifacts/" + artifactId)
+      ).json();
+      expect(artifact.current.sourceMessageIds).toEqual(
+        expect.arrayContaining(result.contextRefs),
+      );
+    }
+    expect([...seen].sort()).toEqual(["dsh", "hermes"]);
+    expect(fixture.violations).toEqual([]);
+    expect(
+      (
+        await outside.context.request.get(
+          origin + "/api/knowledge?q=Native%20runtime%20test",
+        )
+      ).status(),
+    ).toBe(200);
+    expect(
+      await (
+        await outside.context.request.get(
+          origin + "/api/knowledge?q=Native%20runtime%20test",
+        )
+      ).json(),
+    ).toHaveLength(0);
+    currentEngine = "revoked";
+    revoke = true;
+    const interrupted = await start("dsh");
+    await expect
+      .poll(
+        async () =>
+          (
+            await db.pool.query("SELECT state FROM cw_runs WHERE id=$1", [
+              interrupted.id,
+            ])
+          ).rows[0].state,
+        { timeout: 60000, intervals: [700] },
+      )
+      .toBe("failed");
+    expect(
+      (
+        await db.pool.query("SELECT id FROM cw_actions WHERE run_id=$1", [
+          interrupted.id,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await actor.context.request.get(origin + "/api/runs/" + interrupted.id)
+      ).status(),
+    ).toBe(404);
+    await expect(
+      actor.page.getByRole("heading", { name: "团队讨论", exact: true }),
+    ).toBeVisible({ timeout: 20000 });
+    const cancellation = await actor.context.request.post(
+      origin + "/api/runs/" + interrupted.id + "/cancel",
+      { headers: { Origin: origin }, data: {} },
+    );
+    expect(cancellation.status()).toBe(201);
+    expect(Object.keys(await cancellation.json()).sort()).toEqual([
+      "id",
+      "state",
+    ]);
+  } finally {
+    fixture.server.closeAllConnections();
+    await new Promise<void>((resolve) => fixture.server.close(() => resolve()));
+    await actor.context.close();
+    await outside.context.close();
   }
 });

@@ -210,6 +210,31 @@ class ApiController {
       .parse(body);
     return service.createProject(await subject(req), input.name, input.goal);
   }
+  @Get("talk/rooms/:token/project") async talkProject(
+    @Req() req: Request,
+    @Param("token") token: string,
+  ) {
+    return service.talkProject(await subject(req), TalkToken.parse(token));
+  }
+  @Post("projects/from-talk") async projectFromTalk(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = z
+      .object({
+        roomId: TalkToken,
+        name: z.string().trim().min(1).max(100),
+        goal: z.string().trim().min(1).max(1000),
+      })
+      .strict()
+      .parse(body);
+    return service.createTalkProject(
+      await subject(req),
+      input.roomId,
+      input.name,
+      input.goal,
+    );
+  }
   @Post("conversations/:id/messages") async message(
     @Req() req: Request,
     @Param("id") id: string,

@@ -3,6 +3,7 @@ import type { CommunicationMessage, CommunicationRoom } from "@hyper/contracts";
 export interface CommunicationProvider {
   listRooms(): Promise<CommunicationRoom[]>;
   room(id: string): Promise<CommunicationRoom>;
+  assertReadable(id: string): Promise<void>;
   messages(
     id: string,
     before?: string,
