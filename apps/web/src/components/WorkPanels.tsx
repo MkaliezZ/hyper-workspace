@@ -98,11 +98,13 @@ export function TasksPanel({
   onNew,
   onToggle,
   query,
+  onEdit,
 }: {
   tasks: Task[];
   onNew: () => void;
   onToggle: (t: Task) => void;
   query: string;
+  onEdit: (task: Task) => void;
 }) {
   const rows = tasks.filter((t) => t.title.includes(query));
   return (
@@ -137,7 +139,15 @@ export function TasksPanel({
               {t.title}
             </button>
             <span>{t.assignee}</span>
-            <span>{t.dueDate ?? "未设置"}</span>
+            <span className="task-due-actions">
+              <span>{t.dueDate ?? "未设置"}</span>
+              <button
+                onClick={() => onEdit(t)}
+                aria-label={"修改待办：" + t.title}
+              >
+                修改
+              </button>
+            </span>
           </div>
         ))}
         {!rows.length ? (

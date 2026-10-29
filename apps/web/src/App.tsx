@@ -24,6 +24,7 @@ import { KnowledgePanel } from "./components/KnowledgePanel";
 import { FollowUpPanel } from "./components/FollowUpPanel";
 import { ArtifactReviewPanel } from "./components/ArtifactReviewPanel";
 import { artifactStatusLabel } from "@hyper/contracts";
+import { TaskEditor } from "./components/TaskEditor";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
@@ -41,9 +42,10 @@ export function App() {
     [navOpen, setNavOpen] = useState(false),
     [contextOpen, setContextOpen] = useState(false);
   const [dialog, setDialog] = useState<
-      "run" | "task" | "artifact" | "project" | null
+      "run" | "task" | "task_edit" | "artifact" | "project" | null
     >(null),
     [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null),
+    [selectedTask, setSelectedTask] = useState<Task | null>(null),
     [title, setTitle] = useState(""),
     [assignee, setAssignee] = useState(""),
     [due, setDue] = useState(""),
@@ -74,6 +76,7 @@ export function App() {
       artifactScope.current++;
       setDialog(null);
       setSelectedArtifact(null);
+      setSelectedTask(null);
       setEdit("");
       setFeedback("");
       setTitle("");
@@ -510,11 +513,18 @@ export function App() {
                   tasks={view.tasks}
                   query={query}
                   onNew={() => openTask()}
+                  onEdit={(task) => {
+                    setSelectedTask(task);
+                    setDialog("task_edit");
+                  }}
                   onToggle={(t) =>
                     void act(async () => {
                       await mutation(
                         "/tasks/" + t.id,
-                        { status: t.status === "done" ? "open" : "done" },
+                        {
+                          status: t.status === "done" ? "open" : "done",
+                          expectedVersion: t.version,
+                        },
                         "PATCH",
                       );
                       await refresh();
@@ -579,7 +589,10 @@ export function App() {
             void act(async () => {
               await mutation(
                 "/tasks/" + t.id,
-                { status: t.status === "done" ? "open" : "done" },
+                {
+                  status: t.status === "done" ? "open" : "done",
+                  expectedVersion: t.version,
+                },
                 "PATCH",
               );
               await refresh();
@@ -832,6 +845,41 @@ export function App() {
               {busy ? "正在提交…" : "开始执行"}
             </button>
           </form>
+        </Dialog>
+      ) : null}
+      {dialog === "task_edit" && selectedTask ? (
+        <Dialog title="修改待办" wide onClose={() => setDialog(null)}>
+          <TaskEditor
+            key={selectedTask.id}
+            task={selectedTask}
+            view={view}
+            run={run}
+            onRun={(value) => {
+              if (loadedProject.current === view.project.id) setRun(value);
+            }}
+            onUpdated={(task) => {
+              if (loadedProject.current !== view.project.id) return;
+              setSelectedTask((current) =>
+                current?.id === task.id &&
+                (current.version ?? 0) <= (task.version ?? 0)
+                  ? task
+                  : current,
+              );
+              setView((current) =>
+                current?.project.id === view.project.id
+                  ? {
+                      ...current,
+                      tasks: current.tasks.map((row) =>
+                        row.id === task.id &&
+                        (row.version ?? 0) <= (task.version ?? 0)
+                          ? task
+                          : row,
+                      ),
+                    }
+                  : current,
+              );
+            }}
+          />
         </Dialog>
       ) : null}
       {dialog === "artifact" && selectedArtifact ? (

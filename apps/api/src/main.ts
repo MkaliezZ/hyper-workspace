@@ -297,6 +297,12 @@ class ApiController {
       FollowUpConfiguration.parse(body),
     );
   }
+  @Get("tasks/:id") async getTask(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return service.task(await subject(req), uuid(id));
+  }
   @Patch("tasks/:id") async patchTask(
     @Req() req: Request,
     @Param("id") id: string,

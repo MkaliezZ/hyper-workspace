@@ -21,6 +21,7 @@ export const EventKind = z.enum([
   "action.proposed",
   "action.completed",
   "artifact.updated",
+  "task.updated",
   "usage.updated",
   "run.completed",
   "run.failed",
@@ -32,6 +33,7 @@ export const Workflow = z.enum([
   "discussion_to_minutes",
   "project_report",
   "revise_artifact",
+  "revise_task",
   "review_artifact",
   "follow_up",
   "configure_follow_up",
@@ -104,6 +106,8 @@ export const RunInput = z
     modelProfileId: z.uuid().optional(),
     followUpPlan: FollowUpPlan.optional(),
     artifactReviewPlan: ArtifactReviewPlan.optional(),
+    taskId: z.uuid().optional(),
+    expectedTaskVersion: z.number().int().positive().optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
   .strict();
@@ -123,8 +127,31 @@ export const TaskPatch = z
   .object({
     status: z.enum(["open", "done"]).optional(),
     title: z.string().trim().min(1).max(300).optional(),
+    assignee: z.string().trim().min(1).max(100).optional(),
+    dueDate: z.string().date().nullable().optional(),
+    expectedVersion: z.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) =>
+      Object.entries(value).some(
+        ([key, item]) => key !== "expectedVersion" && item !== undefined,
+      ),
+    "请指定需要修改的待办字段。",
+  );
+export type TaskPatch = z.infer<typeof TaskPatch>;
+export const TaskRewrite = z
+  .object({
+    status: z.enum(["open", "done"]).optional(),
+    title: z.string().trim().min(1).max(300).optional(),
+    assignee: z.string().trim().min(1).max(100).optional(),
+    dueDate: z.string().date().nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => Object.values(value).some((item) => item !== undefined),
+    "没有提出待办修改字段。",
+  );
 export const ArtifactRevision = z
   .object({
     content: z.string().trim().min(1).max(100000),
@@ -204,6 +231,7 @@ export interface PlannedAction {
     | "artifact.revise"
     | "artifact.review"
     | "task.create"
+    | "task.update"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -240,6 +268,8 @@ export function toolsForWorkflow(
       return ["artifact.create", "project.report"];
     case "revise_artifact":
       return ["artifact.revise"];
+    case "revise_task":
+      return ["task.update"];
     case "review_artifact":
       return ["artifact.review"];
     case "follow_up":
@@ -286,6 +316,7 @@ export interface Task {
   assignee: string;
   status: "open" | "done";
   dueDate: string | null;
+  version?: number;
 }
 export interface Artifact {
   id: string;

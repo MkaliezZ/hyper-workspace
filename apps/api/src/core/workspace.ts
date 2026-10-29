@@ -16,6 +16,7 @@ import type {
   EventKind,
   ArtifactRevision,
   TaskInput,
+  TaskPatch,
 } from "@hyper/contracts";
 import { isFileWorkflow } from "@hyper/contracts";
 import { Database } from "../db/database.js";
@@ -28,7 +29,7 @@ import { FileReadingService } from "./file-readings.js";
 import { ModelService } from "./models.js";
 import { FollowUpScheduleService } from "./follow-up-schedules.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
-import { createProjectTask } from "./tasks.js";
+import { createProjectTask, patchProjectTask } from "./tasks.js";
 
 export class WorkspaceService {
   constructor(
@@ -62,7 +63,7 @@ export class WorkspaceService {
         [project.conversationId, s.workspaceId],
       ),
       this.db.pool.query(
-        "SELECT id,title,assignee,status,to_char(due_date,'YYYY-MM-DD') AS \"dueDate\" FROM cw_tasks WHERE project_id=$1 AND workspace_id=$2 ORDER BY created_at,id",
+        "SELECT id,title,assignee,status,to_char(due_date,'YYYY-MM-DD') AS \"dueDate\",version FROM cw_tasks WHERE project_id=$1 AND workspace_id=$2 ORDER BY created_at,id",
         [project.id, s.workspaceId],
       ),
       this.db.pool.query(
@@ -172,26 +173,30 @@ export class WorkspaceService {
       createProjectTask(c, s, conversation.project_id, input),
     );
   }
-  async patchTask(
-    s: Subject,
-    id: string,
-    patch: { status?: string; title?: string },
-  ) {
+  async task(s: Subject, id: string, projectId?: string) {
     await assertMember(this.db, s);
     const target = (
       await this.db.pool.query(
-        "SELECT project_id FROM cw_tasks WHERE id=$1 AND workspace_id=$2",
-        [id, s.workspaceId],
+        `SELECT id,project_id AS "projectId",title,assignee,status,to_char(due_date,'YYYY-MM-DD') AS "dueDate",version
+      FROM cw_tasks WHERE id=$1 AND workspace_id=$2 AND ($3::uuid IS NULL OR project_id=$3)`,
+        [id, s.workspaceId, projectId ?? null],
       )
     ).rows[0];
     if (!target) throw new NotFoundException("待办不存在。");
-    await this.access.assert(s, target.project_id);
-    const r = await this.db.pool.query(
-      "UPDATE cw_tasks SET status=COALESCE($1,status),title=COALESCE($2,title) WHERE id=$3 AND workspace_id=$4 RETURNING id,title,assignee,status",
-      [patch.status ?? null, patch.title ?? null, id, s.workspaceId],
+    await this.access.assert(s, target.projectId);
+    const history = await this.db.pool.query(
+      `SELECT v.version,v.snapshot,v.actor_id AS "actorId",u.name AS "actorName",v.channel,v.policy_version AS "policyVersion",v.source_run_id AS "sourceRunId",v.created_at AS "createdAt"
+      FROM cw_task_versions v LEFT JOIN cw_users u ON u.id=v.actor_id WHERE task_id=$1 AND workspace_id=$2 AND version<=$3 ORDER BY version DESC LIMIT 20`,
+      [id, s.workspaceId, target.version],
     );
-    if (!r.rowCount) throw new NotFoundException("待办不存在。");
-    return r.rows[0];
+    await this.access.assert(s, target.projectId);
+    return { current: target, history: history.rows };
+  }
+  async patchTask(s: Subject, id: string, patch: TaskPatch) {
+    const { current } = await this.task(s, id);
+    return this.db.tx((c) =>
+      patchProjectTask(c, s, id, patch, current.projectId),
+    );
   }
   async artifact(s: Subject, id: string) {
     const role = await assertMember(this.db, s);
@@ -509,6 +514,35 @@ export class WorkspaceService {
     )
       throw new BadRequestException("请先从企业会话创建关联项目，再起草回复。");
     let expectedVersion: number | null = null;
+    if (input.workflow === "revise_task") {
+      if (!input.taskId || !input.expectedTaskVersion || input.artifactId)
+        throw new BadRequestException("请指定待办、当前版本和修改要求。");
+      const old = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (old) {
+        if (
+          old.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: old.id, state: old.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("revise_task")
+      )
+        throw new BadRequestException("所选执行器未声明待办修改能力。");
+      const task = await this.task(s, input.taskId, conversation.project_id);
+      if (task.current.version !== input.expectedTaskVersion)
+        throw new ConflictException("待办已更新，请重新读取后修改。");
+    } else if (input.taskId || input.expectedTaskVersion)
+      throw new BadRequestException("此工作类型不接受待办修改目标。");
     if (input.workflow === "review_artifact") {
       if (!input.artifactId || !input.artifactReviewPlan)
         throw new BadRequestException("请指定成果、版本和明确验收决定。");
@@ -558,7 +592,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -576,6 +610,8 @@ export class WorkspaceService {
         s.identityCredentialId ?? null,
         input.followUpPlan ?? null,
         input.artifactReviewPlan ?? null,
+        input.taskId ?? null,
+        input.expectedTaskVersion ?? null,
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };
@@ -608,7 +644,7 @@ export class WorkspaceService {
       );
     else await this.conversation(s, target.conversation_id);
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");

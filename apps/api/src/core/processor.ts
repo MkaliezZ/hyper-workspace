@@ -5,6 +5,7 @@ import { z } from "zod";
 import { PgBoss } from "pg-boss";
 import {
   TaskInput,
+  TaskRewrite,
   toolsForWorkflow,
   isFileWorkflow,
   type EngineId,
@@ -17,7 +18,7 @@ import { assertMember } from "./security.js";
 import { stableDigest } from "./credentials.js";
 import { reviseArtifactVersion, lockArtifact } from "./artifacts.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
-import { createProjectTask } from "./tasks.js";
+import { createProjectTask, patchProjectTask, lockTask } from "./tasks.js";
 import { ModelService } from "./models.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
 import { FollowUpService } from "./follow-up.js";
@@ -260,17 +261,19 @@ export class RunProcessor {
           ? ["artifact.create", "project.report"]
           : run.workflow === "revise_artifact"
             ? ["artifact.revise"]
-            : run.workflow === "review_artifact"
-              ? ["artifact.review"]
-              : run.workflow === "follow_up"
-                ? ["follow_up.check"]
-                : run.workflow === "configure_follow_up"
-                  ? ["follow_up.configure"]
-                  : run.workflow === "draft_reply"
-                    ? ["communication.draft"]
-                    : isFileWorkflow(run.workflow)
-                      ? ["file.reading.save"]
-                      : [];
+            : run.workflow === "revise_task"
+              ? ["task.update"]
+              : run.workflow === "review_artifact"
+                ? ["artifact.review"]
+                : run.workflow === "follow_up"
+                  ? ["follow_up.check"]
+                  : run.workflow === "configure_follow_up"
+                    ? ["follow_up.configure"]
+                    : run.workflow === "draft_reply"
+                      ? ["communication.draft"]
+                      : isFileWorkflow(run.workflow)
+                        ? ["file.reading.save"]
+                        : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -278,6 +281,8 @@ export class RunProcessor {
         throw new Error("执行器没有提出本次工作要求的成果操作，不能报告完成。");
       if (run.workflow === "revise_artifact" && result.actions.length !== 1)
         throw new Error("一次修订必须对应一个明确的成果版本。");
+      if (run.workflow === "revise_task" && result.actions.length !== 1)
+        throw new Error("一次待办修改必须只对应一个明确版本。");
       if (run.workflow === "review_artifact" && result.actions.length !== 1)
         throw new Error("一次验收必须只记录一个明确决定。");
       if (isFileWorkflow(run.workflow) && result.actions.length !== 1)
@@ -331,6 +336,7 @@ export class RunProcessor {
           run.workflow !== "follow_up" &&
           run.workflow !== "configure_follow_up" &&
           run.workflow !== "review_artifact" &&
+          run.workflow !== "revise_task" &&
           !isFileWorkflow(run.workflow)
         )
           await c.query(
@@ -357,9 +363,11 @@ export class RunProcessor {
                       ? "定时跟进配置已保存。"
                       : run.workflow === "review_artifact"
                         ? "已记录员工对指定成果版本的验收决定。"
-                        : isFileWorkflow(run.workflow)
-                          ? "个人文件解读已保存。"
-                          : result.text,
+                        : run.workflow === "revise_task"
+                          ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                          : isFileWorkflow(run.workflow)
+                            ? "个人文件解读已保存。"
+                            : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -431,6 +439,16 @@ export class RunProcessor {
       // Match scheduled checks: target schedule before Run/member locks.
       if (configuration)
         await FollowUpScheduleService.lockTarget(c, s, configuration);
+      if (run.workflow === "revise_task") {
+        const target = (
+          await c.query(
+            "SELECT project_id FROM cw_conversations WHERE id=$1 AND workspace_id=$2",
+            [run.conversation_id, s.workspaceId],
+          )
+        ).rows[0];
+        if (!target) throw new Error("待办项目范围不可用。");
+        await lockTask(c, s, run.task_id, target.project_id);
+      }
       if (["revise_artifact", "review_artifact"].includes(run.workflow)) {
         const scope = (
           await c.query(
@@ -489,6 +507,20 @@ export class RunProcessor {
           .strict()
           .parse(action.args);
         receipt = await FileReadingService.save(c, s, run, input.content);
+      } else if (action.tool === "task.update") {
+        const input = TaskRewrite.parse(action.args);
+        receipt = {
+          tool: action.tool,
+          ...(await patchProjectTask(
+            c,
+            s,
+            run.task_id,
+            { ...input, expectedVersion: run.expected_task_version },
+            conv.project_id,
+            run.id,
+          )),
+        };
+        await appendEvent(c, run.id, "task.updated", receipt);
       } else if (action.tool === "task.create") {
         const input = TaskInput.parse(action.args);
         receipt = {

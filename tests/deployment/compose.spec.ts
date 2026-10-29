@@ -241,6 +241,45 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       status: "accepted",
       channel: "ai_assisted",
     });
+    const taskResponse = await context.request.post(
+      origin +
+        "/api/conversations/" +
+        workspace.project.conversationId +
+        "/tasks",
+      {
+        headers: { Origin: origin },
+        data: {
+          title: "Synthetic container task before restart",
+          assignee: "Synthetic label",
+          dueDate: null,
+        },
+      },
+    );
+    expect(taskResponse.status()).toBe(201);
+    const task = await taskResponse.json();
+    const taskRunResponse = await context.request.post(origin + "/api/runs", {
+      headers: { Origin: origin },
+      data: {
+        conversationId: workspace.project.conversationId,
+        engine: "hermes",
+        workflow: "revise_task",
+        taskId: task.id,
+        expectedTaskVersion: task.version,
+        instruction: "Update this synthetic container task.",
+        modelProfileId: modelId,
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(taskRunResponse.status()).toBe(201);
+    const taskRun = await completed(
+      context.request,
+      (await taskRunResponse.json()).id,
+    );
+    expect(taskRun.result.receipts[0]).toMatchObject({
+      id: task.id,
+      version: 2,
+      status: "done",
+    });
     const schedulePath =
       origin +
       "/api/conversations/" +
@@ -304,6 +343,20 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     await expect(
       page.getByRole("textbox", { name: "成果内容", exact: true }),
     ).toHaveValue("synthetic-container-version-two");
+    const restoredTask = await (
+      await context.request.get(origin + "/api/tasks/" + task.id)
+    ).json();
+    expect(restoredTask.current).toMatchObject({
+      id: task.id,
+      title: "synthetic-container-task-update",
+      version: 2,
+      status: "done",
+    });
+    expect(restoredTask.history).toHaveLength(2);
+    expect(restoredTask.history[0]).toMatchObject({
+      channel: "ai",
+      sourceRunId: taskRun.id,
+    });
     const saved = await (
       await context.request.get(origin + "/api/artifacts/" + artifactId)
     ).json();
@@ -399,7 +452,7 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         `process.stdout.write(await(await fetch('http://model-fixture:8100/stats')).text())`,
       ),
     );
-    expect(stats.calls).toBe(5);
+    expect(stats.calls).toBe(6);
     expect(stats.violations).toBe(0);
   } finally {
     await context.close();

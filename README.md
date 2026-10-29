@@ -25,7 +25,7 @@
 
 企业资料与产品状态独立于执行器；引擎切换保持业务接口稳定，不承诺私有检查点热迁移。
 
-人工添加与 AI 生成待办共用产品业务服务，事务中核验当前成员及项目并回读保存结果；AI 待办编辑入口和完整协作流程仍在补齐。
+人工添加与 AI 生成待办共用产品业务服务；人工/AI 修改单条待办也共用带版本校验的服务，可改标题、负责人文字标记、日期和状态，保留历史并支持人工接管。负责人尚未绑定企业员工账号，状态变更不代表实际工作验收。[待办修改与版本契约](docs/TASK-REVISIONS.md)。
 
 ## 本地开发
 
@@ -98,7 +98,7 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 ## 企业文件与个人资料
 
-Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。文本/Markdown 与 PDF/DOCX/XLSX/PPTX 受控文本提取的真实来源/容器场景已通过 CI，另有成果保存界面竞态修复等待最终 CI。长文分块、共享发布和 Calendar 仍待完成。[文件契约](docs/NEXTCLOUD-FILES.md) · [文档提取、限额与部署](docs/DOCUMENT-INGESTION.md)。
+Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。文本/Markdown 与 PDF/DOCX/XLSX/PPTX 受控文本提取的真实来源/容器场景已通过 CI，成果保存界面竞态修复也已通过完整 CI。长文分块、共享发布和 Calendar 仍待完成。[文件契约](docs/NEXTCLOUD-FILES.md) · [文档提取、限额与部署](docs/DOCUMENT-INGESTION.md)。
 
 下图使用明确 UI 协议测试资料，非真实公司文件。
 
@@ -118,14 +118,13 @@ Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可
 
 [移动端个人解读](docs/images/file-reading-mobile.png)
 
-
 ## 文本成果与验收
 
 项目成果已支持纯文本/Markdown 编辑、AI 生成和反馈修订、历史版本。新增针对确切已保存版本的员工验收：接受、要求修改、重开，可直接记录或让 DSH/Hermes 代执行员工已确认的决定。新内容版本重新作为草稿，旧版意见保留；AI 不自行判断是否合格，也不自动把成果正文发送给模型。[验收契约、权限、迁移与证据](docs/ARTIFACT-REVIEWS.md)。
 
 当前支持基础文本成果和个人文档提取阅读，尚无富文本、多人实时协作、批注评论或 Word/Excel/PPT 原件编辑。个人文件解读与项目成果分别保留权限范围。
 
-“企业文件”新增 PDF/DOCX/XLSX/PPTX（最多 8 MiB、提取文本含位置最多 18000 字符），支持个人预览、AI 阅读/续改与索引。扫描件不执行 OCR；公式明确标记未计算，不承诺版式复现。解析器独立于 DSH/Hermes，安装方法、限制和证据见 [文档接入](docs/DOCUMENT-INGESTION.md)。修复 `1896d27` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40968561013) 来源 9 项与容器 4 项通过；主验证 UI 有 1 项重试后通过，已定位并修复保存后刷新竞态，最终无重试证据待新提交核验。首轮来源 401 及修复记录保留在文档中。独立组件 `5cdb970` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563) 曾三个 job 成功、145 项通过，不能替代后续业务接入验证。
+“企业文件”新增 PDF/DOCX/XLSX/PPTX（最多 8 MiB、提取文本含位置最多 18000 字符），支持个人预览、AI 阅读/续改与索引。扫描件不执行 OCR；公式明确标记未计算，不承诺版式复现。解析器独立于 DSH/Hermes，安装方法、限制和证据见 [文档接入](docs/DOCUMENT-INGESTION.md)。修复 `1896d27` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40968561013) 来源 9 项与容器 4 项通过；主验证 UI 有 1 项重试后通过，已定位并修复保存后刷新竞态，修复提交 `9678126` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40971011531) 三个 job 成功、155 项首轮全部通过。首轮来源 401 及修复记录保留在文档中。独立组件 `5cdb970` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40966081563) 曾三个 job 成功、145 项通过，不能替代后续业务接入验证。
 
 ![文档提取位置与限制说明（UI 协议测试资料）](docs/images/document-preview-desktop.png)
 

@@ -215,7 +215,7 @@ test("Real one-to-one Talk messages are available without importing them into pr
 test("Source project scope survives both real engines and blocks results after real room revocation", async ({
   browser,
 }) => {
-  test.setTimeout(300000);
+  test.setTimeout(360000);
   const room = await talk("talk-alice", "v4/room", "POST", {
     roomType: "2",
     roomName: "Hyper AI Scoped Room",
@@ -234,6 +234,10 @@ test("Source project scope survives both real engines and blocks results after r
   const seen = new Set<string>();
   const fixture = modelFixture(["synthetic-source-model-key"], async (body) => {
     const text = JSON.stringify(body.messages);
+    if (text.includes("Host-bound task revision.")) {
+      expect(text).not.toContain(sentinel);
+      expect(text).not.toContain("protocol-fixture-model-result");
+    }
     if (text.includes("native-follow-up-fixture"))
       expect(text).not.toContain(sentinel);
     if (text.includes("Host-bound artifact review decision.")) {
@@ -368,6 +372,7 @@ test("Source project scope survives both real engines and blocks results after r
       return response.json();
     };
     let reviewedArtifactId = "";
+    let firstTaskRevisionRun = "";
     for (const engine of ["dsh", "hermes"]) {
       currentEngine = engine;
       const run = await start(engine);
@@ -601,6 +606,72 @@ test("Source project scope survives both real engines and blocks results after r
         )
       ).json(),
     ).toHaveLength(0);
+    for (const engine of ["dsh", "hermes"]) {
+      const before = await (
+        await actor.context.request.get(origin + "/api/tasks/" + task.id)
+      ).json();
+      const response = await actor.context.request.post(origin + "/api/runs", {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          engine,
+          workflow: "revise_task",
+          taskId: task.id,
+          expectedTaskVersion: before.current.version,
+          instruction: "Update only this selected synthetic task.",
+          modelProfileId: profile.id,
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(response.status()).toBe(201);
+      const revision = await response.json();
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await actor.context.request.get(
+                  origin + "/api/runs/" + revision.id,
+                )
+              ).json()
+            ).state,
+          { timeout: 60000, intervals: [700] },
+        )
+        .toBe("succeeded");
+      const detail = await (
+        await actor.context.request.get(origin + "/api/tasks/" + task.id)
+      ).json();
+      expect(detail.current).toMatchObject({
+        id: task.id,
+        title: "protocol-fixture-task-update",
+        status: "done",
+      });
+      // Hermes proposes the same canonical fields, so the second edit is a no-op.
+      expect(detail.current.version).toBe(
+        engine === "dsh" ? before.current.version + 1 : before.current.version,
+      );
+      if (engine === "dsh") firstTaskRevisionRun = revision.id;
+      expect(detail.history[0]).toMatchObject({
+        channel: "ai",
+        sourceRunId: firstTaskRevisionRun,
+      });
+      const result = await (
+        await actor.context.request.get(origin + "/api/runs/" + revision.id)
+      ).json();
+      expect(result.result.receipts[0]).toMatchObject({
+        id: task.id,
+        version: detail.current.version,
+        changed: engine === "dsh",
+      });
+      expect(
+        (
+          await outside.context.request.get(origin + "/api/tasks/" + task.id)
+        ).status(),
+      ).toBe(404);
+    }
+    const taskBeforeRevocation = (
+      await db.pool.query("SELECT version FROM cw_tasks WHERE id=$1", [task.id])
+    ).rows[0].version;
     currentEngine = "revoked";
     revoke = true;
     const interrupted = await start("dsh", "follow_up");
@@ -661,6 +732,29 @@ test("Source project scope survives both real engines and blocks results after r
         await actor.context.request.get(origin + "/api/runs/" + interrupted.id)
       ).status(),
     ).toBe(404);
+    expect(
+      (
+        await actor.context.request.get(origin + "/api/tasks/" + task.id)
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await actor.context.request.patch(origin + "/api/tasks/" + task.id, {
+          headers: { Origin: origin },
+          data: {
+            title: "Revoked source edit",
+            expectedVersion: taskBeforeRevocation,
+          },
+        })
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await db.pool.query("SELECT version FROM cw_tasks WHERE id=$1", [
+          task.id,
+        ])
+      ).rows[0].version,
+    ).toBe(taskBeforeRevocation);
     expect(
       (
         await actor.context.request.post(

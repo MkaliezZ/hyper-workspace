@@ -95,6 +95,9 @@ export function modelFixture(
     const artifactReview = JSON.stringify(body.messages).includes(
       "Host-bound artifact review decision.",
     );
+    const taskRevision = JSON.stringify(body.messages).includes(
+      "Host-bound task revision.",
+    );
     if (
       artifactReview &&
       /protocol-fixture-model-result|protocol-fixture-revision/.test(
@@ -105,43 +108,49 @@ export function modelFixture(
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        artifactReview
-          ? { tool: "artifact.review", args: {} }
-          : configureFollowUp
-            ? { tool: "follow_up.configure", args: {} }
-            : followUp
-              ? { tool: "follow_up.check", args: {} }
-              : fileReading
-                ? {
-                    tool: "file.reading.save",
-                    args: {
-                      content:
-                        (fileReadingRevision
-                          ? "private-native-file-revision-"
-                          : "private-native-file-reading-") + employee,
-                    },
-                  }
-                : draftReply
+        taskRevision
+          ? {
+              tool: "task.update",
+              args: { title: "protocol-fixture-task-update", status: "done" },
+            }
+          : artifactReview
+            ? { tool: "artifact.review", args: {} }
+            : configureFollowUp
+              ? { tool: "follow_up.configure", args: {} }
+              : followUp
+                ? { tool: "follow_up.check", args: {} }
+                : fileReading
                   ? {
-                      tool: "communication.draft",
+                      tool: "file.reading.save",
                       args: {
-                        content: "private-native-reply-draft-" + employee,
+                        content:
+                          (fileReadingRevision
+                            ? "private-native-file-revision-"
+                            : "private-native-file-reading-") + employee,
                       },
                     }
-                  : revision
+                  : draftReply
                     ? {
-                        tool: "artifact.revise",
+                        tool: "communication.draft",
                         args: {
-                          content: "protocol-fixture-revision " + revision,
+                          content: "private-native-reply-draft-" + employee,
                         },
                       }
-                    : {
-                        tool: "artifact.create",
-                        args: {
-                          title: "Native runtime test " + employee,
-                          content: "protocol-fixture-model-result " + employee,
+                    : revision
+                      ? {
+                          tool: "artifact.revise",
+                          args: {
+                            content: "protocol-fixture-revision " + revision,
+                          },
+                        }
+                      : {
+                          tool: "artifact.create",
+                          args: {
+                            title: "Native runtime test " + employee,
+                            content:
+                              "protocol-fixture-model-result " + employee,
+                          },
                         },
-                      },
       ],
     });
     if (body.stream) {
@@ -392,6 +401,45 @@ async function verifyArtifactReview(
   return runs;
 }
 
+async function verifyTaskRevision(
+  service: WorkspaceService,
+  processor: RunProcessor,
+  employee: Employee,
+  engine: NativeEngine,
+) {
+  const task = await service.createTask(
+    employee.subject,
+    employee.conversation,
+    {
+      title: "Native task before revision",
+      assignee: "Synthetic label",
+      dueDate: null,
+    },
+  );
+  const run = await service.startRun(employee.subject, {
+    conversationId: employee.conversation,
+    workflow: "revise_task",
+    taskId: task.id,
+    expectedTaskVersion: task.version,
+    engine,
+    modelProfileId: employee.modelId,
+    instruction:
+      "Update the selected task record title and mark its record done.",
+    idempotencyKey: randomUUID(),
+  });
+  await processor.process(run.id);
+  const result = await service.getRun(employee.subject, run.id);
+  assert.equal(result.state, "succeeded", result.error);
+  assert.equal(result.result.receipts[0].id, task.id);
+  assert.equal(result.result.receipts[0].version, 2);
+  assert.equal(result.result.receipts[0].status, "done");
+  const detail = await service.task(employee.subject, task.id);
+  assert.equal(detail.current.title, "protocol-fixture-task-update");
+  assert.equal(detail.history[0].sourceRunId, run.id);
+  assert.equal(detail.history[0].channel, "ai");
+  return run.id;
+}
+
 async function verifyFollowUp(
   db: Database,
   service: WorkspaceService,
@@ -609,6 +657,9 @@ export async function exerciseNativeBusiness(
         engine,
         switchThrough ?? engine,
       ])),
+    );
+    allRuns.push(
+      await verifyTaskRevision(service, processor, employees[0]!, engine),
     );
     for (const id of allRuns) {
       const events = JSON.stringify(
