@@ -190,7 +190,10 @@ export class SourceFileService {
       throw new ConflictException("读取期间文件已变化，请重试。");
     await fresh.provider.assertReadable(current);
     const hash = digest(content),
-      version = current.etag + ":" + hash;
+      version =
+        current.etag +
+        ":" +
+        digest(JSON.stringify([current.name, hash, "utf8-text-v1"]));
     return this.db.tx(async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
         s.workspaceId + s.id + source.config.providerKey,

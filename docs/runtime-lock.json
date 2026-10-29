@@ -14,7 +14,26 @@
       "runtimeVersion": "0.2.1-rc.2",
       "wireServerInfoVersion": "0.0.1",
       "dependencyLock": "runtime/dsh/package-lock.json",
-      "modelEvidence": "local deterministic protocol service, not a real model"
+      "modelEvidence": "local deterministic protocol service, not a real model",
+      "dependencyOverrides": {
+        "@modelcontextprotocol/client": "2.3.0",
+        "fflate": "0.8.3",
+        "undici": "8.12.2",
+        "zod": "4.6.7"
+      },
+      "dependencyAudit": {
+        "date": "2026-10-29",
+        "registry": "https://registry.npmjs.org",
+        "beforeAffectedEntries": {
+          "high": 187,
+          "moderate": 10
+        },
+        "distinctAdvisories": 11,
+        "scope": "Independent runtime npm lock only; engine version unchanged; no Hermes Python or source image assessment",
+        "afterKnownVulnerabilities": 0,
+        "cleanInstallVerified": true,
+        "nativeProtocolRegressions": 3
+      }
     },
     "hermes": {
       "status": "native-local-protocol-fixture-verified",
@@ -27,15 +46,15 @@
     }
   },
   "nextcloud": {
-    "status": "identity-talk-source-project-and-reviewed-replies-ci-verified",
+    "status": "identity-talk-and-personal-files-ci-verified",
     "runtimeVersion": "33.0.10",
     "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
     "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
-    "scope": "Identity, Talk messaging, source-bound projects, AI read context and personal AI reply drafts with employee-reviewed delivery verified; autonomous AI sends and Files/Calendar pending",
+    "scope": "Identity, Talk, source-bound projects, AI read context and reviewed private replies; personal short-text Files snapshots with live source checks and pgvector; autonomous sends, file agent tools, PDF/Office and Calendar pending",
     "companySourceConnected": false,
-    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40833543520",
-    "evidenceCommit": "e9eb756d8d5c4593fb83603167b478c1d6f115ae",
-    "evidenceScope": "Seven real Nextcloud/Talk service tests with synthetic employees; native DSH/Hermes use a local model protocol service; no company SSO/MFA, real model quality or production claim",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40863698233",
+    "evidenceCommit": "10742f3c2e1b4ef9dc6b7419f85d76bf96edebd5",
+    "evidenceScope": "Eight real Nextcloud/Talk/Files service tests with synthetic employees; local deterministic model protocol service; no company SSO/MFA, model quality or production claim",
     "talk": {
       "version": "23.0.12",
       "lock": "runtime/nextcloud/talk.lock.json",
@@ -63,11 +82,14 @@
       }
     },
     "files": {
-      "status": "implemented-real-service-ci-pending",
+      "status": "real-service-ci-verified",
       "contract": "docs/NEXTCLOUD-FILES.md",
       "migration": "db/migrations/009_source_files.sql",
       "parser": "fast-xml-parser@5.11.2",
-      "scope": "Authenticated personal file metadata and explicit short UTF-8 text/Markdown snapshots; private retrieval/indexing with live content permission and version checks; PDF/Office, chunking and agent tool entry pending"
+      "scope": "Authenticated personal file metadata and explicit short UTF-8 text/Markdown snapshots; private retrieval/indexing with live content permission and version checks; PDF/Office, chunking and agent tool entry pending",
+      "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40863698233",
+      "evidenceCommit": "10742f3c2e1b4ef9dc6b7419f85d76bf96edebd5",
+      "evidenceScope": "Explicit private shared-file import, source updates, stable-ID refresh, pgvector and share revocation; synthetic users and local embedding protocol service"
     }
   },
   "note": "Implemented dependency pins do not claim a fully validated production runtime combination.",

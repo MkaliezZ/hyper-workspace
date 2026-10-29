@@ -55,6 +55,7 @@ const embeddingInputs: string[][] = [];
 const dav = new DavFixture();
 let revokeEmbeddingFile: ReturnType<DavFixture["add"]> | undefined;
 let revokeEmbeddingRoom: Room | undefined;
+let duringFileEmbedding: (() => Promise<void>) | undefined;
 const server = createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   let raw = "";
@@ -62,6 +63,11 @@ const server = createServer(async (req, res) => {
   if (req.url?.startsWith("/v1/embeddings")) {
     const body = JSON.parse(raw);
     embeddingInputs.push(body.input);
+    if (duringFileEmbedding) {
+      const change = duringFileEmbedding;
+      duringFileEmbedding = undefined;
+      await change();
+    }
     if (
       revokeEmbeddingFile &&
       body.input.some((text: string) =>
@@ -993,6 +999,37 @@ test("Explicit file imports preserve IDs and source provenance without publishin
       await new KnowledgeService(db).semantic(s(), "private alpha", profile.id)
     ).some((row) => row.id === first.id),
     true,
+  );
+  // Renaming may retain the source ETag. An embedding for the old title must not overwrite the refreshed asset.
+  duringFileEmbedding = async () => {
+    source.path = ["资料", "renamed-private-file.md"];
+    const renamed = await files.import(
+      s(),
+      source.path,
+      source.id,
+      source.etag,
+    );
+    assert.equal(renamed.id, first.id);
+    assert.notEqual(renamed.sourceVersion, first.sourceVersion);
+  };
+  try {
+    const renamed = await new KnowledgeService(db).index(
+      s(),
+      [first.id],
+      profile.id,
+    );
+    assert.deepEqual(renamed.indexed, []);
+    assert.deepEqual(renamed.skipped, [first.id]);
+  } finally {
+    duringFileEmbedding = undefined;
+  }
+  assert.equal(
+    (
+      await db.pool.query("SELECT embedding FROM cw_assets WHERE id=$1", [
+        first.id,
+      ])
+    ).rows[0].embedding,
+    null,
   );
 });
 test("A changed or replaced source file cannot serve old text or vectors; refresh retains the exact stable object", async () => {
