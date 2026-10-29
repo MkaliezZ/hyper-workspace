@@ -81,13 +81,21 @@ export function modelFixture(
     const fileReading = JSON.stringify(body.messages).includes(
       "native-file-reading-fixture",
     );
+    const fileReadingRevision = JSON.stringify(body.messages).includes(
+      "native-file-revision-fixture",
+    );
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
         fileReading
           ? {
               tool: "file.reading.save",
-              args: { content: "private-native-file-reading-" + employee },
+              args: {
+                content:
+                  (fileReadingRevision
+                    ? "private-native-file-revision-"
+                    : "private-native-file-reading-") + employee,
+              },
             }
           : draftReply
             ? {

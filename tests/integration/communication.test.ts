@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import type { Subject } from "@hyper/contracts";
+import { FileReadingRevisionInput } from "@hyper/contracts";
 import { Database } from "../../apps/api/src/db/database.js";
 import { Vault } from "../../apps/api/src/core/credentials.js";
 import { requireNextcloud } from "../../apps/api/src/providers/nextcloud.js";
@@ -448,7 +449,7 @@ function scopedWorkspace(execute: any) {
     id: "dsh",
     describeCapabilities: () => ({
       configured: true,
-      operations: ["discussion_to_minutes", "read_file"],
+      operations: ["discussion_to_minutes", "read_file", "revise_file_reading"],
       evidence: "protocol-fixture",
     }),
     execute,
@@ -1468,4 +1469,344 @@ test("File cancellation and expired-lease reconciliation retain no runtime input
     "recovery_required",
   );
   await assert.rejects(access(path));
+});
+
+const readingProposal = (content: string) => ({
+  text: "private-model-summary",
+  evidence: "fixture",
+  actions: [{ tool: "file.reading.save", args: { content } }],
+});
+test("AI feedback revises the selected saved reading across engines with stable identity, provenance and replay-safe receipts", async () => {
+  let selectedId: string;
+  const f = await preparedFileReading(async (r: any) => {
+    if (r.workflow === "revise_file_reading") {
+      assert.ok(r.context.includes("human-reviewed-current-version"));
+      assert.ok(r.context.includes("selected-file-reading-sentinel"));
+      assert.ok(r.context.includes(selectedId));
+      assert.ok(!r.context.includes("initial-answer-not-selected"));
+      assert.ok(!r.context.includes("unselected-reading-answer"));
+      await r.onProgress("private-revision-progress");
+      return readingProposal("ai-revised-personal-reading");
+    }
+    return readingProposal(
+      r.instruction === "unselected-reading"
+        ? "unselected-reading-answer"
+        : "initial-answer-not-selected",
+    );
+  });
+  await new RunProcessor(f.work).process(f.started.id);
+  selectedId = (await f.work.getRun(s(), f.started.id)).result.receipts[0].id;
+  const readings = new FileReadingService(db);
+  await readings.revise(s(), selectedId, {
+    content: "human-reviewed-current-version",
+    expectedVersion: 1,
+  });
+  const other = await f.work.startFileRun(s(), f.file.id, {
+    ...f.input,
+    instruction: "unselected-reading",
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(f.work).process(other.id);
+  f.work.engines.set("hermes", { ...f.work.engines.get("dsh")!, id: "hermes" });
+  const input = {
+    engine: "hermes" as const,
+    instruction: "private-revision-feedback",
+    expectedVersion: 2,
+    idempotencyKey: randomUUID(),
+  };
+  const started = await f.work.startFileReadingRevision(s(), selectedId, input);
+  assert.equal(
+    (await f.work.startFileReadingRevision(s(), selectedId, input)).id,
+    started.id,
+  );
+  await new RunProcessor(f.work).process(started.id);
+  const run = await f.work.getRun(s(), started.id);
+  assert.equal(run.state, "succeeded", run.error);
+  assert.deepEqual(run.result.receipts, [
+    { tool: "file.reading.save", id: selectedId, version: 3 },
+  ]);
+  assert.deepEqual(run.contextRefs, [
+    "file:" + f.file.id + "@" + f.file.sourceVersion,
+    "file-reading:" + selectedId + "@2",
+  ]);
+  const value = await readings.get(s(), selectedId);
+  assert.equal(value.content, "ai-revised-personal-reading");
+  assert.deepEqual(
+    value.versions.map((v: any) => v.engine ?? "manual"),
+    ["dsh", "manual", "hermes"],
+  );
+  assert.equal(value.versions[2].feedback, input.instruction);
+  assert.equal(value.versions[2].runId, started.id);
+  assert.equal(
+    (await f.work.getRun(s(), f.started.id)).result.receipts[0].version,
+    1,
+  );
+  assert.equal(
+    (await f.work.startFileReadingRevision(s(), selectedId, input)).id,
+    started.id,
+  );
+  await assert.rejects(
+    f.work.startFileReadingRevision(s(), selectedId, {
+      ...input,
+      instruction: "changed-feedback",
+    }),
+    /幂等/,
+  );
+  await assert.rejects(
+    f.work.startFileReadingRevision(s("bob"), selectedId, {
+      ...input,
+      idempotencyKey: randomUUID(),
+    }),
+  );
+  assert.equal((await readings.list(s(), f.file.id)).readings.length, 2);
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_messages WHERE metadata->>'runId'=$1",
+        [run.id],
+      )
+    ).rowCount,
+    0,
+  );
+  const events = JSON.stringify(await f.work.events(s(), run.id));
+  for (const privateText of [
+    input.instruction,
+    "private-revision-progress",
+    value.content,
+  ])
+    assert.ok(!events.includes(privateText));
+  await assert.rejects(
+    access(resolve(process.env.RUNTIME_DIR ?? ".runtime/runs", run.id)),
+  );
+  const foreignRun = randomUUID();
+  await db.pool.query(
+    `INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,idempotency_key,input_hash,demo,source_file_asset_id,expected_file_version)
+    VALUES($1,$2,$3,NULL,'dsh','read_file','another-employee-private-feedback',$4,'synthetic-foreign-hash',false,$5,$6)`,
+    [
+      foreignRun,
+      s().workspaceId,
+      s("bob").id,
+      randomUUID(),
+      f.file.id,
+      f.file.sourceVersion,
+    ],
+  );
+  try {
+    await db.pool.query(
+      "UPDATE cw_file_reading_versions SET source_run_id=$1 WHERE reading_id=$2 AND version=3",
+      [foreignRun, selectedId],
+    );
+    await assert.rejects(readings.get(s(), selectedId), /执行记录/);
+    assert.ok(
+      !(await readings.list(s(), f.file.id)).readings.some(
+        (v: any) => v.id === selectedId,
+      ),
+    );
+  } finally {
+    await db.pool.query(
+      "UPDATE cw_file_reading_versions SET source_run_id=$1 WHERE reading_id=$2 AND version=3",
+      [run.id, selectedId],
+    );
+    await db.pool.query("DELETE FROM cw_runs WHERE id=$1", [foreignRun]);
+  }
+});
+test("Manual revisions before dispatch or during AI execution cannot be overwritten by a stale file-reading proposal", async () => {
+  let id: string,
+    revisionCalls = 0;
+  const readings = new FileReadingService(db);
+  const f = await preparedFileReading(async (r: any) => {
+    if (r.workflow === "revise_file_reading") {
+      revisionCalls++;
+      await readings.revise(s(), id, {
+        content: "manual-takes-control-during-model",
+        expectedVersion: 2,
+      });
+    }
+    return readingProposal("stale-ai-result");
+  });
+  await new RunProcessor(f.work).process(f.started.id);
+  id = (await f.work.getRun(s(), f.started.id)).result.receipts[0].id;
+  const input = {
+    engine: "dsh" as const,
+    instruction: "revise",
+    expectedVersion: 1,
+    idempotencyKey: randomUUID(),
+  };
+  const before = await f.work.startFileReadingRevision(s(), id, input);
+  await readings.revise(s(), id, {
+    content: "manual-before-dispatch",
+    expectedVersion: 1,
+  });
+  await new RunProcessor(f.work).process(before.id);
+  assert.equal(revisionCalls, 0);
+  assert.match((await f.work.getRun(s(), before.id)).error, /未覆盖/);
+  const during = await f.work.startFileReadingRevision(s(), id, {
+    ...input,
+    expectedVersion: 2,
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(f.work).process(during.id);
+  const run = await f.work.getRun(s(), during.id);
+  assert.equal(run.state, "failed");
+  assert.match(run.error, /未覆盖/);
+  const saved = await readings.get(s(), id);
+  assert.equal(saved.content, "manual-takes-control-during-model");
+  assert.equal(saved.version, 3);
+  assert.equal(
+    (
+      await db.pool.query("SELECT id FROM cw_actions WHERE run_id=$1", [
+        during.id,
+      ])
+    ).rowCount,
+    0,
+  );
+});
+test("Source revocation during AI revision redacts prior versions and every related Run's private instruction", async () => {
+  let source: any;
+  const f = await preparedFileReading(async (r: any) => {
+    if (r.workflow === "revise_file_reading")
+      source.blockedDownloads.add("alice");
+    return readingProposal("private-content-never-published");
+  });
+  source = f.source;
+  await new RunProcessor(f.work).process(f.started.id);
+  const id = (await f.work.getRun(s(), f.started.id)).result.receipts[0].id;
+  await new FileReadingService(db).revise(s(), id, {
+    content: "private-manual-copy",
+    expectedVersion: 1,
+  });
+  const revision = await f.work.startFileReadingRevision(s(), id, {
+    engine: "dsh",
+    instruction: "private-feedback-to-redact",
+    expectedVersion: 2,
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(f.work).process(revision.id);
+  assert.ok(
+    (
+      await db.pool.query(
+        "SELECT content FROM cw_file_reading_versions WHERE reading_id=$1",
+        [id],
+      )
+    ).rows.every((v) => v.content === ""),
+  );
+  const runs = (
+    await db.pool.query(
+      "SELECT instruction,result,state FROM cw_runs WHERE id=ANY($1::uuid[])",
+      [[f.started.id, revision.id]],
+    )
+  ).rows;
+  assert.ok(runs.every((v) => v.instruction === "" && v.result === null));
+  await assert.rejects(new FileReadingService(db).get(s(), id));
+  await assert.rejects(f.work.getRun(s(), revision.id));
+  await assert.rejects(
+    access(resolve(process.env.RUNTIME_DIR ?? ".runtime/runs", revision.id)),
+  );
+});
+test("Revision limits, explicit scope and model argument validation prevent extra versions or shared-scope file work", async () => {
+  const f = await preparedFileReading(async (r: any) =>
+    readingProposal("base-reading"),
+  );
+  await new RunProcessor(f.work).process(f.started.id);
+  const id = (await f.work.getRun(s(), f.started.id)).result.receipts[0].id;
+  const input = {
+    engine: "dsh" as const,
+    instruction: "private-feedback",
+    expectedVersion: 1,
+    idempotencyKey: randomUUID(),
+  };
+  for (const override of [
+    { assetId: f.file.id },
+    { actorId: s("bob").id },
+    { expectedSourceVersion: f.file.sourceVersion },
+  ])
+    assert.throws(() =>
+      FileReadingRevisionInput.parse({ ...input, ...override }),
+    );
+  const view = await f.work.view(s());
+  await assert.rejects(
+    f.work.startRun(s(), {
+      engine: "dsh",
+      workflow: "revise_file_reading",
+      conversationId: view.project.conversationId,
+      instruction: "shared-scope",
+      idempotencyKey: randomUUID(),
+    }),
+  );
+  await assert.rejects(
+    db.pool.query(
+      "UPDATE cw_runs SET workflow='revise_file_reading' WHERE id=$1",
+      [f.started.id],
+    ),
+    (e: any) => e.code === "23514",
+  );
+  f.work.engines.set("dsh", {
+    ...f.work.engines.get("dsh")!,
+    execute: async () => ({
+      text: "attempt",
+      evidence: "fixture",
+      actions: [
+        {
+          tool: "file.reading.save",
+          args: { content: "target-override", readingId: randomUUID() },
+        },
+      ],
+    }),
+  });
+  const bad = await f.work.startFileReadingRevision(s(), id, input);
+  await new RunProcessor(f.work).process(bad.id);
+  assert.equal((await f.work.getRun(s(), bad.id)).state, "failed");
+  const readings = new FileReadingService(db);
+  for (let version = 1; version < 10; version++)
+    await readings.revise(s(), id, {
+      content: "manual-version-" + (version + 1),
+      expectedVersion: version,
+    });
+  await assert.rejects(
+    f.work.startFileReadingRevision(s(), id, {
+      ...input,
+      expectedVersion: 10,
+      idempotencyKey: randomUUID(),
+    }),
+    /10/,
+  );
+  assert.equal((await readings.get(s(), id)).versions.length, 10);
+});
+test("Combined private file and selected reading obey the input byte limit before any revision model dispatch", async () => {
+  const source = dav.add(
+    "alice",
+    ["large-reading-" + randomUUID() + ".md"],
+    "字".repeat(18000),
+  );
+  const file = await new SourceFileService(db).import(
+    s(),
+    source.path,
+    source.id,
+    source.etag,
+  );
+  let calls = 0;
+  const work = scopedWorkspace(async () => {
+    calls++;
+    return readingProposal("文".repeat(20000));
+  });
+  await chatProfile(work);
+  const initial = await work.startFileRun(s(), file.id, {
+    engine: "dsh",
+    instruction: "short-question",
+    expectedSourceVersion: file.sourceVersion,
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(work).process(initial.id);
+  const id = (await work.getRun(s(), initial.id)).result.receipts[0].id;
+  const revision = await work.startFileReadingRevision(s(), id, {
+    engine: "dsh",
+    instruction: "revise",
+    expectedVersion: 1,
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(work).process(revision.id);
+  assert.equal((await work.getRun(s(), revision.id)).state, "failed");
+  assert.match((await work.getRun(s(), revision.id)).error, /100 KB/);
+  assert.equal(calls, 1);
+  assert.equal((await new FileReadingService(db).get(s(), id)).version, 1);
 });

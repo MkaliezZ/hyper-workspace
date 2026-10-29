@@ -6,6 +6,7 @@ import { PgBoss } from "pg-boss";
 import {
   TaskInput,
   toolsForWorkflow,
+  isFileWorkflow,
   type EngineId,
   type Subject,
   type PlannedAction,
@@ -17,7 +18,11 @@ import { stableDigest } from "./credentials.js";
 import { reviseArtifactVersion } from "./artifacts.js";
 import { ModelService } from "./models.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
-import { FileReadingService } from "./file-readings.js";
+import {
+  FileReadingService,
+  ReadingVersionConflict,
+  ReadingInputLimit,
+} from "./file-readings.js";
 async function purgeFileRuntime(db: Database, id: string) {
   await rm(resolve(process.env.RUNTIME_DIR ?? ".runtime/runs", id), {
     recursive: true,
@@ -187,10 +192,12 @@ export class RunProcessor {
             );
       await assertRunScope(this.service, subject, run);
       abort.signal.throwIfAborted();
-      if (Buffer.byteLength(context + run.instruction, "utf8") > 100000)
+      if (Buffer.byteLength(context + run.instruction, "utf8") > 100000) {
+        if (isFileWorkflow(run.workflow)) throw new ReadingInputLimit();
         throw new Error(
           "当前上下文超过 100 KB，请缩小讨论范围或拆分成果后重试。",
         );
+      }
       const result = await adapter.execute({
         runId,
         subject,
@@ -206,8 +213,9 @@ export class RunProcessor {
         signal: abort.signal,
         onProgress: (text) =>
           event("progress.updated", {
-            text:
-              run.workflow === "read_file" ? "正在阅读所选个人文件。" : text,
+            text: isFileWorkflow(run.workflow)
+              ? "正在阅读所选个人文件。"
+              : text,
           }),
       });
       abort.signal.throwIfAborted();
@@ -224,7 +232,7 @@ export class RunProcessor {
               ? ["follow_up.check"]
               : run.workflow === "draft_reply"
                 ? ["communication.draft"]
-                : run.workflow === "read_file"
+                : isFileWorkflow(run.workflow)
                   ? ["file.reading.save"]
                   : [];
       if (
@@ -234,7 +242,7 @@ export class RunProcessor {
         throw new Error("执行器没有提出本次工作要求的成果操作，不能报告完成。");
       if (run.workflow === "revise_artifact" && result.actions.length !== 1)
         throw new Error("一次修订必须对应一个明确的成果版本。");
-      if (run.workflow === "read_file" && result.actions.length !== 1)
+      if (isFileWorkflow(run.workflow) && result.actions.length !== 1)
         throw new Error("一次文件阅读必须只保存一条个人解读。");
       if (run.workflow === "draft_reply" && result.actions.length !== 1)
         throw new Error("一次起草必须只准备一条会话回复。");
@@ -254,7 +262,7 @@ export class RunProcessor {
         );
         if (!member.rowCount)
           throw new Error("工作区权限已撤销，不能发布执行结果。");
-        if (run.workflow === "read_file")
+        if (isFileWorkflow(run.workflow))
           await FileReadingService.lockSource(
             c,
             subject,
@@ -266,7 +274,7 @@ export class RunProcessor {
           [runId, lease],
         );
         if (current.rows[0]?.state !== "running") return;
-        if (run.workflow !== "draft_reply" && run.workflow !== "read_file")
+        if (run.workflow !== "draft_reply" && !isFileWorkflow(run.workflow))
           await c.query(
             "INSERT INTO cw_messages(id,workspace_id,conversation_id,author,role,content,metadata) VALUES($1,$2,$3,'协作助手','assistant',$4,$5)",
             [
@@ -285,7 +293,7 @@ export class RunProcessor {
               text:
                 run.workflow === "draft_reply"
                   ? "回复草稿已保存，尚未发送。"
-                  : run.workflow === "read_file"
+                  : isFileWorkflow(run.workflow)
                     ? "个人文件解读已保存。"
                     : result.text,
               receipts,
@@ -311,12 +319,14 @@ export class RunProcessor {
           [runId],
         );
         const state = actions.rowCount ? "recovery_required" : "failed";
-        const message =
-          run.workflow === "read_file"
-            ? "文件阅读未完成，请检查来源、模型或重新发起。"
-            : error instanceof Error
-              ? error.message
-              : "执行失败。";
+        const message = isFileWorkflow(run.workflow)
+          ? error instanceof ReadingVersionConflict ||
+            error instanceof ReadingInputLimit
+            ? error.message
+            : "文件阅读未完成，请检查来源、模型或重新发起。"
+          : error instanceof Error
+            ? error.message
+            : "执行失败。";
         await c.query(
           "UPDATE cw_runs SET state=$2,error=$3,updated_at=now(),lease_expires_at=NULL WHERE id=$1",
           [runId, state, message],
@@ -332,7 +342,7 @@ export class RunProcessor {
       clearTimeout(timer);
       clearInterval(heartbeat);
       if (scopeTimer) clearInterval(scopeTimer);
-      if (run.workflow === "read_file")
+      if (isFileWorkflow(run.workflow))
         await purgeFileRuntime(db, runId).catch(() =>
           console.error(
             "Private runtime cleanup failed; inspect runtime storage.",
@@ -351,7 +361,7 @@ export class RunProcessor {
     if (!toolsForWorkflow(run.workflow).includes(action.tool))
       throw new Error("本次工作类型未授权该业务动作。");
     return this.service.db.tx(async (c) => {
-      if (run.workflow === "read_file")
+      if (isFileWorkflow(run.workflow))
         await FileReadingService.lockSource(
           c,
           s,
@@ -390,7 +400,7 @@ export class RunProcessor {
           [run.conversation_id, s.workspaceId],
         )
       ).rows[0];
-      if (!conv && run.workflow !== "read_file")
+      if (!conv && !isFileWorkflow(run.workflow))
         throw new Error("Conversation unavailable.");
       let receipt: Record<string, unknown>;
       if (action.tool === "file.reading.save") {

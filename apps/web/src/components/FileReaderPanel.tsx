@@ -7,7 +7,12 @@ type Reading = {
   version: number;
   sourceVersion: string;
   question: string;
-  versions: { version: number; content: string }[];
+  versions: {
+    version: number;
+    content: string;
+    engine?: string;
+    feedback?: string;
+  }[];
 };
 type Library = {
   readings: { id: string; version: number; engine: string }[];
@@ -36,11 +41,15 @@ export function FileReaderPanel({
     [runId, setRunId] = useState<string>(),
     [reading, setReading] = useState<Reading>(),
     [draft, setDraft] = useState(""),
+    [feedback, setFeedback] = useState(""),
     [notice, setNotice] = useState("");
   const alive = useRef(true),
     selection = useRef(0),
     selectedReading = useRef<string | undefined>(undefined),
-    attempt = useRef<{ hash: string; key: string } | undefined>(undefined);
+    attempt = useRef<{ hash: string; key: string } | undefined>(undefined),
+    revisionAttempt = useRef<{ hash: string; key: string } | undefined>(
+      undefined,
+    );
   async function library() {
     const value = await api<Library>("/files/imports/" + file.id + "/readings");
     if (!alive.current) return;
@@ -55,6 +64,10 @@ export function FileReaderPanel({
       token === selection.current &&
       value.sourceVersion === file.sourceVersion
     ) {
+      if (selectedReading.current !== value.id) {
+        setFeedback("");
+        revisionAttempt.current = undefined;
+      }
       selectedReading.current = value.id;
       setReading(value);
       setDraft(value.content);
@@ -73,6 +86,7 @@ export function FileReaderPanel({
             setItems([]);
             setReading(undefined);
             setDraft("");
+            setFeedback("");
             setNotice("来源或模型列表暂时无法验证，请重新打开。");
           }
         });
@@ -92,7 +106,9 @@ export function FileReaderPanel({
         const r = await api<{
           state: string;
           error?: string;
-          result?: { receipts: { tool: string; id: string }[] };
+          result?: {
+            receipts: { tool: string; id: string; version?: number }[];
+          };
         }>("/runs/" + runId);
         if (stopped || !alive.current) return;
         if (
@@ -113,7 +129,13 @@ export function FileReaderPanel({
           if (saved) {
             if (!selectedReading.current) await select(saved.id);
             else if (alive.current)
-              setNotice("新解读已保存，可从记录打开。当前编辑内容已保留。");
+              setNotice(
+                saved.id === selectedReading.current && saved.version
+                  ? "解读 v" +
+                      saved.version +
+                      " 已保存，可重新读取。当前编辑内容已保留。"
+                  : "新解读已保存，可从记录打开。当前编辑内容已保留。",
+              );
           }
         }
       } catch {
@@ -123,6 +145,9 @@ export function FileReaderPanel({
           setItems([]);
           setReading(undefined);
           setDraft("");
+          setFeedback("");
+          selectedReading.current = undefined;
+          revisionAttempt.current = undefined;
           setNotice("无法验证当前来源，已关闭解读内容。");
         }
       } finally {
@@ -150,7 +175,8 @@ export function FileReaderPanel({
     <section className="file-reader" aria-label="个人 AI 文件阅读">
       <h4>用 AI 阅读当前版本</h4>
       <p className="muted small">
-        仅发送这份文件和你的问题给所选模型。解读仅本人可见，可人工修改；沿用源权限和版本。
+        仅发送这份文件、问题和显式选择的已保存解读给所选模型。解读仅本人可见，可人工或
+        AI 修改；沿用源权限和版本。
       </p>
       <form
         onSubmit={(e) => {
@@ -253,19 +279,22 @@ export function FileReaderPanel({
             disabled={busy}
             onClick={() => void act(() => select(item.id))}
           >
-            {item.engine.toUpperCase()} · 解读 v{item.version}
+            {item.engine === "manual" ? "人工" : item.engine.toUpperCase()} ·
+            解读 v{item.version}
           </button>
         ))}
       </div>
       {reading ? (
-        <div aria-label="个人文件解读">
+        <div role="region" aria-label="个人文件解读">
           <p className="muted small">
             问题：{reading.question} · 当前修订 v{reading.version}
           </p>
           <label>
             修改解读
             <textarea
+              className="file-reading-editor"
               value={draft}
+              disabled={busy}
               maxLength={20000}
               onChange={(e) => setDraft(e.target.value)}
             />
@@ -296,11 +325,80 @@ export function FileReaderPanel({
           >
             重新读取解读
           </button>
+          <form
+            className="file-reading-revision"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (busy || runId || draft !== reading.content) return;
+              void act(async () => {
+                const id = reading.id;
+                const input = {
+                  engine,
+                  instruction: feedback,
+                  expectedVersion: reading.version,
+                  modelProfileId: model || undefined,
+                };
+                const hash = JSON.stringify({ id, ...input });
+                if (revisionAttempt.current?.hash !== hash)
+                  revisionAttempt.current = { hash, key: crypto.randomUUID() };
+                const result = await mutation<{ id: string }>(
+                  "/files/readings/" + id + "/revisions",
+                  { ...input, idempotencyKey: revisionAttempt.current.key },
+                );
+                if (alive.current) {
+                  setRunId(result.id);
+                  setNotice(
+                    "正在按要求修改已保存的解读 v" +
+                      reading.version +
+                      "；当前编辑内容会保留。",
+                  );
+                  revisionAttempt.current = undefined;
+                }
+              });
+            }}
+          >
+            <label className="file-reading-question">
+              AI 修改要求
+              <textarea
+                value={feedback}
+                maxLength={4000}
+                required
+                disabled={busy || !!runId}
+                onChange={(e) => setFeedback(e.target.value)}
+              />
+            </label>
+            <p className="muted small">
+              沿用上方执行器和阅读模型，修改已保存的 v{reading.version}
+              。先保存手工修改，再交给 AI；执行期间仍可手工接管。
+            </p>
+            <button
+              className="primary"
+              disabled={
+                busy ||
+                !!runId ||
+                !feedback.trim() ||
+                draft !== reading.content ||
+                reading.version >= 10 ||
+                !engines[engine]?.configured ||
+                !engines[engine]?.operations.includes("revise_file_reading")
+              }
+            >
+              按要求修改解读
+            </button>
+          </form>
           <details>
             <summary>查看版本记录（{reading.versions.length}）</summary>
             {reading.versions.map((v) => (
               <div key={v.version}>
-                <strong>v{v.version}</strong>
+                <strong>
+                  v{v.version}
+                  {v.engine ? " · " + v.engine.toUpperCase() : " · 人工"}
+                </strong>
+                {v.feedback ? (
+                  <p className="muted small">
+                    {v.version === 1 ? "阅读问题" : "修改要求"}：{v.feedback}
+                  </p>
+                ) : null}
                 <pre>{v.content}</pre>
               </div>
             ))}

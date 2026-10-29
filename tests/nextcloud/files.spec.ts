@@ -90,11 +90,12 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
   });
   await new Promise<void>((resolve) => model.listen(0, "127.0.0.1", resolve));
   let currentEngine = "dsh";
+  let currentSource = v1;
   const enginesSeen = new Set<string>();
   const fixture = modelFixture(["synthetic-file-reading-key"], (body) => {
     const text = JSON.stringify(body.messages);
     expect(text).toContain("native-file-reading-fixture");
-    expect(text).toContain(currentEngine === "dsh" ? v1 : v2);
+    expect(text).toContain(currentSource);
     expect(text).toContain("Employee-selected private file");
     enginesSeen.add(currentEngine);
   });
@@ -204,6 +205,64 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
         .toBeTruthy();
       return reading;
     }
+    async function revise(
+      reading: any,
+      engine: string,
+      expectedVersion: number,
+    ) {
+      currentEngine = engine;
+      await bob.page
+        .getByRole("combobox", { name: "执行器", exact: true })
+        .selectOption(engine);
+      await bob.page
+        .getByRole("textbox", { name: "AI 修改要求", exact: true })
+        .fill(
+          "native-file-revision-fixture: Keep the selected saved draft and clarify its next steps.",
+        );
+      await bob.page
+        .getByRole("button", { name: "按要求修改解读", exact: true })
+        .click();
+      await expect(
+        bob.page.getByText(
+          "解读 v" +
+            (expectedVersion + 1) +
+            " 已保存，可重新读取。当前编辑内容已保留。",
+          { exact: true },
+        ),
+      ).toBeVisible({ timeout: 75000 });
+      await bob.page
+        .getByRole("button", { name: "重新读取解读", exact: true })
+        .click();
+      await expect(
+        bob.page.getByRole("textbox", { name: "修改解读", exact: true }),
+      ).toHaveValue("private-native-file-revision-0");
+      const updated = await (
+        await bob.context.request.get(
+          origin + "/api/files/readings/" + reading.id,
+        )
+      ).json();
+      expect(updated.id).toBe(reading.id);
+      expect(updated.version).toBe(expectedVersion + 1);
+      expect(updated.versions.at(-1).engine).toBe(engine);
+      const revisionRunId = updated.versions.at(-1).runId;
+      const run = await (
+        await bob.context.request.get(origin + "/api/runs/" + revisionRunId)
+      ).json();
+      expect(run.result.evidence).toBe("runtime");
+      expect(run.result.receipts[0]).toMatchObject({
+        id: reading.id,
+        version: expectedVersion + 1,
+      });
+      expect(run.contextRefs).toContain(
+        "file-reading:" + reading.id + "@" + expectedVersion,
+      );
+      expect(
+        (
+          await alice.context.request.get(origin + "/api/runs/" + revisionRunId)
+        ).status(),
+      ).toBe(404);
+      return revisionRunId;
+    }
 
     await bob.page
       .getByRole("navigation", { name: "工作区导航" })
@@ -253,7 +312,18 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
       true,
     );
     const firstReading = await read("dsh");
+    const firstRevision = await revise(firstReading, "hermes", 1);
+    expect(
+      (
+        await (
+          await bob.context.request.get(
+            origin + "/api/runs/" + firstReading.runId,
+          )
+        ).json()
+      ).result.receipts[0].version,
+    ).toBe(1);
     await upload("talk-alice", filename, v2);
+    currentSource = v2;
     expect(
       await (
         await bob.context.request.get(origin + "/api/knowledge?q=" + v1)
@@ -268,6 +338,19 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     expect(stale.content).toBe("");
     expect(stale.embedding).toBe(null);
     expect(stale.validity).toBe("stale");
+    expect(
+      (
+        await bob.context.request.get(origin + "/api/runs/" + firstRevision)
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT instruction,result FROM cw_runs WHERE id=$1",
+          [firstRevision],
+        )
+      ).rows[0],
+    ).toMatchObject({ instruction: "", result: null });
     expect(
       (
         await bob.context.request.get(
@@ -309,6 +392,7 @@ test("Real Files imports and pgvector retain employee scope and reject changed o
     await expect(
       bob.page.getByText("当前修订 v2", { exact: false }),
     ).toBeVisible();
+    await revise(secondReading, "dsh", 2);
     await share("talk-alice", filename, "DELETE", String(sharing.id));
     expect(
       (

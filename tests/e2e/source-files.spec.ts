@@ -10,12 +10,12 @@ async function start(page: any, request: any) {
   view.artifacts = [];
   view.engines.dsh = {
     configured: true,
-    operations: ["read_file"],
+    operations: ["read_file", "revise_file_reading"],
     evidence: "UI protocol fixture",
   };
   view.engines.hermes = {
     configured: true,
-    operations: ["read_file"],
+    operations: ["read_file", "revise_file_reading"],
     evidence: "UI protocol fixture",
     modelProviders: ["openai-compatible"],
   };
@@ -147,6 +147,239 @@ async function readingFile(page: any) {
     }),
   );
 }
+async function savedReading(page: any) {
+  await readingFile(page);
+  await page.route("**/api/files/imports/" + id + "/readings", (r: any) =>
+    r.fulfill({
+      json: {
+        readings: [{ id: readingId, version: 2, engine: "manual" }],
+        runs: [],
+      },
+    }),
+  );
+  await page.route("**/api/files/readings/" + readingId, (r: any) =>
+    r.fulfill({
+      json: {
+        id: readingId,
+        version: 2,
+        content: "已保存的人工解读",
+        question: "概括当前文件",
+        sourceVersion: "v1:hash",
+        versions: [
+          { version: 1, content: "初稿", engine: "dsh" },
+          { version: 2, content: "已保存的人工解读" },
+        ],
+      },
+    }),
+  );
+}
+test("AI feedback appends a saved version while preserving an in-progress manual draft and exposes its provenance", async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(m.text());
+  });
+  await savedReading(page);
+  let finished = false,
+    submitted = false;
+  const output = "AI 修订：保留已确认事实，并补充待核对事项和下一步。";
+  await page.route(
+    "**/api/files/readings/" + readingId + "/revisions",
+    (route) => {
+      const body = route.request().postDataJSON();
+      expect(body).toMatchObject({
+        engine: "hermes",
+        expectedVersion: 2,
+        instruction: "请补充下一步和待核对事项。",
+        modelProfileId: "80000000-0000-4000-8000-000000000001",
+      });
+      expect(body).not.toHaveProperty("content");
+      expect(body).not.toHaveProperty("apiKey");
+      submitted = true;
+      return route.fulfill({ json: { id: runId, state: "queued" } });
+    },
+  );
+  await page.route("**/api/runs/" + runId, (route) =>
+    route.fulfill({
+      json: {
+        id: runId,
+        state: finished ? "succeeded" : "running",
+        result: finished
+          ? {
+              receipts: [
+                { tool: "file.reading.save", id: readingId, version: 3 },
+              ],
+            }
+          : undefined,
+      },
+    }),
+  );
+  await page.route("**/api/files/imports/" + id + "/readings", (route) =>
+    route.fulfill({
+      json: {
+        readings: [
+          {
+            id: readingId,
+            version: finished ? 3 : 2,
+            engine: finished ? "hermes" : "manual",
+          },
+        ],
+        runs: [],
+      },
+    }),
+  );
+  await page.route("**/api/files/readings/" + readingId, (route) =>
+    route.fulfill({
+      json: {
+        id: readingId,
+        version: finished ? 3 : 2,
+        content: finished ? output : "已保存的人工解读",
+        question: "概括当前文件",
+        sourceVersion: "v1:hash",
+        versions: [
+          { version: 1, content: "初稿", engine: "dsh" },
+          { version: 2, content: "已保存的人工解读" },
+          ...(finished
+            ? [
+                {
+                  version: 3,
+                  content: output,
+                  engine: "hermes",
+                  feedback: "请补充下一步和待核对事项。",
+                },
+              ]
+            : []),
+        ],
+      },
+    }),
+  );
+  await start(page, request);
+  await page.getByRole("button", { name: "查看文本", exact: true }).click();
+  await page
+    .getByRole("button", { name: "AI 阅读此文件", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "人工 · 解读 v2", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "执行器", exact: true })
+    .selectOption("hermes");
+  await page
+    .getByRole("combobox", { name: "阅读模型", exact: true })
+    .selectOption("80000000-0000-4000-8000-000000000001");
+  const editor = page.getByRole("textbox", { name: "修改解读", exact: true });
+  await page
+    .getByRole("textbox", { name: "AI 修改要求", exact: true })
+    .fill("请补充下一步和待核对事项。");
+  const revise = page.getByRole("button", {
+    name: "按要求修改解读",
+    exact: true,
+  });
+  await editor.fill("尚未保存的编辑");
+  await expect(revise).toBeDisabled();
+  await editor.fill("已保存的人工解读");
+  await revise.click();
+  expect(submitted).toBe(true);
+  await editor.fill("AI 执行期间保留的人工草稿");
+  finished = true;
+  await expect(
+    page.getByText("解读 v3 已保存，可重新读取。当前编辑内容已保留。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(editor).toHaveValue("AI 执行期间保留的人工草稿");
+  await page.getByRole("button", { name: "重新读取解读", exact: true }).click();
+  await expect(editor).toHaveValue(output);
+  await page.getByText("查看版本记录（3）", { exact: true }).click();
+  await expect(page.getByText("v3 · HERMES", { exact: true })).toBeVisible();
+  await expect(page).toHaveTitle(/Hyper Workspace/);
+  await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+  expect(page.url()).toBe("http://127.0.0.1:5173/");
+  await expect(
+    page.getByRole("navigation", { name: "工作区导航", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("region", { name: "个人文件解读", exact: true })
+    .screenshot({ path: "/tmp/hyper-reading-revision-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await editor.scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/hyper-reading-revision-mobile.png" });
+  expect(errors).toEqual([]);
+});
+test("Source loss clears AI feedback and a delayed revision admission cannot restore the private editor", async ({
+  page,
+  request,
+}) => {
+  await savedReading(page);
+  let revoked = false;
+  let admit: () => void = () => {};
+  const delayed = new Promise<void>((resolve) => {
+    admit = resolve;
+  });
+  await page.route("**/api/files/imports", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id,
+          title,
+          state: revoked ? "unavailable" : "ready",
+          sourceVersion: revoked ? undefined : "v1:hash",
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/files/imports/" + id, (route) =>
+    route.fulfill(
+      revoked
+        ? { status: 404, json: { message: "文件来源已失效" } }
+        : { json: { id, title, content, sourceVersion: "v1:hash" } },
+    ),
+  );
+  await page.route(
+    "**/api/files/readings/" + readingId + "/revisions",
+    async (route) => {
+      await delayed;
+      await route.fulfill({ json: { id: runId, state: "queued" } });
+    },
+  );
+  await start(page, request);
+  await page.getByRole("button", { name: "查看文本", exact: true }).click();
+  await page
+    .getByRole("button", { name: "AI 阅读此文件", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "人工 · 解读 v2", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "AI 修改要求", exact: true })
+    .fill("private-feedback-draft");
+  const pending = page.waitForRequest(
+    "**/api/files/readings/" + readingId + "/revisions",
+  );
+  await page
+    .getByRole("button", { name: "按要求修改解读", exact: true })
+    .click();
+  await pending;
+  revoked = true;
+  await expect(
+    page.getByRole("region", { name: "个人 AI 文件阅读", exact: true }),
+  ).toHaveCount(0, { timeout: 15000 });
+  admit();
+  await expect(
+    page.getByText("private-feedback-draft", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "修改解读", exact: true }),
+  ).toHaveCount(0);
+});
 test("Personal AI reading chooses engine/model, resumes a saved result and preserves editable versions on desktop and mobile", async ({
   page,
   request,

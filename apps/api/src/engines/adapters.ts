@@ -164,6 +164,7 @@ export class DshAdapter implements EngineAdapter {
         "chat",
         "draft_reply",
         "read_file",
+        "revise_file_reading",
       ],
       evidence: this.command ? "configured-unverified" : "not-configured",
     };
@@ -270,6 +271,7 @@ export class HermesAdapter implements EngineAdapter {
         "chat",
         "draft_reply",
         "read_file",
+        "revise_file_reading",
       ],
       evidence: this.command ? "configured-unverified" : "not-configured",
     };

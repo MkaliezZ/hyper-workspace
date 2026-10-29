@@ -1528,8 +1528,15 @@ p {
   min-height: 100px;
   resize: vertical;
 }
-.file-reader [aria-label="个人文件解读"] textarea {
+.file-reader .file-reading-editor {
   min-height: 180px;
+}
+.file-reading-revision > p {
+  grid-column: 1/-1;
+  margin: 0;
+}
+.file-reading-revision > button {
+  justify-self: start;
 }
 .file-reading-history {
   display: flex;

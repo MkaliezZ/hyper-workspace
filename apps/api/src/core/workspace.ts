@@ -9,6 +9,7 @@ import type { PoolClient } from "pg";
 import type {
   Subject,
   FileReadingInput,
+  FileReadingRevisionInput,
   RunInput,
   EngineId,
   EngineAdapter,
@@ -16,12 +17,14 @@ import type {
   ArtifactRevision,
   TaskInput,
 } from "@hyper/contracts";
+import { isFileWorkflow } from "@hyper/contracts";
 import { Database } from "../db/database.js";
 import { assertMember } from "./security.js";
 import { maskKey, stableDigest, Vault } from "./credentials.js";
 import { reviseArtifactVersion } from "./artifacts.js";
 import { ProjectAccess } from "./project-access.js";
 import { SourceFileService } from "./source-files.js";
+import { FileReadingService } from "./file-readings.js";
 import { ModelService } from "./models.js";
 
 export class WorkspaceService {
@@ -367,8 +370,95 @@ export class WorkspaceService {
       throw new ConflictException("相同幂等键不能用于不同任务。");
     return { id: old.id, state: old.state, created: false };
   }
+  async startFileReadingRevision(
+    s: Subject,
+    readingId: string,
+    input: FileReadingRevisionInput,
+  ) {
+    const reading = await new FileReadingService(this.db).get(s, readingId);
+    const inputHash = stableDigest({
+      ...input,
+      readingId,
+      assetId: reading.assetId,
+      sourceVersion: reading.sourceVersion,
+      workflow: "revise_file_reading",
+      idempotencyKey: undefined,
+    });
+    const replay = (row: any) => {
+      if (row.input_hash !== inputHash)
+        throw new ConflictException("相同幂等键不能用于不同任务。");
+      return { id: row.id, state: row.state, created: false };
+    };
+    const lookup = (client: Pick<PoolClient, "query">) =>
+      client.query(
+        "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+        [s.workspaceId, s.id, input.idempotencyKey],
+      );
+    const old = (await lookup(this.db.pool)).rows[0];
+    if (old) return replay(old);
+    if (reading.version !== input.expectedVersion)
+      throw new ConflictException("解读版本已变化，请重新读取后修改。");
+    if (reading.version >= 10)
+      throw new BadRequestException("当前每条解读最多保留 10 个版本。");
+    if (
+      !this.engines
+        .get(input.engine)
+        ?.describeCapabilities()
+        .operations.includes("revise_file_reading")
+    )
+      throw new BadRequestException("执行器尚未声明文件解读修订能力。");
+    const model = await this.runModel(s, input.engine, input.modelProfileId);
+    return this.db.tx(async (c) => {
+      await FileReadingService.lockSource(
+        c,
+        s,
+        reading.assetId,
+        reading.sourceVersion,
+      );
+      const existing = (await lookup(c)).rows[0];
+      if (existing) return replay(existing);
+      const target = (
+        await c.query(
+          `SELECT current_version FROM cw_file_readings WHERE id=$1 AND workspace_id=$2
+        AND actor_id=$3 AND source_asset_id=$4 AND source_version=$5 AND invalidated_at IS NULL FOR SHARE`,
+          [
+            readingId,
+            s.workspaceId,
+            s.id,
+            reading.assetId,
+            reading.sourceVersion,
+          ],
+        )
+      ).rows[0];
+      if (!target || target.current_version !== input.expectedVersion)
+        throw new ConflictException("解读版本已变化，请重新读取后修改。");
+      const result = await c.query(
+        `INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,idempotency_key,
+        input_hash,demo,model_profile_id,identity_credential_id,source_file_asset_id,expected_file_version,source_file_reading_id,expected_reading_version)
+        VALUES($1,$2,$3,NULL,$4,'revise_file_reading',$5,$6,$7,false,$8,$9,$10,$11,$12,$13)
+        ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state`,
+        [
+          randomUUID(),
+          s.workspaceId,
+          s.id,
+          input.engine,
+          input.instruction,
+          input.idempotencyKey,
+          inputHash,
+          model?.id,
+          s.identityCredentialId,
+          reading.assetId,
+          reading.sourceVersion,
+          readingId,
+          input.expectedVersion,
+        ],
+      );
+      if (result.rowCount) return { ...result.rows[0], created: true };
+      return replay((await lookup(c)).rows[0]);
+    });
+  }
   async startRun(s: Subject, input: RunInput) {
-    if (input.workflow === "read_file")
+    if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
     if (

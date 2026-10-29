@@ -106,9 +106,13 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 新增个人“AI 阅读此文件”：选择 DSH/Hermes 与 chat 模型，基于所选当前版本生成个人解读，可人工修改并保留版本；源变更/撤权清理相关解读。该流程保持个人范围，完整共享发布与多文件 RAG 仍待实现。[范围、运行清理与迁移](docs/FILE-AI-READING.md)。
 
+可对已保存的解读填写“AI 修改要求”，继续使用 DSH 或切换 Hermes，追加到同一解读的版本历史。AI 只使用当前文件与选中的已保存版本；人工已修改时拒绝旧结果，完成后保留编辑框草稿，由员工主动读取新版本。本地已验证，真实来源中的双向续改与容器回归待本轮 CI。
+
 下图为 UI 协议测试资料，非真实公司资料或模型质量证据。
 
 ![个人 AI 文件阅读与修订](docs/images/file-reading-desktop.png)
+
+![个人解读按反馈续改与版本来源（UI 协议测试资料）](docs/images/file-reading-ai-revision.png)
 
 [移动端个人解读](docs/images/file-reading-mobile.png)
 
@@ -125,7 +129,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-本地已通过类型检查、构建、16 项单元/Provider/部署配置测试、52 项数据库集成测试；既有 18 项浏览器和 3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
+本地已通过类型检查、构建、16 项单元/Provider/部署配置测试、57 项数据库集成测试、20 项浏览器和 3 项双执行器原生运行时测试。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。最新个人解读续改增量的完整 CI 待本轮验证。
 
 部署首轮 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 在固定 Hermes 源码下载时遇到 HTTP 429，第二轮复用归档遇到构建 secret 大小限制。修复为有界重试、公开源码缓存/摘要复核与独立构建上下文后，提交 `5a0cb37` 的 [容器 job](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 2 项用例通过；完整证据和首轮失败记录见部署文档。
 

@@ -50,6 +50,7 @@ import {
   FilePath,
   FileReadingInput,
   FileReadingRevision,
+  FileReadingRevisionInput,
 } from "@hyper/contracts";
 import { FileReadingService } from "./core/file-readings.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
@@ -340,6 +341,19 @@ class ApiController {
       uuid(id),
       FileReadingRevision.parse(body),
     );
+  }
+  @Post("files/readings/:id/revisions") async aiReviseFileReading(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const r = await service.startFileReadingRevision(
+      await subject(req),
+      uuid(id),
+      FileReadingRevisionInput.parse(body),
+    );
+    await queue.enqueue(r.id);
+    return r;
   }
   @Post("files/list") async sourceFiles(
     @Req() req: Request,

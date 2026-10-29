@@ -98,7 +98,16 @@
         "scope": "Single explicit private file version; personal reading objects and manual versions; dependent text redacted on source invalidation; no shared project publication or cross-file retrieval",
         "modelEvidence": "Local deterministic model protocol service; native DSH/Hermes; no real model quality claim",
         "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40869859532",
-        "evidenceCommit": "38de92795eb611ae3c46d57ed3d17b5f29df49c1"
+        "evidenceCommit": "38de92795eb611ae3c46d57ed3d17b5f29df49c1",
+        "aiRevisions": {
+          "status": "implemented-native-source-ci-pending",
+          "contract": "docs/FILE-AI-READING.md",
+          "migration": "db/migrations/011_file_reading_ai_revisions.sql",
+          "engineCapability": "EngineAdapter 1.0 additive revise_file_reading / existing file.reading.save",
+          "scope": "One explicit saved personal reading and the same current source file; optimistic versions, per-version Run/engine/feedback; no shared publication or full history context",
+          "localEvidence": "16 unit/config, 57 database, 20 browser, three native engine checks and build pass; UI protocol fixtures at 1504x1045 and 390x844; no real model quality claim",
+          "sourceEvidence": "Pending this CI: DSH to Hermes, source update redaction, Hermes to manual to DSH, then source share revocation"
+        }
       }
     }
   },

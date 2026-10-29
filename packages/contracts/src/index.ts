@@ -36,8 +36,12 @@ export const Workflow = z.enum([
   "chat",
   "draft_reply",
   "read_file",
+  "revise_file_reading",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
+export function isFileWorkflow(workflow: string) {
+  return workflow === "read_file" || workflow === "revise_file_reading";
+}
 export const RunInput = z
   .object({
     conversationId: z.uuid(),
@@ -187,6 +191,7 @@ export function toolsForWorkflow(
     case "draft_reply":
       return ["communication.draft"];
     case "read_file":
+    case "revise_file_reading":
       return ["file.reading.save"];
   }
 }
@@ -334,6 +339,12 @@ export const FileReadingInput = z
   })
   .strict();
 export type FileReadingInput = z.infer<typeof FileReadingInput>;
+export const FileReadingRevisionInput = FileReadingInput.omit({
+  expectedSourceVersion: true,
+})
+  .extend({ expectedVersion: z.number().int().positive() })
+  .strict();
+export type FileReadingRevisionInput = z.infer<typeof FileReadingRevisionInput>;
 export const FileReadingRevision = z
   .object({
     content: z.string().trim().min(1).max(20000),
