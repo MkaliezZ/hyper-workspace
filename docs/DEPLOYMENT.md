@@ -1,6 +1,6 @@
 # Docker Compose 自部署
 
-对应 P04/P07/P08、C05/C07、A01/A08/A10、E09/E10 的运行与恢复子集。技术基线不变：React/TypeScript、NestJS、独立 Worker、PostgreSQL/pgvector/pg-boss、DSH 默认与 Hermes 兼容。当前仍是开发版；本轮真实容器结果待 CI，不能据此宣称生产验收完成。
+对应 P04/P07/P08、C05/C07、A01/A08/A10、E09/E10 的运行与恢复子集。技术基线不变：React/TypeScript、NestJS、独立 Worker、PostgreSQL/pgvector/pg-boss、DSH 默认与 Hermes 兼容。当前仍是开发版；Linux amd64 容器基础与恢复子集已在 CI 通过，生产验收待完成。
 
 ## 包含的服务
 
@@ -69,7 +69,7 @@ docker compose --env-file .env.compose down
 # 同一配置与数据卷再次启动
 docker compose --env-file .env.compose up -d
 # 将产品数据库备份到受控位置
-docker compose --env-file .env.compose exec -T db pg_dump -U hyper -Fc hyper > hyper-backup.dump
+docker compose --env-file .env.compose exec -T db pg_dump -U hyper -Fc hyper > /path/to/private-backup/hyper-backup.dump
 ```
 
 备份包含企业资料与密文，需与主密钥分开受控保存。正式恢复演练、备份保留、数据库最小权限角色分离、负载容量、费用策略和主机加固尚未完成。`down --volumes` 只用于本仓库的隔离 CI 清理，不能作为保留企业数据的停止方式。
@@ -88,12 +88,14 @@ API 与 Worker/数据库重启后，业务对象与历史保存在 PostgreSQL。
 
 上述摘要于 2026-10-29 通过 Docker Registry v2 manifest 响应核对。系统 apt 依赖随发行仓库安全更新，镜像内记录 `runtime/image-packages.txt`，镜像标记源码 revision；这不是位级可重复构建或所有 OS/Python 包安全审计。
 
-首次容器 [CI 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 的三个 job 均停在固定 Hermes 源码下载 HTTP 429，尚未运行容器业务断言。下载器已增加有界重试、缓存摘要复核，CI 仅缓存公开源码归档并通过只读独立构建上下文复用；不上传 `.runtime` 内的其他数据，也不改变原提交、源码 SHA-256 或上游依赖锁。缓存损坏直接失败，3 项下载回归已在本地通过；修复后的完整容器结果待 CI。
+首次容器 [CI 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 的三个 job 均停在固定 Hermes 源码下载 HTTP 429，当时未运行容器业务断言。下载器增加有界重试、缓存摘要复核，CI 仅缓存公开源码归档并通过只读独立构建上下文复用；不上传 `.runtime` 内的其他数据，也不改变原提交、源码 SHA-256 或上游依赖锁。缓存损坏直接失败，3 项下载回归已在本地与后续 CI 通过。
 
 第二轮 [CI 40904981867](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40904981867) 下载已成功，容器构建在启动前因 BuildKit secret 的 500 KiB 上限拒绝 89 MB 公开归档。构建输入现改为只包含这份归档的命名上下文，经只读 bind mount 读取并重新校验；主构建上下文继续排除 `.runtime` 和 `.env`。默认 Compose 的该上下文只有说明文件，未准备归档时仍从固定 URL 下载。直接 `docker build` 时须提供 `--build-context hermes_source=runtime/hermes/build-context`，日常部署使用上方 Compose 命令即可。
 
 本地通过类型/构建、15 单元/Provider/部署配置、49 数据库、18 UI 回归；编译后的 API 在独立本地端口直接提供网页，验证正常登录、HttpOnly cookie、私有路径拒绝、桌面/手机无溢出。首次复用测试库时，其最后一项撤权测试让演示成员失效，静态登录验证失败；仅对隔离测试库重新 seed 后复测，未放宽鉴权。
 
-独立 `deployment` CI 将从干净镜像构建启动 Compose，检查构建网页、双原生执行器、同一成果跨引擎修订、数据库/API/Worker 停启持久化，以及中断 Worker 的租约隔离与不重放；模型为网络内的合成协议服务。该容器结果本轮待运行。本机无 Docker，不把本地静态 HTTP 测试写成容器已通过；真实公司部署、真实模型质量及完整 E01–E10 仍未验收。
+提交 `5a0cb37125661da261b96b841dcf23d6db0d022a` 的 [CI 40906030218](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 三个 job 均成功，共 98 项测试。独立 `deployment` job 在 Linux amd64 从干净镜像构建、启动 Compose，2 项用例均通过：构建网页/私有路径/原 socket 演示登录边界，原生 DSH 创建与 Hermes 对同一成果修订，数据库/API/Worker 停启后会话/密文模型配置/成果版本保留，以及中断 Worker 后进入 `recovery_required` 而不重放模型调用。模型为内部合成协议服务，没有公司数据或真实供应商 Key。
+
+本机无 Docker；容器结论来自上述真实 CI，本地静态 HTTP 验证单独记录。真实公司 HTTPS/SSO、真实模型质量、完整 E01–E10、备份恢复演练、最小权限数据库角色和全面生产隔离仍未验收。
 
 依据：[Compose 启动依赖](https://docs.docker.com/compose/how-tos/startup-order/)、[独立构建上下文](https://docs.docker.com/reference/compose-file/build/#additional_contexts)、[多阶段构建](https://docs.docker.com/build/building/multi-stage/)、[官方 Python 镜像构建定义](https://github.com/docker-library/python/blob/master/3.14/slim-bookworm/Dockerfile)。文档分支只作说明，实际版本以摘要与 CI 为准。

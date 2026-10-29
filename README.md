@@ -62,7 +62,7 @@ node scripts/deploy-init.mjs
 HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -d --build
 ```
 
-[完整配置、备份、迁移与回退说明](docs/DEPLOYMENT.md)。目前已完成本地配置/编译网页验证，真实容器构建与恢复用例待本轮 CI；不代表生产验收。
+[完整配置、备份、迁移与回退说明](docs/DEPLOYMENT.md)。Linux amd64 容器构建、启动、双执行器、停启持久化与中断恢复用例已在 CI 通过；真实公司环境与生产验收仍待完成。
 
 ## 企业账号登录
 
@@ -125,9 +125,9 @@ npm run test:e2e
 
 本地已通过类型检查、构建、15 项单元/Provider/部署配置测试、49 项数据库集成测试、18 项浏览器测试；3 项双执行器原生运行时测试已通过。模型与向量 HTTP 测试使用明确的本地协议测试服务；不代表真实供应商效果。
 
-部署首轮 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 在固定 Hermes 源码下载时遇到 HTTP 429，尚未运行容器业务断言。已补有界重试、公开源码缓存/摘要复核及 3 项下载器回归，完整 CI 正在复测。
+部署首轮 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 在固定 Hermes 源码下载时遇到 HTTP 429，第二轮复用归档遇到构建 secret 大小限制。修复为有界重试、公开源码缓存/摘要复核与独立构建上下文后，提交 `5a0cb37` 的 [容器 job](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 2 项用例通过；完整证据和首轮失败记录见部署文档。
 
-GitHub Actions 使用真实 PostgreSQL/pgvector 及固定 Nextcloud 33.0.10/Talk 23.0.12；新增部署用例后计划主 job 88 项（含 3 项 Python 下载回归）、来源 8 项、容器 2 项，最终以对应 run 实际结果为准。绿色状态只证明工作流实际覆盖的测试，不代表真实模型质量或原始 E01–E10 已全部完成。
+提交 `5a0cb37` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 三个 job 均成功，共 98 项测试：15 单元/Provider/部署配置、3 Python 下载回归、49 数据库、18 UI、3 原生执行器、8 真实 Nextcloud/Talk/Files、2 容器部署恢复。另含类型、构建、两个 npm 审计和冻结包校验。模型仍为协议测试服务；未代表真实模型质量或原始 E01–E10 全部完成。
 
 个人文件阅读实现提交 `38de927` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40869859532) 两个 job 成功，共 90 项测试（12 单元/Provider、49 数据库、18 浏览器、3 原生执行器、8 真实来源），另含类型、构建、两个 npm 依赖审计和冻结包校验。来源用例覆盖 DSH/Hermes 的私有文件解读、修订、源更新与撤权传播；模型仍为协议测试服务。后续提交以各自 Actions 为准。
 

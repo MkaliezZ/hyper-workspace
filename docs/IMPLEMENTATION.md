@@ -1,6 +1,6 @@
 # Hyper Workspace 实施状态
 
-更新日期：2026-10-29。当前为第一阶段开发，尚未完成产品验收。
+更新日期：2026-10-30。当前为第一阶段开发，尚未完成产品验收。
 
 用户明确授权：公库开发、持续更新 README、必要的图片、蓝白黑 UI、检查并修复 Actions。产品名固定为 Hyper Workspace，命名变更见 [NAMING.md](NAMING.md)。
 
@@ -96,11 +96,12 @@
 
 - 新增统一构建镜像、数据库/一次性初始化/API/Worker Compose 配置，保留独立进程与来源 Provider；API 提供已构建 React 网页。Node/Python 基础镜像摘要经官方 registry 核对，沿用双执行器锁文件。
 - 配置生成器以 0600 创建独立密钥并拒绝覆盖；API 默认 loopback，容器显式绑定，公开生产 origin 要求 HTTPS；Cookie 安全属性按规范 origin，演示登录仍要求实际 socket 为 loopback。Worker 健康文件需数据库探测成功，运行卷仅挂 Worker。
-- 新增 3 项部署配置/保护用例，本地共 15 单元、49 数据库、18 UI 与编译网页 HTTP/手机验证通过。独立容器 CI 增加 2 项组合用例，真实镜像启动、双引擎、数据持久化及中断租约恢复待当前 CI。源码映射、来源、备份、迁移与未验证项见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+- 新增 3 项部署配置/保护用例，本地共 15 单元、49 数据库、18 UI 与编译网页 HTTP/手机验证通过。独立容器 CI 的 2 项组合用例已通过，覆盖真实镜像启动、双引擎、数据持久化及中断租约恢复；绿色证据见下方。源码映射、来源、备份、迁移与未验证项见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 - 本机缺 Docker，未声称容器本地通过；公司 HTTPS/SSO、数据库权限分离、镜像全面审计、备份恢复、容量与生产加固仍待完成。冻结包不改。
-- 首轮提交 `08ddfe8` 的 [run 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 三个 job 均因固定 Hermes 源码下载 HTTP 429 失败，容器断言尚未运行。增加有界重试、每次复核摘要的公开源码缓存和只读独立构建上下文，保留原锁；3 项下载器回归通过，完整 CI 待复测。缓存不含 Run 数据或凭据，来源诊断仅在容器已创建时读取日志。
+- 首轮提交 `08ddfe8` 的 [run 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 三个 job 均因固定 Hermes 源码下载 HTTP 429 失败，当时未运行容器断言。增加有界重试、每次复核摘要的公开源码缓存和只读独立构建上下文，保留原锁；3 项下载器回归已通过。缓存不含 Run 数据或凭据，来源诊断仅在容器已创建时读取日志。
 
-- 第二轮 [run 40904981867](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40904981867) 已成功下载固定归档，构建复用因 secret 500 KiB 上限失败；已改为只含公开归档的命名上下文与只读挂载，安装器再次校验摘要。容器行为待后续 CI。
+- 第二轮 [run 40904981867](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40904981867) 已成功下载固定归档，构建复用因 secret 500 KiB 上限失败；改为只含公开归档的命名上下文与只读挂载，安装器再次校验摘要。
+- 修复提交 `5a0cb37125661da261b96b841dcf23d6db0d022a` 的 [run 40906030218](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40906030218) 三个 job 全部成功，共 98 项测试（15 单元/Provider/部署配置、3 下载器、49 数据库、18 UI、3 原生执行器、8 真实来源、2 容器）。两执行器在同一成果上创建/修订，数据库/API/Worker 停启后会话/模型密文配置/版本保留；中断 Worker 的 Run 进入待核对且无模型重放。模型仍为协议服务，没有公司或完整 E01–E10 验收结论，原冻结快照不改。
 
 ## 本地环境证据
 
@@ -116,7 +117,7 @@
 - 原始 E01–E10 的双引擎业务验收，不能用单元测试或 fixture 流程代替。
 - 费用与预算策略、复杂审批、多模态、原生端与正式运行加固。
 - 运行恢复、资产版本一致性、实时源端权限变更和不同项目范围的更细粒度验证。
-- Docker Compose 已提供配置，真实容器/干净环境运行待本轮 CI；后续公司环境验收与新增页面视觉核验。
+- Docker Compose 的 Linux amd64 基础与恢复子集已通过真实 CI；公司环境、备份恢复演练、数据库权限分离、ARM/Windows 与新增页面视觉核验仍需后续验证。
 
 首轮浏览器测试发现待办排序误用消息序号，已修复并增加授权工作区加载测试；发送失败保留草稿已加入测试。GitHub 首轮 CI 暴露 Node watch 模式监听不存在 .env 的 Linux 启动错误，已修复；提交 760bc57 的完整 Actions 已通过（run 40753925009）。后续提交仍以自身 Actions 结果为准。原始交接快照保留 not_implemented/not_run，它描述交接时状态，不随实现改写。
 
