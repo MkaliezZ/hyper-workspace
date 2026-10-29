@@ -488,8 +488,11 @@ test("Both native engines prepare private Talk replies that an employee reviews 
       actor.page.getByRole("heading", { name: "团队讨论", exact: true }),
     ).toBeVisible();
     await expect(
-      peer.page.getByRole("heading", { name: "团队讨论", exact: true }),
+      peer.page.getByRole("navigation", { name: "工作区导航" }),
     ).toBeVisible();
+    expect(
+      (await peer.context.request.get(origin + "/api/workspace")).status(),
+    ).toBe(200);
     const created = await actor.context.request.post(
       origin + "/api/projects/from-talk",
       {
