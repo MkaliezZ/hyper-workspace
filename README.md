@@ -47,9 +47,9 @@
 
 实际 DeepSeek Flash 的 DSH/Hermes 两次合成回读已成功，均记录到供应商用量；金额估算和员工声明与供应商账单分开。[用量口径、权限与迁移](docs/MODEL-USAGE.md) · [桌面界面](docs/images/model-usage-desktop.png) · [手机界面](docs/images/model-usage-mobile.png)。
 
-用量实现 `bb2fde8422f732494719b609979bf010aa5c44a8` 的 [CI 41033005171](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41033005171) 三个 job 全部成功，198 项首轮通过：22 单元/配置、3 下载器、8 解析、110 数据库、3 原生执行器、39 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。
-
 “设置 → 价格与预算”支持人工价格版本、按连接的 UTC 每日预算、请求预留和明确金额核对，人工/AI 共用服务。预算不足、未知费用或超预留会阻止后续请求；已发请求仍可能超额，不承诺供应商账单硬封顶。组织/项目跨连接预算和自动账单对账仍待实现。[契约与回退](docs/MODEL-SPENDING.md) · [桌面](docs/images/model-spending-desktop.png) · [手机](docs/images/model-spending-mobile.png)。
+
+最终代码 `22757e44b30dd4ca480e4f458f74e8dfd44f1bec` 的 [CI 41040063081](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41040063081) 三个 job 全部成功，210 项首轮通过：25 单元/配置、3 下载器、8 解析、118 数据库、3 原生执行器、40 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。模型、单价、金额声明和企业资料均为明确合成样例，不代表供应商账单或公司上线验收。
 
 ## 本地开发
 

@@ -62,3 +62,18 @@ This initial comparison verifies only the first-stage UI surface. Native engine 
 Main navigation, project selection, discussion tabs and knowledge tabs use a 180ms opacity/6px upward entrance, with subtle navigation color transitions. Animation reuses surface nodes and follows the existing navigation/editor lifecycle; a stable navigation key prevents animation during typing or background polling. No outgoing-page snapshots retain old project content. `prefers-reduced-motion` disables the entrance and navigation transitions, and changing that preference cancels an in-progress entrance. No animation dependency was added.
 
 Browser plugin not available; local Playwright Chromium at http://127.0.0.1:5173 verified desktop 1504×1045 and mobile 390×844. Fourteen checks passed: identity, nonblank content, no overlay, draft preservation, project/knowledge-tab transitions, rapid navigation, animation timing, quiet polling, mobile overflow, reduced motion for pages/tabs/navigation colors and console health. Screenshots were inspected locally and an interaction recording was captured, all outside the repo; [CI for a359a8f](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41016502773) passed all three jobs and 178 checks on the first attempt, including 37 UI scenarios. Safari/Firefox were not exercised.
+
+## 价格与预算 — 2026-10-30
+
+验证路径：设置 → 价格与预算 → 确认并保存单价/预算 → 实际合成 HTTP 请求 → 未知费用阻止后续请求 → 员工核对 → AI 保存确认方案。人工/AI 使用同一费用账户；页面区分估算、声明和未知，手机设置标签排为两列。
+
+Browser plugin not available，使用项目 Playwright Chromium；本机 http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。完整 40 项界面回归通过，增加控制台监听后的费用场景再次通过；未测 Safari/Firefox、真实供应商价格或公司账单。
+
+| 检查               | 结果                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| 页面身份、有效内容 | URL/标题及产品、费用配置区域通过                                                              |
+| 框架错误/控制台    | 无 Vite overlay、pageerror 或相关 error/warning；登录前 401 与用例刻意拒绝读取的 403 单独识别 |
+| 交互与实际结果     | 未知消耗拒绝后 HTTP 计数不增加，核对和 AI 保存读取实际账户版本；403 后旧明细清除              |
+| 视觉与响应布局     | 两种宽度截图已查看，无横向溢出，金额/表单和操作可访问                                         |
+
+[桌面截图](../images/model-spending-desktop.png) · [手机截图](../images/model-spending-mobile.png)。截图全部为合成资料；范围、费用精度和回退见 [模块契约](../MODEL-SPENDING.md)。
