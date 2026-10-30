@@ -262,5 +262,17 @@
     "scope": "Product model configuration and verification, native DSH minutes plus two actual tasks, native Hermes revision of the same artifact v1 to v2; nine readback checks and expected-content inspection; 32 runtime files scanned without full plaintext key",
     "limits": "Local demo identity and synthetic data, assignee text labels not enterprise UID mapping; no full business, embedding, multi-model, human-rubric, billing or production acceptance",
     "secrets": "Restricted local configuration and encrypted product profile only; no credentials or private reports committed"
+  },
+  "pageTransitions": {
+    "status": "local-rendered-and-full-ci-verified",
+    "implementation": "React layout effect and Web Animations API; no new dependency or extra surface/editor remount",
+    "durationMs": 180,
+    "scope": "Navigation/project/discussion tabs and knowledge tabs; stable key excludes background data updates",
+    "reducedMotion": "Skip animation and navigation color transitions; cancel in-progress entrance if user enables reduced motion",
+    "localEvidence": "14 Playwright Chromium checks at 1504x1045 and 390x844: page identity/content/overlay/console, navigation/project/tab/rapid switches, draft preservation, no polling animation, reduced motion and overflow; screenshots inspected and recording captured outside repo",
+    "evidenceCommit": "a359a8ff5b6df3381cff30a79a70fc2779dca4cf",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41016502773",
+    "evidenceScope": "178 first-attempt checks across three successful jobs, including 37 UI; no real provider credentials in CI; Safari/Firefox not exercised",
+    "mapping": "P08 C00/C04 A08 E08 subset"
   }
 }
