@@ -31,7 +31,7 @@
 
 “知识库 → 方法与模板”支持从已保存成果整理 SOP、模板、案例、量规和术语。人工与 AI 共用服务：先保存候选，由员工确认验证依据后发布；支持版本修订、撤回，以及在纪要、周报和成果修改中复用确切版本。AI 不能自行验证、发布为公司规则或改变员工确认的操作。工作区级发布需要管理员；企业会话来源的方法仍限来源项目。
 
-主体实现的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40999699396) 三个 job 成功、177 项首轮通过，含真实来源与受限容器；后续界面输入隔离及失权清理增量的 5 项定向 UI 通过，最终完整 CI 待核验；没有真实模型或公司验收结论。[方法资产、权限、回执与迁移](docs/METHODS.md) · [实际桌面界面](docs/images/methods-desktop.png) · [手机界面](docs/images/methods-mobile.png)。
+最终实现 `3015eaa` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41001696525) 三个 job 成功、178 项首轮通过，含 37 界面、双执行器、真实来源权限与受限容器重启/撤回；输入隔离和失权后的迟到响应清理也已覆盖；没有真实模型或公司验收结论。[方法资产、权限、回执与迁移](docs/METHODS.md) · [实际桌面界面](docs/images/methods-desktop.png) · [手机界面](docs/images/methods-mobile.png)。
 
 ## 本地开发
 
@@ -186,6 +186,7 @@ npm run test:e2e
 
 - [Agent 开发规则](AGENTS.md)
 - [当前实现与未验证项](docs/IMPLEMENTATION.md)
+- [首版交付核对表与剩余门槛](docs/DELIVERY-CHECKLIST.md)
 - [产品三层基线](docs/handoff-v1/AI-IM基线/README.md)
 - [技术与跨引擎契约](docs/handoff-v1/AI-IM基线/技术选型与模块契约-v1.0.md)
 - [产品命名决定](docs/NAMING.md)

@@ -238,16 +238,19 @@
     "evidenceScope": "165 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 87 database, 3 native runtime, 32 UI, 9 real source, 4 container; real Nextcloud DSH edit/Hermes no-op receipts and source revocation, restricted container Hermes edit/history survival after DB/API/Worker restart; synthetic sources/models only"
   },
   "methodAssets": {
-    "status": "native-source-container-ci-verified-ui-isolation-fix-pending",
+    "status": "native-engines-real-source-container-and-ui-ci-verified",
     "contract": "docs/METHODS.md",
     "migration": "db/migrations/017_method_assets.sql",
     "scope": "Artifact-version-derived candidates, employee verification, role-bound publication, content/governance revisions, withdrawal and pinned reuse in minutes/reports/artifact revisions; source-bound methods stay in origin project, no policy mutation",
     "localEvidence": "95 full database, 36 full UI, 19 unit, 3 native runtime, typecheck/build and frozen baseline; eight method database cases repeated after withdrawn-reference Run replay fix; first full UI 35 passed/one auth read interrupted by a concurrent local API edit, then 36 clean after code stabilized",
     "assetIndex": "Published only, canonical directory/cache binding and version checks before embedding/return; withdrawal invalidates vectors and rejects in-flight business writes; selected method usage records context preparation plus actual Run state, not proof of model success",
     "mapping": "P04/P05/P06/P07/P08 C02/C04/C06/C07 A06/A07/A08/A09/A10 E01/E02/E04/E05/E06/E07/E09/E10 subsets",
-    "evidenceCommit": "5ef6be012caa24cb73d14b6a55180a4ae3a55461",
-    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40999699396",
-    "evidenceScope": "177 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 95 database, 3 native runtime, 36 UI, 9 real source, 4 container; real source DSH generation/Hermes reuse and revocation; restricted container DSH create/publish/restart/Hermes withdrawal; synthetic sources/models only",
-    "subsequentFix": "Separate editing/reuse instructions and clear prior-object intent/target; scoped sequenced lists cannot restore private rows after denied reads; five targeted UI and web typecheck passed; final 37 UI and full CI pending"
+    "evidenceCommit": "3015eaa475b93141c1d966b4b44da8ef6f73721c",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41001696525",
+    "evidenceScope": "178 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 95 database, 3 native runtime, 37 UI, 9 real source, 4 container; source DSH generation/Hermes reuse/revocation; restricted container DSH creation/publication/restart/Hermes withdrawal; instruction isolation and denied-read/delayed-list guard; synthetic sources/models only",
+    "subsequentFix": "Separate editing/reuse instructions and clear prior-object intent/target; scoped sequenced lists cannot restore private rows after denied reads. Five targeted UI and web typecheck passed locally; final full 37 UI and complete CI passed first attempt.",
+    "previousEvidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40999699396",
+    "previousEvidenceCommit": "5ef6be012caa24cb73d14b6a55180a4ae3a55461",
+    "previousEvidenceScope": "177 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 95 database, 3 native runtime, 36 UI, 9 real source, 4 container; real source DSH generation/Hermes reuse and revocation; restricted container DSH create/publish/restart/Hermes withdrawal; synthetic sources/models only"
   }
 }
