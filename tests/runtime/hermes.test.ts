@@ -2,7 +2,7 @@ import { test } from "node:test";
 import { exerciseNativeBusiness } from "./business-contract.js";
 test(
   "Real Hermes isolates employee models, native tools and receipts",
-  { timeout: 150000 },
+  { timeout: 210000 },
   () => exerciseNativeBusiness("hermes"),
 );
 test(

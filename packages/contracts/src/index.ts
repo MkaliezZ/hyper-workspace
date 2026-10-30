@@ -41,12 +41,52 @@ export const Workflow = z.enum([
   "configure_follow_up",
   "configure_policy",
   "usage_report",
+  "manage_spending",
   "chat",
   "draft_reply",
   "read_file",
   "revise_file_reading",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
+export const MoneyAmount = z
+  .string()
+  .regex(/^(0|[1-9]\d{0,8})(\.\d{1,6})?$/, "请输入最多六位小数的非负金额。");
+export const ExactMoneyAmount = z
+  .string()
+  .regex(/^(0|[1-9]\d{0,8})(\.\d{1,12})?$/, "核对金额最多保留十二位小数。");
+export const ModelSpendingPlan = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("configure"),
+      modelProfileId: z.uuid(),
+      expectedRevision: z.number().int().min(0),
+      currency: z.enum(["CNY", "USD"]),
+      inputPerMillion: MoneyAmount,
+      outputPerMillion: MoneyAmount,
+      cacheReadPerMillion: MoneyAmount,
+      cacheWritePerMillion: MoneyAmount,
+      dailyLimit: MoneyAmount.nullable(),
+      requestReservation: MoneyAmount,
+      source: z.string().trim().min(1).max(1000),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("reconcile"),
+      requestId: z.uuid(),
+      expectedRevision: z.number().int().min(0),
+      currency: z.enum(["CNY", "USD"]),
+      amount: ExactMoneyAmount,
+      evidence: z.string().trim().min(1).max(2000),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+]);
+export type ModelSpendingPlan = z.infer<typeof ModelSpendingPlan>;
+export const ModelSpendingInput = z
+  .object({ plan: ModelSpendingPlan, idempotencyKey: z.uuid() })
+  .strict();
 export const ExecutionRules = z
   .object({
     maxContextBytes: z.number().int().min(1024).max(100000).optional(),
@@ -225,6 +265,7 @@ export const RunInput = z
     methodPlan: MethodPlan.optional(),
     methodRefs: z.array(MethodReference).max(3).optional(),
     policyPlan: ExecutionPolicyPlan.optional(),
+    spendingPlan: ModelSpendingPlan.optional(),
     taskRules: ExecutionRules.omit({ dailyRuns: true }).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
@@ -354,6 +395,7 @@ export interface PlannedAction {
     | "method.manage"
     | "policy.configure"
     | "usage.report"
+    | "spending.manage"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -405,6 +447,8 @@ export function toolsForWorkflow(
       return ["policy.configure"];
     case "usage_report":
       return ["usage.report"];
+    case "manage_spending":
+      return ["spending.manage"];
     case "chat":
       return [];
     case "draft_reply":

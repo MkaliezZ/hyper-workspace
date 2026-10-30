@@ -45,6 +45,14 @@ test("Real stdio transport handles responses, errors and bounded timeouts withou
     300,
   );
   try {
+    const ready = rpc.waitForNotification(
+      "fixture.ready",
+      () => true,
+      new AbortController().signal,
+      5000,
+    );
+    rpc.start();
+    await ready;
     assert.deepEqual(await rpc.request("echo", { value: 42 }), {
       method: "echo",
       params: { value: 42 },

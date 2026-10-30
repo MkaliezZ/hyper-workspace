@@ -105,7 +105,10 @@ test("Usage shows actual provider counters and unknowns, supports private AI rea
     expect(actual.result.receipts[0].summary.incomplete).toBeGreaterThanOrEqual(
       1,
     );
-    expect(actual.result.receipts[0].costStatus).toBe("not-configured");
+    expect(["not-configured", "estimates-and-declarations"]).toContain(
+      actual.result.receipts[0].costStatus,
+    );
+    expect(Array.isArray(actual.result.receipts[0].costs)).toBeTruthy();
     await page.screenshot({
       path: testInfo.outputPath("model-usage-desktop.png"),
       fullPage: false,

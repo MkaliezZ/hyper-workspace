@@ -13,6 +13,7 @@ import { ArtifactReviewService } from "./artifact-reviews.js";
 import { MethodsService } from "./methods.js";
 import { ExecutionPolicyService } from "./execution-policy.js";
 import { ModelUsageService } from "./model-usage.js";
+import { ModelSpendingService } from "./model-spending.js";
 export async function assertRunScope(
   service: WorkspaceService,
   s: Subject,
@@ -97,12 +98,36 @@ export async function loadRunContext(
     };
   }
   const conversation = await service.conversation(subject, run.conversation_id);
+  if (run.workflow === "manage_spending") {
+    const prepared = await new ModelSpendingService(service.db).prepare(
+      subject,
+      run.spending_plan,
+    );
+    const { source, evidence, ...safePlan } = prepared.plan as any;
+    return {
+      context:
+        "Host-bound model spending plan. Propose exactly one spending.manage with empty args. Scope, currency, prices, reservation, budget and declared reconciliation amount were explicitly chosen by the employee and must not change. Evidence notes remain in the host, not model context. Prices/amounts are employee declarations, not verified invoices. No discussion is included.\n" +
+        JSON.stringify({ profileId: prepared.profileId, plan: safePlan }),
+      sourceIds: [],
+      contextRefs: [
+        "model-spending:" +
+          prepared.profileId +
+          "@" +
+          prepared.plan.expectedRevision,
+      ],
+      live: true,
+    };
+  }
   if (run.workflow === "usage_report") {
     const view = await new ModelUsageService(service.db).view(subject);
     return {
       context:
         "Host-bound personal model usage query. Propose exactly one usage.report with empty args. The host reads the authenticated employee's current ledger. Missing usage is unknown, never zero. No costs or invoices are configured. Do not select actors, periods, profiles or recipients.\n" +
-        JSON.stringify({ summary: view.summary, note: view.note }),
+        JSON.stringify({
+          summary: view.summary,
+          costs: view.costs,
+          note: view.note,
+        }),
       sourceIds: [],
       contextRefs: ["personal-model-usage:today-UTC"],
       live: true,

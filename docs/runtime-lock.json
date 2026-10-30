@@ -294,13 +294,26 @@
     "evidenceScope": "188 first-attempt checks across three successful jobs; includes real Nextcloud and restricted container deployment; no full C07 or formal E01-E10 acceptance"
   },
   "modelUsage": {
-    "status": "local-fully-verified-ci-pending",
+    "status": "full-ci-verified",
     "mapping": "P04/P07/P08 C02/C05/C07 A10 E07/E09/E10 subset",
     "implementation": "Per-Run loopback model gateway, scoped ephemeral child credential, original provider credential kept in host; durable request attempts, provider JSON/SSE counters and atomic usage event settlement; direct verification/embedding covered",
     "scope": "Actor-owned current-day UTC summary and last 30 days/latest 100 requests; manual UI and host-grounded private AI usage.report",
     "unknowns": "Missing, truncated, invalid, rejected and unsettled requests never fabricate zero usage/cost; input/cache/reasoning counters do not double-count",
     "realProviderEvidence": "Local configured deepseek-flash: one DSH and one Hermes usage_report Run succeeded, each one completed provider request with reported input/output and settled ledger; synthetic project/own metadata only, private reports not committed",
     "localEvidence": "22 unit/configuration, all 110 database cases (6 usage cases), 3 native runtime cases and all 39 stable Chromium UI cases passed; desktop/mobile screenshots inspected; first full UI 38 pass/1 interruption during development-server restart preserved, stable rerun 39 pass",
-    "limits": "No price/currency/amount budget, invoice reconciliation, organization financial view, real embedding quality, Safari/Firefox or full E01-E10 claim"
+    "limits": "This original usage increment had no prices or amount budget; subsequent per-connection spending increment recorded separately. No supplier invoice verification, organization financial view, real embedding quality, Safari/Firefox or full E01-E10 claim",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41033005171",
+    "evidenceCommit": "bb2fde8422f732494719b609979bf010aa5c44a8",
+    "evidenceScope": "198 first-attempt checks across three successful jobs: 22 unit, 3 downloader, 8 extraction, 110 database, 3 native runtime, 39 UI, 9 real source, 4 container; typecheck/build, audits and frozen package; synthetic sources/models only"
+  },
+  "modelSpending": {
+    "status": "local-fully-verified-ci-pending",
+    "contract": "docs/MODEL-SPENDING.md",
+    "migration": "db/migrations/020_model_spending.sql",
+    "mapping": "P04/P07/P08 C05/C07 A01/A10 E04/E07/E09/E10 subsets",
+    "scope": "Employee-declared immutable per-connection CNY/USD rates, exact integer price estimates, UTC daily admission and concurrent request reservation; explicit employee amount reconciliation with CAS, idempotency and private audit; manual and host-bound AI use same service",
+    "authority": "Personal owner or current workspace admin for shared connections; current membership checked; ordinary members cannot access shared request history or audit notes; evidence/source text excluded from model context",
+    "localEvidence": "25 unit/config, 118 database, 3 expanded native runtime and all 40 Chromium UI cases passed; type/build and desktop/mobile screenshots; synthetic rates, HTTP endpoints and declarations only",
+    "limits": "Reservation can be exceeded by an already sent request; unknown/over-reservation pauses later calls. No provider billing hard cap, real supplier invoice verification, organization/project cross-connection budget, real prices or full enterprise acceptance"
   }
 }

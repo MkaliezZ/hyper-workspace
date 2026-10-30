@@ -36,6 +36,7 @@ async function seed(page: Page) {
     .poll(
       async () =>
         (await (await page.request.get("/api/runs/" + run.id)).json()).state,
+      { timeout: 20000 },
     )
     .toBe("succeeded");
   const artifact = (

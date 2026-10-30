@@ -23,6 +23,7 @@ import { MethodsService } from "./methods.js";
 import { ModelService } from "./models.js";
 import { RunModelGateway } from "./model-gateway.js";
 import { ModelUsageService } from "./model-usage.js";
+import { ModelSpendingService, SpendLimitError } from "./model-spending.js";
 import {
   ExecutionPolicyService,
   ExecutionLimitError,
@@ -276,6 +277,7 @@ export class RunProcessor {
               await assertRunScope(this.service, subject, run);
               return executionPolicy.check(db.pool, subject, run, contextBytes);
             },
+            (error) => abort.abort(error),
           )).start()
         : undefined;
       const result = await adapter.execute({
@@ -317,31 +319,33 @@ export class RunProcessor {
         run.workflow === "discussion_to_minutes" ||
         run.workflow === "project_report"
           ? ["artifact.create", "project.report"]
-          : run.workflow === "usage_report"
-            ? ["usage.report"]
-            : run.workflow === "configure_policy"
-              ? ["policy.configure"]
-              : run.workflow === "manage_method"
-                ? [
-                    ["create", "revise"].includes(run.method_plan.operation)
-                      ? "method.write"
-                      : "method.manage",
-                  ]
-                : run.workflow === "revise_artifact"
-                  ? ["artifact.revise"]
-                  : run.workflow === "revise_task"
-                    ? ["task.update"]
-                    : run.workflow === "review_artifact"
-                      ? ["artifact.review"]
-                      : run.workflow === "follow_up"
-                        ? ["follow_up.check"]
-                        : run.workflow === "configure_follow_up"
-                          ? ["follow_up.configure"]
-                          : run.workflow === "draft_reply"
-                            ? ["communication.draft"]
-                            : isFileWorkflow(run.workflow)
-                              ? ["file.reading.save"]
-                              : [];
+          : run.workflow === "manage_spending"
+            ? ["spending.manage"]
+            : run.workflow === "usage_report"
+              ? ["usage.report"]
+              : run.workflow === "configure_policy"
+                ? ["policy.configure"]
+                : run.workflow === "manage_method"
+                  ? [
+                      ["create", "revise"].includes(run.method_plan.operation)
+                        ? "method.write"
+                        : "method.manage",
+                    ]
+                  : run.workflow === "revise_artifact"
+                    ? ["artifact.revise"]
+                    : run.workflow === "revise_task"
+                      ? ["task.update"]
+                      : run.workflow === "review_artifact"
+                        ? ["artifact.review"]
+                        : run.workflow === "follow_up"
+                          ? ["follow_up.check"]
+                          : run.workflow === "configure_follow_up"
+                            ? ["follow_up.configure"]
+                            : run.workflow === "draft_reply"
+                              ? ["communication.draft"]
+                              : isFileWorkflow(run.workflow)
+                                ? ["file.reading.save"]
+                                : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -355,6 +359,8 @@ export class RunProcessor {
         throw new Error("一次执行规则配置只接受一个明确操作。");
       if (run.workflow === "usage_report" && result.actions.length !== 1)
         throw new Error("一次用量查询只接受一个实际回读操作。");
+      if (run.workflow === "manage_spending" && result.actions.length !== 1)
+        throw new Error("一次费用管理只接受一个员工确认的操作。");
       if (run.workflow === "revise_task" && result.actions.length !== 1)
         throw new Error("一次待办修改必须只对应一个明确版本。");
       if (run.workflow === "review_artifact" && result.actions.length !== 1)
@@ -423,6 +429,7 @@ export class RunProcessor {
           run.workflow !== "configure_follow_up" &&
           run.workflow !== "configure_policy" &&
           run.workflow !== "usage_report" &&
+          run.workflow !== "manage_spending" &&
           run.workflow !== "review_artifact" &&
           run.workflow !== "revise_task" &&
           run.workflow !== "manage_method" &&
@@ -453,16 +460,18 @@ export class RunProcessor {
                       : run.workflow === "configure_policy"
                         ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
                         : run.workflow === "usage_report"
-                          ? "已回读本人的模型用量记录；不完整用量与费用仍明确标记为未知。"
-                          : run.workflow === "review_artifact"
-                            ? "已记录员工对指定成果版本的验收决定。"
-                            : run.workflow === "manage_method"
-                              ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
-                              : run.workflow === "revise_task"
-                                ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                                : isFileWorkflow(run.workflow)
-                                  ? "个人文件解读已保存。"
-                                  : result.text,
+                          ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
+                          : run.workflow === "manage_spending"
+                            ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
+                            : run.workflow === "review_artifact"
+                              ? "已记录员工对指定成果版本的验收决定。"
+                              : run.workflow === "manage_method"
+                                ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                                : run.workflow === "revise_task"
+                                  ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                                  : isFileWorkflow(run.workflow)
+                                    ? "个人文件解读已保存。"
+                                    : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -486,14 +495,16 @@ export class RunProcessor {
           [runId],
         );
         const state = actions.rowCount ? "recovery_required" : "failed";
+        const failure = modelGateway?.denial ?? error;
         const message = isFileWorkflow(run.workflow)
-          ? error instanceof ReadingVersionConflict ||
-            error instanceof ReadingInputLimit ||
-            error instanceof ExecutionLimitError
-            ? error.message
+          ? failure instanceof ReadingVersionConflict ||
+            failure instanceof ReadingInputLimit ||
+            failure instanceof ExecutionLimitError ||
+            failure instanceof SpendLimitError
+            ? failure.message
             : "文件阅读未完成，请检查来源、模型或重新发起。"
-          : error instanceof Error
-            ? error.message
+          : failure instanceof Error
+            ? failure.message
             : "执行失败。";
         await c.query(
           "UPDATE cw_runs SET state=$2,error=$3,updated_at=now(),lease_expires_at=NULL WHERE id=$1",
@@ -546,6 +557,15 @@ export class RunProcessor {
       // Match scheduled checks: target schedule before Run/member locks.
       if (configuration)
         await FollowUpScheduleService.lockTarget(c, s, configuration);
+      if (run.workflow === "manage_spending")
+        await ModelSpendingService.lock(
+          c,
+          await new ModelSpendingService(this.service.db).target(
+            c,
+            s,
+            run.spending_plan,
+          ),
+        );
       if (run.method_refs?.length || run.workflow === "manage_method") {
         const scope = (
           await c.query(
@@ -631,12 +651,22 @@ export class RunProcessor {
       if (!conv && !isFileWorkflow(run.workflow))
         throw new Error("Conversation unavailable.");
       let receipt: Record<string, unknown>;
-      if (action.tool === "usage.report") {
+      if (action.tool === "spending.manage") {
+        z.object({}).strict().parse(action.args);
+        receipt = await new ModelSpendingService(this.service.db).apply(
+          c,
+          s,
+          run.spending_plan,
+          "spending:" + run.id,
+          run.id,
+        );
+      } else if (action.tool === "usage.report") {
         z.object({}).strict().parse(action.args);
         const usage = await new ModelUsageService(this.service.db).view(s);
         receipt = {
           tool: "usage.report",
           summary: usage.summary,
+          costs: usage.costs,
           costStatus: usage.costStatus,
           note: usage.note,
         };

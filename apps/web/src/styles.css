@@ -1027,6 +1027,28 @@ p {
   flex-basis: 100%;
   color: #63718a;
 }
+.spending-select {
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+  margin: 18px 0;
+  font-size: 13px;
+  color: #63718a;
+}
+.spending-select select {
+  width: 100%;
+}
+@media (max-width: 600px) {
+  .settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 8px;
+    padding: 0 12px;
+  }
+  .settings-tabs button {
+    padding: 0 8px;
+  }
+}
 .settings-section {
   margin-top: 38px;
 }

@@ -3,6 +3,7 @@ import type { Subject } from "@hyper/contracts";
 import type { Database } from "../db/database.js";
 import { assertMember } from "./security.js";
 import { appendEvent } from "./workspace.js";
+import { ModelSpendingService, units } from "./model-spending.js";
 export interface ProviderUsage {
   status: "unknown" | "partial" | "reported" | "invalid";
   inputTokens: number | null;
@@ -104,6 +105,7 @@ export class ModelAccounting {
     const id = randomUUID(),
       s = this.subject;
     await this.db.tx(async (c) => {
+      await ModelSpendingService.lock(c, this.profile.id);
       if (
         !(
           await c.query(
@@ -146,6 +148,7 @@ export class ModelAccounting {
           this.profile.provider,
         ],
       );
+      await new ModelSpendingService(this.db).admit(c, this.profile.id, id);
     });
     return id;
   }
@@ -156,9 +159,10 @@ export class ModelAccounting {
     httpStatus?: number,
   ) {
     return this.db.tx(async (c) => {
+      await ModelSpendingService.lock(c, this.profile.id);
       const r = await c.query(
         `UPDATE cw_model_requests SET transport=$2,usage_status=$3,input_tokens=$4,output_tokens=$5,cache_read_tokens=$6,cache_write_tokens=$7,reasoning_tokens=$8,http_status=$9,settled_at=clock_timestamp()
-      WHERE id=$1 AND workspace_id=$10 AND actor_id=$11 AND settled_at IS NULL RETURNING id,run_id`,
+      WHERE id=$1 AND workspace_id=$10 AND actor_id=$11 AND settled_at IS NULL RETURNING *`,
         [
           id,
           transport,
@@ -173,6 +177,21 @@ export class ModelAccounting {
           this.subject.id,
         ],
       );
+      if (r.rowCount)
+        await new ModelSpendingService(this.db).settle(
+          c,
+          r.rows[0],
+          usage,
+          transport,
+        );
+      const charge = r.rowCount
+        ? (
+            await c.query(
+              "SELECT price_version,cost_currency,cost_status,estimated_cost_picos,declared_cost_picos,reserved_picos,charge_review_required FROM cw_model_requests WHERE id=$1",
+              [id],
+            )
+          ).rows[0]
+        : undefined;
       if (r.rows[0]?.run_id)
         await appendEvent(c, r.rows[0].run_id, "usage.updated", {
           kind: "provider-response",
@@ -180,6 +199,23 @@ export class ModelAccounting {
           transport,
           httpStatus: httpStatus ?? null,
           usage,
+          charge: charge
+            ? {
+                priceVersion: charge.price_version,
+                currency: charge.cost_currency,
+                status: charge.cost_status,
+                estimate:
+                  charge.estimated_cost_picos === null
+                    ? null
+                    : units(charge.estimated_cost_picos),
+                declared:
+                  charge.declared_cost_picos === null
+                    ? null
+                    : units(charge.declared_cost_picos),
+                reserved: units(charge.reserved_picos),
+                reviewRequired: charge.charge_review_required,
+              }
+            : undefined,
         });
       return !!r.rowCount;
     });
@@ -191,11 +227,20 @@ export class ModelUsageService {
     await assertMember(this.db, s);
     const rows = (
       await this.db.pool.query(
-        `SELECT id,model_profile_id AS "modelProfileId",run_id AS "runId",purpose,model,provider,transport,usage_status AS "usageStatus",input_tokens::float8 AS "inputTokens",output_tokens::float8 AS "outputTokens",cache_read_tokens::float8 AS "cacheReadTokens",cache_write_tokens::float8 AS "cacheWriteTokens",reasoning_tokens::float8 AS "reasoningTokens",http_status AS "httpStatus",started_at AS "startedAt",settled_at AS "settledAt"
+        `SELECT id,model_profile_id AS "modelProfileId",run_id AS "runId",purpose,model,provider,transport,usage_status AS "usageStatus",input_tokens::float8 AS "inputTokens",output_tokens::float8 AS "outputTokens",cache_read_tokens::float8 AS "cacheReadTokens",cache_write_tokens::float8 AS "cacheWriteTokens",reasoning_tokens::float8 AS "reasoningTokens",http_status AS "httpStatus",started_at AS "startedAt",settled_at AS "settledAt",price_version AS "priceVersion",cost_currency AS "costCurrency",cost_status AS "costStatus",estimated_cost_picos,declared_cost_picos
       FROM cw_model_requests WHERE workspace_id=$1 AND actor_id=$2 AND started_at>=now()-interval '30 days' ORDER BY started_at DESC,id LIMIT 100`,
         [s.workspaceId, s.id],
       )
-    ).rows;
+    ).rows.map((row) => {
+      const { estimated_cost_picos, declared_cost_picos, ...safe } = row;
+      return {
+        ...safe,
+        estimatedCost:
+          estimated_cost_picos === null ? null : units(estimated_cost_picos),
+        declaredCost:
+          declared_cost_picos === null ? null : units(declared_cost_picos),
+      };
+    });
     const summary = (
       await this.db.pool.query(
         `SELECT count(*)::int AS requests,count(*) FILTER(WHERE usage_status='reported')::int AS reported,count(*) FILTER(WHERE usage_status<>'reported')::int AS incomplete,
@@ -204,14 +249,26 @@ export class ModelUsageService {
         [s.workspaceId, s.id],
       )
     ).rows[0];
+    const costs = (
+      await this.db.pool.query(
+        `SELECT cost_currency AS currency,sum(COALESCE(declared_cost_picos,estimated_cost_picos))::text AS amount,count(*) FILTER(WHERE declared_cost_picos IS NULL AND estimated_cost_picos IS NULL)::int AS unknown FROM cw_model_requests WHERE workspace_id=$1 AND actor_id=$2 AND cost_currency IS NOT NULL AND started_at >= (date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') GROUP BY cost_currency ORDER BY cost_currency`,
+        [s.workspaceId, s.id],
+      )
+    ).rows.map((row) => ({
+      ...row,
+      amount: row.amount === null ? null : units(row.amount),
+    }));
     await assertMember(this.db, s);
     return {
       period: "30 days, latest 100 requests",
       dayBoundary: "UTC",
       summary,
       rows,
-      costStatus: "not-configured",
-      note: "仅汇总供应商已返回的数字；有未知或部分用量时，合计不是完整消耗。未接入价格与账单，不代表零费用。",
+      costs,
+      costStatus: costs.length
+        ? "estimates-and-declarations"
+        : "not-configured",
+      note: "仅汇总供应商已返回的数字；不完整用量和未定价费用保持未知。价格估算与员工核对金额均不代表系统已验证供应商账单；不同币种不混算。",
     };
   }
 }

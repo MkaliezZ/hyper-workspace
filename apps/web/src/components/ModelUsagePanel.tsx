@@ -19,8 +19,14 @@ interface UsageView {
     inputTokens: number | null;
     outputTokens: number | null;
     startedAt: string;
+    priceVersion?: number;
+    costStatus?: string;
+    costCurrency?: string;
+    estimatedCost?: string | null;
+    declaredCost?: string | null;
   }[];
   note: string;
+  costs?: { currency: string; amount: string | null; unknown: number }[];
 }
 const number = (v: number | null) => (v === null ? "未知" : v.toLocaleString());
 const status: Record<string, string> = {
@@ -157,6 +163,12 @@ export function ModelUsagePanel({
             已返回输出 token：{number(data.summary.reportedOutputTokens)}
           </div>
           <p className="muted">{data.note}</p>
+          {data.costs?.map((c) => (
+            <p className="muted" key={c.currency}>
+              今日已估算/声明：{c.amount ?? "未知"} {c.currency} · 费用未知请求{" "}
+              {c.unknown}。未定价记录另保留为未知。
+            </p>
+          ))}
           <form
             className="settings-form"
             onSubmit={(e) => {
@@ -225,6 +237,14 @@ export function ModelUsagePanel({
               <span>
                 输入 {number(row.inputTokens)} · 输出 {number(row.outputTokens)}
               </span>
+              <small>
+                费用：
+                {row.declaredCost != null
+                  ? `员工核对声明 ${row.declaredCost} ${row.costCurrency}`
+                  : row.estimatedCost != null
+                    ? `${row.costStatus === "upper_estimate" ? "保守上界估算" : "价格估算"} ${row.estimatedCost} ${row.costCurrency}（价格 v${row.priceVersion}）`
+                    : "未定价或未知"}
+              </small>
             </article>
           ))}
           {!data.rows.length ? (

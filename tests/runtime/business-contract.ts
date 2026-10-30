@@ -11,6 +11,7 @@ import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
 import type { Subject } from "@hyper/contracts";
 import { FollowUpScheduleService } from "../../apps/api/src/core/follow-up-schedules.js";
 import { MethodsService } from "../../apps/api/src/core/methods.js";
+import { ModelSpendingService } from "../../apps/api/src/core/model-spending.js";
 import type { MethodPlan } from "@hyper/contracts";
 
 type NativeEngine = "dsh" | "hermes";
@@ -100,6 +101,14 @@ export function modelFixture(
     const usageReport = JSON.stringify(body.messages).includes(
       "Host-bound personal model usage query.",
     );
+    const spending = JSON.stringify(body.messages).includes(
+      "Host-bound model spending plan.",
+    );
+    if (
+      spending &&
+      JSON.stringify(body.messages).includes("native-private-spending-evidence")
+    )
+      violations.push("Spending evidence entered the model context");
     if (configurePolicy && cap !== 128)
       violations.push(
         "Execution policy token bound was not passed to the native runtime",
@@ -133,72 +142,74 @@ export function modelFixture(
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        usageReport
-          ? { tool: "usage.report", args: {} }
-          : configurePolicy
-            ? { tool: "policy.configure", args: {} }
-            : methodDraft
-              ? {
-                  tool: "method.write",
-                  args: {
-                    title: "Protocol fixture method candidate",
-                    kind: "sop",
-                    content:
-                      "protocol-fixture-method-guidance: check evidence before output.",
-                  },
-                }
-              : methodManagement
-                ? { tool: "method.manage", args: {} }
-                : taskRevision
-                  ? {
-                      tool: "task.update",
-                      args: {
-                        title: "protocol-fixture-task-update",
-                        status: "done",
-                      },
-                    }
-                  : artifactReview
-                    ? { tool: "artifact.review", args: {} }
-                    : configureFollowUp
-                      ? { tool: "follow_up.configure", args: {} }
-                      : followUp
-                        ? { tool: "follow_up.check", args: {} }
-                        : fileReading
-                          ? {
-                              tool: "file.reading.save",
-                              args: {
-                                content:
-                                  (fileReadingRevision
-                                    ? "private-native-file-revision-"
-                                    : "private-native-file-reading-") +
-                                  employee,
-                              },
-                            }
-                          : draftReply
+        spending
+          ? { tool: "spending.manage", args: {} }
+          : usageReport
+            ? { tool: "usage.report", args: {} }
+            : configurePolicy
+              ? { tool: "policy.configure", args: {} }
+              : methodDraft
+                ? {
+                    tool: "method.write",
+                    args: {
+                      title: "Protocol fixture method candidate",
+                      kind: "sop",
+                      content:
+                        "protocol-fixture-method-guidance: check evidence before output.",
+                    },
+                  }
+                : methodManagement
+                  ? { tool: "method.manage", args: {} }
+                  : taskRevision
+                    ? {
+                        tool: "task.update",
+                        args: {
+                          title: "protocol-fixture-task-update",
+                          status: "done",
+                        },
+                      }
+                    : artifactReview
+                      ? { tool: "artifact.review", args: {} }
+                      : configureFollowUp
+                        ? { tool: "follow_up.configure", args: {} }
+                        : followUp
+                          ? { tool: "follow_up.check", args: {} }
+                          : fileReading
                             ? {
-                                tool: "communication.draft",
+                                tool: "file.reading.save",
                                 args: {
                                   content:
-                                    "private-native-reply-draft-" + employee,
+                                    (fileReadingRevision
+                                      ? "private-native-file-revision-"
+                                      : "private-native-file-reading-") +
+                                    employee,
                                 },
                               }
-                            : revision
+                            : draftReply
                               ? {
-                                  tool: "artifact.revise",
+                                  tool: "communication.draft",
                                   args: {
                                     content:
-                                      "protocol-fixture-revision " + revision,
+                                      "private-native-reply-draft-" + employee,
                                   },
                                 }
-                              : {
-                                  tool: "artifact.create",
-                                  args: {
-                                    title: "Native runtime test " + employee,
-                                    content:
-                                      "protocol-fixture-model-result " +
-                                      employee,
+                              : revision
+                                ? {
+                                    tool: "artifact.revise",
+                                    args: {
+                                      content:
+                                        "protocol-fixture-revision " + revision,
+                                    },
+                                  }
+                                : {
+                                    tool: "artifact.create",
+                                    args: {
+                                      title: "Native runtime test " + employee,
+                                      content:
+                                        "protocol-fixture-model-result " +
+                                        employee,
+                                    },
                                   },
-                                },
       ],
     });
     if (body.stream) {
@@ -305,6 +316,24 @@ async function seedEmployee(
     purpose: "chat",
     scope: "personal",
   });
+  await new ModelSpendingService(db).save(
+    subject,
+    {
+      operation: "configure",
+      modelProfileId: model.id,
+      expectedRevision: 0,
+      currency: "CNY",
+      inputPerMillion: "1",
+      outputPerMillion: "1",
+      cacheReadPerMillion: "1",
+      cacheWritePerMillion: "1",
+      dailyLimit: null,
+      requestReservation: "0",
+      source: "Synthetic protocol price v1; not supplier prices",
+      confirmed: true,
+    },
+    randomUUID(),
+  );
   const run = await service.startRun(subject, {
     conversationId: conversation,
     engine,
@@ -855,6 +884,93 @@ export async function exerciseNativeBusiness(
     assert.equal(usageResult.state, "succeeded", usageResult.error);
     assert.ok(usageResult.result.receipts[0].summary.requests > 0);
     assert.equal(usageResult.result.receipts[0].summary.incomplete, 0);
+    const spendingPlan = {
+      operation: "configure" as const,
+      modelProfileId: employee.modelId,
+      expectedRevision: 1,
+      currency: "CNY" as const,
+      inputPerMillion: "1",
+      outputPerMillion: "1",
+      cacheReadPerMillion: "1",
+      cacheWritePerMillion: "1",
+      dailyLimit: null,
+      requestReservation: "0",
+      source: "native-private-spending-evidence",
+      confirmed: true as const,
+    };
+    const financeRun = await service.startRun(employee.subject, {
+      conversationId: employee.conversation,
+      engine,
+      workflow: "manage_spending",
+      instruction: "Only apply the exact confirmed synthetic spending plan.",
+      modelProfileId: employee.modelId,
+      spendingPlan,
+      idempotencyKey: randomUUID(),
+    });
+    allRuns.push(financeRun.id);
+    await processor.process(financeRun.id);
+    const financeResult = await service.getRun(employee.subject, financeRun.id);
+    assert.equal(financeResult.state, "succeeded", financeResult.error);
+    assert.equal(financeResult.result.receipts[0].revision, 2);
+    assert.equal(financeResult.result.receipts[0].prices, "employee-declared");
+    const charged = (
+      await db.pool.query(
+        "SELECT id,charge_revision FROM cw_model_requests WHERE run_id=$1",
+        [financeRun.id],
+      )
+    ).rows[0];
+    const reconcileRun = await service.startRun(employee.subject, {
+      conversationId: employee.conversation,
+      engine,
+      workflow: "manage_spending",
+      instruction:
+        "Apply only this confirmed synthetic employee reconciliation.",
+      modelProfileId: employee.modelId,
+      spendingPlan: {
+        operation: "reconcile",
+        requestId: charged.id,
+        expectedRevision: charged.charge_revision,
+        currency: "CNY",
+        amount: "0.000016",
+        evidence: "native-private-spending-evidence",
+        confirmed: true,
+      },
+      idempotencyKey: randomUUID(),
+    });
+    allRuns.push(reconcileRun.id);
+    await processor.process(reconcileRun.id);
+    const reconciled = await service.getRun(employee.subject, reconcileRun.id);
+    assert.equal(reconciled.state, "succeeded", reconciled.error);
+    assert.equal(reconciled.result.receipts[0].amount, "0.000016");
+    assert.equal(
+      reconciled.result.receipts[0].evidenceType,
+      "employee-declared-not-provider-verified",
+    );
+    const finance = new ModelSpendingService(db);
+    await finance.save(
+      employee.subject,
+      {
+        ...spendingPlan,
+        expectedRevision: 2,
+        dailyLimit: "0",
+        requestReservation: "0.01",
+      },
+      randomUUID(),
+    );
+    const before = fixture.calls(),
+      blocked = await service.startRun(employee.subject, {
+        conversationId: employee.conversation,
+        engine,
+        workflow: "usage_report",
+        instruction: "Budget gate must reject this before upstream HTTP.",
+        modelProfileId: employee.modelId,
+        idempotencyKey: randomUUID(),
+      });
+    await processor.process(blocked.id);
+    const blockedResult = await service.getRun(employee.subject, blocked.id);
+    assert.equal(blockedResult.state, "failed");
+    assert.match(blockedResult.error, /预算/);
+    assert.equal(fixture.calls(), before);
     const requestRows = await db.pool.query(
       "SELECT run_id,usage_status,input_tokens,output_tokens FROM cw_model_requests WHERE run_id=ANY($1::uuid[])",
       [allRuns],

@@ -32,6 +32,7 @@ import { ArtifactReviewService } from "./artifact-reviews.js";
 import { createProjectTask, patchProjectTask } from "./tasks.js";
 import { MethodsService } from "./methods.js";
 import { ExecutionPolicyService } from "./execution-policy.js";
+import { ModelSpendingService, units } from "./model-spending.js";
 
 export class WorkspaceService {
   constructor(
@@ -540,6 +541,33 @@ export class WorkspaceService {
         input.methodRefs,
       );
     }
+    if (input.workflow === "manage_spending") {
+      if (!input.spendingPlan || input.artifactId)
+        throw new BadRequestException("请先指定明确的费用配置或核对方案。");
+      const prior = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (prior) {
+        if (
+          prior.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: prior.id, state: prior.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("manage_spending")
+      )
+        throw new BadRequestException("执行器未声明费用管理能力。");
+      await new ModelSpendingService(this.db).prepare(s, input.spendingPlan);
+    } else if (input.spendingPlan)
+      throw new BadRequestException("此工作类型不接受费用管理方案。");
     if (input.workflow === "configure_policy") {
       if (!input.policyPlan || input.artifactId)
         throw new BadRequestException("请明确指定执行规则与范围。");
@@ -690,7 +718,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -714,6 +742,7 @@ export class WorkspaceService {
         JSON.stringify(input.methodRefs ?? []),
         input.policyPlan ?? null,
         input.taskRules ?? {},
+        input.spendingPlan ?? null,
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };
@@ -756,7 +785,22 @@ export class WorkspaceService {
         [id, s.workspaceId, s.id],
       )
     ).rows[0];
-    r.rows[0].modelUsage = { ...usage, costStatus: "not-configured" };
+    const costs = (
+      await this.db.pool.query(
+        `SELECT cost_currency AS currency,sum(COALESCE(declared_cost_picos,estimated_cost_picos))::text AS amount,count(*) FILTER(WHERE declared_cost_picos IS NULL AND estimated_cost_picos IS NULL)::int AS unknown FROM cw_model_requests WHERE run_id=$1 AND workspace_id=$2 AND actor_id=$3 AND cost_currency IS NOT NULL GROUP BY cost_currency ORDER BY cost_currency`,
+        [id, s.workspaceId, s.id],
+      )
+    ).rows.map((row) => ({
+      ...row,
+      amount: row.amount === null ? null : units(row.amount),
+    }));
+    r.rows[0].modelUsage = {
+      ...usage,
+      costs,
+      costStatus: costs.length
+        ? "estimates-and-declarations"
+        : "not-configured",
+    };
     return r.rows[0];
   }
   async events(s: Subject, id: string, after = 0) {

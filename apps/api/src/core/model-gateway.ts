@@ -12,11 +12,17 @@ import {
   unknownUsage,
   type ProviderUsage,
 } from "./model-usage.js";
+import { SpendLimitError } from "./model-spending.js";
 
 /** Per-Run loopback gateway. The child receives only this short-lived capability, never the provider Key. */
 export class RunModelGateway {
+  denial?: SpendLimitError;
   private server = createServer((req, res) => {
-    const task = this.handle(req, res).catch(() => {
+    const task = this.handle(req, res).catch((error) => {
+      if (error instanceof SpendLimitError) {
+        this.denial = error;
+        this.onDenied?.(error);
+      }
       if (!res.headersSent) {
         res.writeHead(502, { "Content-Type": "application/json" });
         res.end('{"error":"Model gateway request failed"}');
@@ -33,6 +39,7 @@ export class RunModelGateway {
     private runId: string,
     private signal: AbortSignal,
     private authorize: () => Promise<{ maxOutputTokens: number }>,
+    private onDenied?: (error: SpendLimitError) => void,
   ) {}
   async start(): Promise<ModelConnection> {
     this.signal.throwIfAborted();

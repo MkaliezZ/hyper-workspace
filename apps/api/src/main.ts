@@ -38,6 +38,7 @@ import {
   ArtifactReviewInput,
   MethodActionInput,
   ExecutionPolicyInput,
+  ModelSpendingInput,
 } from "@hyper/contracts";
 import { Database, DEMO } from "./db/database.js";
 import { authenticate, issueSession } from "./core/security.js";
@@ -47,6 +48,7 @@ import { RunProcessor } from "./core/processor.js";
 import { engineRegistry } from "./engines/adapters.js";
 import { ModelService } from "./core/models.js";
 import { ModelUsageService } from "./core/model-usage.js";
+import { ModelSpendingService } from "./core/model-spending.js";
 import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
 import { ReplyDraftService } from "./core/reply-drafts.js";
@@ -590,6 +592,26 @@ class ApiController {
   }
   @Get("model-usage") async modelUsage(@Req() req: Request) {
     return new ModelUsageService(db).view(await subject(req));
+  }
+  @Get("model-spending") async modelSpending(
+    @Req() req: Request,
+    @Query("modelProfileId") profileId?: string,
+  ) {
+    return new ModelSpendingService(db).view(
+      await subject(req),
+      profileId ? uuid(profileId) : undefined,
+    );
+  }
+  @Post("model-spending") async saveModelSpending(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = ModelSpendingInput.parse(body);
+    return new ModelSpendingService(db).save(
+      await subject(req),
+      input.plan,
+      input.idempotencyKey,
+    );
   }
   @Post("models") async saveModel(@Req() req: Request, @Body() body: unknown) {
     return service.saveModel(await subject(req), ModelInput.parse(body));

@@ -1,5 +1,9 @@
 import { createInterface } from "node:readline";
 const lines = createInterface({ input: process.stdin });
+process.stdout.write(
+  JSON.stringify({ jsonrpc: "2.0", method: "fixture.ready", params: {} }) +
+    "\n",
+);
 for await (const line of lines) {
   const m = JSON.parse(line);
   if (m.method === "hang") continue;

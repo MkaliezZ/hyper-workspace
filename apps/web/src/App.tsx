@@ -28,6 +28,7 @@ import { artifactStatusLabel } from "@hyper/contracts";
 import { TaskEditor } from "./components/TaskEditor";
 import { ExecutionPolicyPanel } from "./components/ExecutionPolicyPanel";
 import { ModelUsagePanel } from "./components/ModelUsagePanel";
+import { ModelSpendingPanel } from "./components/ModelSpendingPanel";
 import { usePageTransition } from "./hooks/usePageTransition";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
@@ -595,7 +596,11 @@ export function App() {
         ) : null}
         {section === "settings" ? (
           <>
-            <div className="tabs" role="tablist" aria-label="设置分类">
+            <div
+              className="tabs settings-tabs"
+              role="tablist"
+              aria-label="设置分类"
+            >
               <button
                 role="tab"
                 aria-selected={settingsTab === "models"}
@@ -620,9 +625,26 @@ export function App() {
               >
                 模型用量
               </button>
+              <button
+                role="tab"
+                aria-selected={settingsTab === "spending"}
+                className={settingsTab === "spending" ? "active" : ""}
+                onClick={() => setSettingsTab("spending")}
+              >
+                价格与预算
+              </button>
             </div>
             {settingsTab === "models" ? (
               <ModelSettings view={view} busy={busy} act={act} />
+            ) : settingsTab === "spending" ? (
+              <ModelSpendingPanel
+                key={view.user.id + view.project.id}
+                view={view}
+                run={run}
+                onRun={(r) => {
+                  if (loadedProject.current === view.project.id) setRun(r);
+                }}
+              />
             ) : settingsTab === "usage" ? (
               <ModelUsagePanel
                 key={view.user.id + view.project.id}
