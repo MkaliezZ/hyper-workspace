@@ -55,6 +55,7 @@ export function MethodsPanel({
     [evidence, setEvidence] = useState(""),
     [scope, setScope] = useState<"project" | "workspace">("project"),
     [confirmed, setConfirmed] = useState(false);
+  const [reuseInstruction, setReuseInstruction] = useState("");
   const [instruction, setInstruction] = useState(""),
     [engine, setEngine] = useState("dsh"),
     [modelId, setModelId] = useState(""),
@@ -112,6 +113,7 @@ export function MethodsPanel({
           setSource(undefined);
           setEvidence("");
           setInstruction("");
+          setReuseInstruction("");
           setConfirmed(false);
           attempt.current = undefined;
           generation.current++;
@@ -149,12 +151,17 @@ export function MethodsPanel({
           setDraft(empty);
           setEvidence("");
           setInstruction("");
+          setReuseInstruction("");
           setConfirmed(false);
         }
       }
     }
   }
   function choose(id: string) {
+    setInstruction("");
+    setReuseInstruction("");
+    setReuseWorkflow("project_report");
+    setReuseArtifact("");
     const token = ++generation.current;
     setSelected(id);
     setDetail(undefined);
@@ -331,7 +338,7 @@ export function MethodsPanel({
       busy ||
       pending ||
       incompatible ||
-      !instruction.trim()
+      !reuseInstruction.trim()
     )
       return;
     const current = detail.current,
@@ -340,7 +347,7 @@ export function MethodsPanel({
       conversationId: view.project.conversationId,
       workflow: reuseWorkflow,
       engine,
-      instruction: instruction.trim(),
+      instruction: reuseInstruction.trim(),
       methodRefs: [
         {
           id: current.id,
@@ -826,10 +833,10 @@ export function MethodsPanel({
                 方法复用要求
                 <textarea
                   aria-label="方法复用要求"
-                  value={instruction}
+                  value={reuseInstruction}
                   maxLength={20000}
                   disabled={busy}
-                  onChange={(e) => setInstruction(e.target.value)}
+                  onChange={(e) => setReuseInstruction(e.target.value)}
                 />
               </label>
               <button
@@ -838,7 +845,7 @@ export function MethodsPanel({
                   busy ||
                   pending ||
                   incompatible ||
-                  !instruction.trim() ||
+                  !reuseInstruction.trim() ||
                   (reuseWorkflow === "revise_artifact" && !reuseArtifact)
                 }
                 onClick={() => void reuse()}

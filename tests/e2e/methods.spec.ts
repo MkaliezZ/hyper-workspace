@@ -120,18 +120,31 @@ test("Manual candidate verification, publication, actual worker reuse and withdr
     panel.getByRole("heading", { name: "使用此版本生成成果", exact: true }),
   ).toBeVisible();
   await panel
+    .getByRole("combobox", { name: "方法操作方式", exact: true })
+    .selectOption("ai");
+  await panel
+    .getByRole("textbox", { name: "方法 AI 要求", exact: true })
+    .fill("仅修改方法措辞，不生成项目周报。");
+  await panel
     .getByRole("combobox", { name: "方法执行器", exact: true })
     .selectOption("fixture");
   await panel
     .getByRole("textbox", { name: "方法复用要求", exact: true })
     .fill("用这个已发布的演示 SOP 整理项目周报，未知明确标识。");
+  await expect(
+    panel.getByRole("textbox", { name: "方法 AI 要求", exact: true }),
+  ).toHaveValue("仅修改方法措辞，不生成项目周报。");
   const admitted = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/api/runs"),
   );
   await panel
     .getByRole("button", { name: "使用当前已发布版本", exact: true })
     .click();
-  const run = await (await admitted).json();
+  const admission = await admitted;
+  expect(admission.request().postDataJSON().instruction).toBe(
+    "用这个已发布的演示 SOP 整理项目周报，未知明确标识。",
+  );
+  const run = await admission.json();
   await expect
     .poll(
       async () =>
@@ -140,6 +153,22 @@ test("Manual candidate verification, publication, actual worker reuse and withdr
     .toBe("succeeded");
   await panel.getByText("版本、操作与本人复用记录", { exact: true }).click();
   await expect(panel.locator(".method-history")).toContainText("succeeded");
+  await panel.getByRole("button", { name: "新建方法", exact: true }).click();
+  await expect(
+    panel.getByRole("textbox", { name: "方法 AI 要求", exact: true }),
+  ).toHaveValue("");
+  await panel
+    .getByRole("button", { name: "打开方法：演示：证据核对 SOP", exact: true })
+    .click();
+  await expect(
+    panel.getByRole("textbox", { name: "方法 AI 要求", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    panel.getByRole("textbox", { name: "方法复用要求", exact: true }),
+  ).toHaveValue("");
+  await panel
+    .getByRole("combobox", { name: "方法操作方式", exact: true })
+    .selectOption("human");
   expect(new URL(page.url()).pathname).toBe("/");
   await expect(page).toHaveTitle(/Hyper Workspace/);
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
