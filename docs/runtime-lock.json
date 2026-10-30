@@ -319,5 +319,15 @@
     "evidenceCommit": "22757e44b30dd4ca480e4f458f74e8dfd44f1bec",
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41040063081",
     "evidenceScope": "210 first-attempt checks across three successful jobs: 25 unit/config, 3 downloader, 8 extraction, 118 database, 3 native runtime, 40 UI, 9 real source, 4 container; typecheck/build, both npm audits and frozen package; synthetic model endpoints, prices and declarations only"
+  },
+  "workBriefs": {
+    "status": "local-component-verified-full-regressions-and-ci-pending",
+    "contract": "docs/WORK-BRIEFS.md",
+    "migration": "db/migrations/021_work_briefs.sql",
+    "mapping": "P02/P04/P05/P07/P08 C01/C02/C04/C05/C07 A02/A06/A09/A10 E01/E02/E04/E07/E08/E09/E10 subsets",
+    "scope": "Project-visible product-owned goal/scope/constraints/completion criteria; employee questions/answers, explicit confirmation and reopen; creator/current-admin writes, live project-source reads; exact confirmed version references for minutes/reports/artifact revisions",
+    "ai": "Strict brief.write drafts; brief.manage empty args for host-bound answer/confirm/reopen plans; native DSH and Hermes share the same product objects",
+    "localEvidence": "25 unit/config, 124 database, type/build, one new native cross-engine case and targeted Chromium desktop/mobile flow passed; first UI selector timeout retained, corrected role-based locator passed; full native/UI regressions pending",
+    "limits": "Brief needs_input is product state, not an engine checkpoint or suspended Run; no universal natural-language ambiguity detection, real quality rubric or full enterprise acceptance"
   }
 }

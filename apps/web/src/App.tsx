@@ -1,3 +1,5 @@
+import { WorkBriefPanel } from "./components/WorkBriefPanel";
+import type { BriefReference } from "@hyper/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Artifact,
@@ -30,7 +32,7 @@ import { ExecutionPolicyPanel } from "./components/ExecutionPolicyPanel";
 import { ModelUsagePanel } from "./components/ModelUsagePanel";
 import { ModelSpendingPanel } from "./components/ModelSpendingPanel";
 import { usePageTransition } from "./hooks/usePageTransition";
-type Tab = "discussion" | "tasks" | "artifacts";
+type Tab = "discussion" | "tasks" | "artifacts" | "briefs";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
     [login, setLogin] = useState(false),
@@ -74,6 +76,7 @@ export function App() {
   const [runModels, setRunModels] = useState<ModelSummary[]>([]),
     [modelProfileId, setModelProfileId] = useState("");
   const [settingsTab, setSettingsTab] = useState("models");
+  const [briefRef, setBriefRef] = useState<BriefReference>();
   const [taskRules, setTaskRules] = useState<ExecutionRules>({});
   const [edit, setEdit] = useState(""),
     [feedback, setFeedback] = useState("");
@@ -104,6 +107,7 @@ export function App() {
       setRunModels([]);
       setModelProfileId("");
       setTaskRules({});
+      setBriefRef(undefined);
     };
     try {
       const value = await api<WorkspaceView>(
@@ -337,6 +341,7 @@ export function App() {
           setError("");
           if (section === "enterprise") setSection("messages");
           setDialog("run");
+          setBriefRef(undefined);
           setEngine("dsh");
         }}
         onNewProject={() => {
@@ -484,6 +489,7 @@ export function App() {
               {(
                 [
                   ["discussion", view.project.source ? "工作记录" : "讨论"],
+                  ["briefs", "任务说明"],
                   ["tasks", "任务"],
                   ["artifacts", "成果"],
                 ] as const
@@ -520,6 +526,25 @@ export function App() {
                     await refresh();
                   })
                 }
+              />
+            ) : tab === "briefs" ? (
+              <WorkBriefPanel
+                key={view.user.id + ":" + view.project.id}
+                view={view}
+                run={run}
+                onRun={(value) => {
+                  if (loadedProject.current === view.project.id) setRun(value);
+                }}
+                onUse={(ref) => {
+                  setBriefRef(ref);
+                  setWorkflow("discussion_to_minutes");
+                  setInstruction(
+                    "按已确认任务说明和当前获准讨论制作成果，遵守范围与完成标准，未知事实明确标记。",
+                  );
+                  setEngine("dsh");
+                  setError("");
+                  setDialog("run");
+                }}
               />
             ) : tab === "tasks" ? (
               <div className="task-workspace">
@@ -833,6 +858,7 @@ export function App() {
                   engine,
                   instruction,
                   taskRules,
+                  ...(briefRef ? { briefRef } : {}),
                   ...(engine !== "fixture" && modelProfileId
                     ? { modelProfileId }
                     : {}),
@@ -851,7 +877,17 @@ export function App() {
               工作类型
               <select
                 value={workflow}
-                onChange={(e) => setWorkflow(e.target.value)}
+                onChange={(e) => {
+                  setWorkflow(e.target.value);
+                  if (
+                    ![
+                      "discussion_to_minutes",
+                      "project_report",
+                      "revise_artifact",
+                    ].includes(e.target.value)
+                  )
+                    setBriefRef(undefined);
+                }}
               >
                 <option value="discussion_to_minutes">讨论 → 纪要</option>
                 <option value="project_report">项目周报</option>
@@ -864,6 +900,19 @@ export function App() {
                 ) : null}
               </select>
             </label>
+            {briefRef ? (
+              <div className="source-scope-note">
+                本次绑定任务说明版本 v{briefRef.version}
+                ；执行前及每次业务动作检查当前确认状态。
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setBriefRef(undefined)}
+                >
+                  移除说明引用
+                </button>
+              </div>
+            ) : null}
             <label>
               工作要求
               <textarea

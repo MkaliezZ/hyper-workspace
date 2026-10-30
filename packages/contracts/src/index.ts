@@ -42,12 +42,75 @@ export const Workflow = z.enum([
   "configure_policy",
   "usage_report",
   "manage_spending",
+  "manage_brief",
   "chat",
   "draft_reply",
   "read_file",
   "revise_file_reading",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
+export const WorkBriefContent = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    goal: z.string().trim().min(1).max(4000),
+    scope: z.string().trim().max(4000),
+    constraints: z.string().trim().max(4000),
+    completionCriteria: z.string().trim().max(4000),
+    questions: z
+      .array(z.string().trim().min(1).max(600))
+      .max(10)
+      .refine(
+        (items) => new Set(items).size === items.length,
+        "澄清问题不能重复。",
+      ),
+  })
+  .strict();
+export type WorkBriefContent = z.infer<typeof WorkBriefContent>;
+export const BriefReference = z
+  .object({ id: z.uuid(), version: z.number().int().positive() })
+  .strict();
+export type BriefReference = z.infer<typeof BriefReference>;
+const briefTarget = {
+  briefId: z.uuid(),
+  expectedVersion: z.number().int().positive(),
+};
+export const WorkBriefPlan = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("create") }).strict(),
+  z.object({ operation: z.literal("revise"), ...briefTarget }).strict(),
+  z
+    .object({
+      operation: z.literal("answer"),
+      ...briefTarget,
+      answers: z
+        .array(
+          z
+            .object({
+              questionId: z.uuid(),
+              answer: z.string().trim().min(1).max(4000),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(10),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("confirm"),
+      ...briefTarget,
+      confirmed: z.literal(true),
+    })
+    .strict(),
+  z.object({ operation: z.literal("reopen"), ...briefTarget }).strict(),
+]);
+export type WorkBriefPlan = z.infer<typeof WorkBriefPlan>;
+export const WorkBriefInput = z
+  .object({
+    plan: WorkBriefPlan,
+    draft: WorkBriefContent.optional(),
+    idempotencyKey: z.uuid(),
+  })
+  .strict();
 export const MoneyAmount = z
   .string()
   .regex(/^(0|[1-9]\d{0,8})(\.\d{1,6})?$/, "请输入最多六位小数的非负金额。");
@@ -266,6 +329,8 @@ export const RunInput = z
     methodRefs: z.array(MethodReference).max(3).optional(),
     policyPlan: ExecutionPolicyPlan.optional(),
     spendingPlan: ModelSpendingPlan.optional(),
+    briefPlan: WorkBriefPlan.optional(),
+    briefRef: BriefReference.optional(),
     taskRules: ExecutionRules.omit({ dailyRuns: true }).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
@@ -396,6 +461,8 @@ export interface PlannedAction {
     | "policy.configure"
     | "usage.report"
     | "spending.manage"
+    | "brief.write"
+    | "brief.manage"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -449,6 +516,8 @@ export function toolsForWorkflow(
       return ["usage.report"];
     case "manage_spending":
       return ["spending.manage"];
+    case "manage_brief":
+      return ["brief.write", "brief.manage"];
     case "chat":
       return [];
     case "draft_reply":

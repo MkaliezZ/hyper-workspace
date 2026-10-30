@@ -1,3 +1,5 @@
+import { WorkBriefInput } from "@hyper/contracts";
+import { WorkBriefService } from "./core/work-briefs.js";
 import "reflect-metadata";
 import {
   Body,
@@ -289,6 +291,37 @@ class ApiController {
       input.roomId,
       input.name,
       input.goal,
+    );
+  }
+  @Get("projects/:id/work-briefs") async briefs(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new WorkBriefService(db).list(await subject(req), uuid(id));
+  }
+  @Get("projects/:id/work-briefs/:briefId") async brief(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Param("briefId") briefId: string,
+  ) {
+    return new WorkBriefService(db).get(
+      await subject(req),
+      uuid(id),
+      uuid(briefId),
+    );
+  }
+  @Post("projects/:id/work-briefs") async saveBrief(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const input = WorkBriefInput.parse(body);
+    return new WorkBriefService(db).save(
+      await subject(req),
+      uuid(id),
+      input.plan,
+      input.draft,
+      input.idempotencyKey,
     );
   }
   @Post("conversations/:id/messages") async message(

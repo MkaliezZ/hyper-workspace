@@ -1,3 +1,5 @@
+import { WorkBriefService } from "./work-briefs.js";
+import { WorkBriefContent } from "@hyper/contracts";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -319,33 +321,39 @@ export class RunProcessor {
         run.workflow === "discussion_to_minutes" ||
         run.workflow === "project_report"
           ? ["artifact.create", "project.report"]
-          : run.workflow === "manage_spending"
-            ? ["spending.manage"]
-            : run.workflow === "usage_report"
-              ? ["usage.report"]
-              : run.workflow === "configure_policy"
-                ? ["policy.configure"]
-                : run.workflow === "manage_method"
-                  ? [
-                      ["create", "revise"].includes(run.method_plan.operation)
-                        ? "method.write"
-                        : "method.manage",
-                    ]
-                  : run.workflow === "revise_artifact"
-                    ? ["artifact.revise"]
-                    : run.workflow === "revise_task"
-                      ? ["task.update"]
-                      : run.workflow === "review_artifact"
-                        ? ["artifact.review"]
-                        : run.workflow === "follow_up"
-                          ? ["follow_up.check"]
-                          : run.workflow === "configure_follow_up"
-                            ? ["follow_up.configure"]
-                            : run.workflow === "draft_reply"
-                              ? ["communication.draft"]
-                              : isFileWorkflow(run.workflow)
-                                ? ["file.reading.save"]
-                                : [];
+          : run.workflow === "manage_brief"
+            ? [
+                ["create", "revise"].includes(run.brief_plan.operation)
+                  ? "brief.write"
+                  : "brief.manage",
+              ]
+            : run.workflow === "manage_spending"
+              ? ["spending.manage"]
+              : run.workflow === "usage_report"
+                ? ["usage.report"]
+                : run.workflow === "configure_policy"
+                  ? ["policy.configure"]
+                  : run.workflow === "manage_method"
+                    ? [
+                        ["create", "revise"].includes(run.method_plan.operation)
+                          ? "method.write"
+                          : "method.manage",
+                      ]
+                    : run.workflow === "revise_artifact"
+                      ? ["artifact.revise"]
+                      : run.workflow === "revise_task"
+                        ? ["task.update"]
+                        : run.workflow === "review_artifact"
+                          ? ["artifact.review"]
+                          : run.workflow === "follow_up"
+                            ? ["follow_up.check"]
+                            : run.workflow === "configure_follow_up"
+                              ? ["follow_up.configure"]
+                              : run.workflow === "draft_reply"
+                                ? ["communication.draft"]
+                                : isFileWorkflow(run.workflow)
+                                  ? ["file.reading.save"]
+                                  : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -359,6 +367,8 @@ export class RunProcessor {
         throw new Error("一次执行规则配置只接受一个明确操作。");
       if (run.workflow === "usage_report" && result.actions.length !== 1)
         throw new Error("一次用量查询只接受一个实际回读操作。");
+      if (run.workflow === "manage_brief" && result.actions.length !== 1)
+        throw new Error("一次任务说明操作只接受一个明确动作。");
       if (run.workflow === "manage_spending" && result.actions.length !== 1)
         throw new Error("一次费用管理只接受一个员工确认的操作。");
       if (run.workflow === "revise_task" && result.actions.length !== 1)
@@ -405,6 +415,21 @@ export class RunProcessor {
             result.actions.length,
           );
         await assertScheduledRun(c, run, true);
+        if (run.brief_ref) {
+          await WorkBriefService.lock(c, run.brief_ref.id);
+          const scope = (
+            await c.query(
+              "SELECT project_id FROM cw_conversations WHERE id=$1 AND workspace_id=$2",
+              [run.conversation_id, subject.workspaceId],
+            )
+          ).rows[0];
+          await new WorkBriefService(db).reference(
+            c,
+            subject,
+            scope.project_id,
+            run.brief_ref,
+          );
+        }
         const member = await c.query(
           "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
           [subject.workspaceId, subject.id],
@@ -430,6 +455,7 @@ export class RunProcessor {
           run.workflow !== "configure_policy" &&
           run.workflow !== "usage_report" &&
           run.workflow !== "manage_spending" &&
+          run.workflow !== "manage_brief" &&
           run.workflow !== "review_artifact" &&
           run.workflow !== "revise_task" &&
           run.workflow !== "manage_method" &&
@@ -459,19 +485,21 @@ export class RunProcessor {
                       ? "定时跟进配置已保存。"
                       : run.workflow === "configure_policy"
                         ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
-                        : run.workflow === "usage_report"
-                          ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
-                          : run.workflow === "manage_spending"
-                            ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
-                            : run.workflow === "review_artifact"
-                              ? "已记录员工对指定成果版本的验收决定。"
-                              : run.workflow === "manage_method"
-                                ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
-                                : run.workflow === "revise_task"
-                                  ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                                  : isFileWorkflow(run.workflow)
-                                    ? "个人文件解读已保存。"
-                                    : result.text,
+                        : run.workflow === "manage_brief"
+                          ? "任务说明操作已保存；仍需完成必要澄清并确认当前版本后才能按说明执行。"
+                          : run.workflow === "usage_report"
+                            ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
+                            : run.workflow === "manage_spending"
+                              ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
+                              : run.workflow === "review_artifact"
+                                ? "已记录员工对指定成果版本的验收决定。"
+                                : run.workflow === "manage_method"
+                                  ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                                  : run.workflow === "revise_task"
+                                    ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                                    : isFileWorkflow(run.workflow)
+                                      ? "个人文件解读已保存。"
+                                      : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -554,6 +582,28 @@ export class RunProcessor {
         actionCount,
       );
       await assertScheduledRun(c, run, true);
+      if (
+        run.brief_ref ||
+        (run.brief_plan && run.brief_plan.operation !== "create")
+      ) {
+        const briefId = run.brief_ref?.id ?? run.brief_plan.briefId;
+        await WorkBriefService.lock(c, briefId);
+        if (run.brief_ref) {
+          const scope = (
+            await c.query(
+              "SELECT project_id FROM cw_conversations WHERE id=$1 AND workspace_id=$2",
+              [run.conversation_id, s.workspaceId],
+            )
+          ).rows[0];
+          await new WorkBriefService(this.service.db).reference(
+            c,
+            s,
+            scope.project_id,
+            run.brief_ref,
+          );
+        }
+      }
+
       // Match scheduled checks: target schedule before Run/member locks.
       if (configuration)
         await FollowUpScheduleService.lockTarget(c, s, configuration);
@@ -651,7 +701,21 @@ export class RunProcessor {
       if (!conv && !isFileWorkflow(run.workflow))
         throw new Error("Conversation unavailable.");
       let receipt: Record<string, unknown>;
-      if (action.tool === "spending.manage") {
+      if (action.tool === "brief.write" || action.tool === "brief.manage") {
+        const writing = ["create", "revise"].includes(run.brief_plan.operation);
+        if (writing !== (action.tool === "brief.write"))
+          throw new Error("任务说明操作不匹配。");
+        if (!writing) z.object({}).strict().parse(action.args);
+        receipt = await new WorkBriefService(this.service.db).apply(
+          c,
+          s,
+          conv.project_id,
+          run.brief_plan,
+          writing ? WorkBriefContent.parse(action.args) : undefined,
+          "brief:" + run.id,
+          run.id,
+        );
+      } else if (action.tool === "spending.manage") {
         z.object({}).strict().parse(action.args);
         receipt = await new ModelSpendingService(this.service.db).apply(
           c,

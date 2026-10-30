@@ -335,6 +335,44 @@ test("Source project scope survives both real engines and blocks results after r
         )
       ).status(),
     ).toBe(404);
+    const briefBase =
+      origin + "/api/projects/" + workspace.project.id + "/work-briefs";
+    const briefResponse = await actor.context.request.post(briefBase, {
+      headers: { Origin: origin },
+      data: {
+        plan: { operation: "create" },
+        draft: {
+          title: "Source work brief",
+          goal: "Use only current authorized messages",
+          scope: "This source-linked project",
+          constraints: "No external sends",
+          completionCriteria: "Persist an editable artifact with references",
+          questions: [],
+        },
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(briefResponse.status()).toBe(201);
+    const brief = await briefResponse.json();
+    const confirmedBriefResponse = await actor.context.request.post(briefBase, {
+      headers: { Origin: origin },
+      data: {
+        plan: {
+          operation: "confirm",
+          briefId: brief.briefId,
+          expectedVersion: brief.version,
+          confirmed: true,
+        },
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(confirmedBriefResponse.status()).toBe(201);
+    const confirmedBrief = await confirmedBriefResponse.json();
+    expect(
+      (
+        await outside.context.request.get(briefBase + "/" + brief.briefId)
+      ).status(),
+    ).toBe(404);
     const profileResponse = await actor.context.request.post(
       origin + "/api/models",
       {
@@ -369,6 +407,14 @@ test("Source project scope survives both real engines and blocks results after r
             workflow === "follow_up"
               ? "native-follow-up-fixture: check only current product tasks."
               : "Use authorized source messages to prepare a draft artifact.",
+          ...(workflow === "discussion_to_minutes"
+            ? {
+                briefRef: {
+                  id: brief.briefId,
+                  version: confirmedBrief.version,
+                },
+              }
+            : {}),
           modelProfileId: profile.id,
           idempotencyKey: randomUUID(),
         },
@@ -402,6 +448,9 @@ test("Source project scope survives both real engines and blocks results after r
       expect(
         result.contextRefs.some((ref: string) => ref.startsWith("talk:")),
       ).toBe(true);
+      expect(result.contextRefs).toContain(
+        "work-brief:" + brief.briefId + "@" + confirmedBrief.version,
+      );
       const artifactId = result.result.receipts[0].id;
       expect(
         (
@@ -848,6 +897,26 @@ test("Source project scope survives both real engines and blocks results after r
         [schedule.id],
       )
     ).rows[0];
+    expect(
+      (
+        await actor.context.request.get(briefBase + "/" + brief.briefId)
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await actor.context.request.post(briefBase, {
+          headers: { Origin: origin },
+          data: {
+            plan: {
+              operation: "reopen",
+              briefId: brief.briefId,
+              expectedVersion: confirmedBrief.version,
+            },
+            idempotencyKey: randomUUID(),
+          },
+        })
+      ).status(),
+    ).toBe(404);
     expect(revokedSchedule).toEqual({
       checks_started: 1,
       last_run_id: savedSchedule.last_run_id,

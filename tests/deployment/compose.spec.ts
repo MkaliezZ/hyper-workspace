@@ -182,6 +182,40 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     });
     expect(profile.status()).toBe(201);
     const modelId = (await profile.json()).id;
+    const briefBase =
+      origin + "/api/projects/" + workspace.project.id + "/work-briefs";
+    const briefResponse = await context.request.post(briefBase, {
+      headers: { Origin: origin },
+      data: {
+        plan: { operation: "create" },
+        draft: {
+          title: "Container work brief",
+          goal: "Persist product context across restarts",
+          scope: "The selected product project",
+          constraints: "No external sends",
+          completionCriteria: "Readable artifact and saved versions",
+          questions: [],
+        },
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(briefResponse.status()).toBe(201);
+    const brief = await briefResponse.json();
+    const confirmedBriefResponse = await context.request.post(briefBase, {
+      headers: { Origin: origin },
+      data: {
+        plan: {
+          operation: "confirm",
+          briefId: brief.briefId,
+          expectedVersion: brief.version,
+          confirmed: true,
+        },
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(confirmedBriefResponse.status()).toBe(201);
+    const confirmedBrief = await confirmedBriefResponse.json();
+
     const start = async (
       engine: string,
       workflow: string,
@@ -198,6 +232,14 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
           instruction,
           artifactId,
           artifactReviewPlan,
+          ...(workflow === "discussion_to_minutes"
+            ? {
+                briefRef: {
+                  id: brief.briefId,
+                  version: confirmedBrief.version,
+                },
+              }
+            : {}),
           modelProfileId: modelId,
           idempotencyKey: randomUUID(),
         },
@@ -208,6 +250,9 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     const dsh = await completed(
       context.request,
       await start("dsh", "discussion_to_minutes", "compose-create"),
+    );
+    expect(dsh.contextRefs).toContain(
+      "work-brief:" + brief.briefId + "@" + confirmedBrief.version,
     );
     const artifactId = dsh.result.receipts[0].id;
     expect(dsh.result.evidence).toBe("runtime");
@@ -384,6 +429,16 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         { timeout: 60000 },
       )
       .toBe(200);
+    const restoredBrief = await (
+      await context.request.get(briefBase + "/" + brief.briefId)
+    ).json();
+    expect(restoredBrief.current).toMatchObject({
+      version: confirmedBrief.version,
+      status: "confirmed",
+      content: { goal: "Persist product context across restarts" },
+    });
+    expect(restoredBrief.history).toHaveLength(2);
+
     await page.reload();
     await page.getByRole("tab", { name: "成果", exact: true }).click();
     await page
