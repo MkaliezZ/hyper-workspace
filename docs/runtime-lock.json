@@ -248,6 +248,6 @@
     "evidenceCommit": "5ef6be012caa24cb73d14b6a55180a4ae3a55461",
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40999699396",
     "evidenceScope": "177 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 95 database, 3 native runtime, 36 UI, 9 real source, 4 container; real source DSH generation/Hermes reuse and revocation; restricted container DSH create/publish/restart/Hermes withdrawal; synthetic sources/models only",
-    "subsequentFix": "Separate AI method editing/reuse instructions; clear prior-object instructions and revision target on method selection/new object. Four targeted UI and web typecheck passed; final full CI pending."
+    "subsequentFix": "Separate editing/reuse instructions and clear prior-object intent/target; scoped sequenced lists cannot restore private rows after denied reads; five targeted UI and web typecheck passed; final 37 UI and full CI pending"
   }
 }

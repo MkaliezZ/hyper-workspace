@@ -68,6 +68,7 @@ export function MethodsPanel({
   const alive = useRef(false),
     generation = useRef(0),
     query = useRef(0),
+    listQuery = useRef(0),
     saving = useRef(false),
     attempt = useRef<{ hash: string; key: string } | undefined>(undefined);
   const ownRun =
@@ -97,13 +98,24 @@ export function MethodsPanel({
     !!model &&
     !view.engines[engine]?.modelProviders?.includes(model.provider);
   async function list() {
+    const token = generation.current,
+      sequence = ++listQuery.current;
     try {
       const values = await api<MethodAsset[]>(
         "/projects/" + view.project.id + "/methods",
       );
-      if (alive.current) setRows(values);
+      if (
+        alive.current &&
+        token === generation.current &&
+        sequence === listQuery.current
+      )
+        setRows(values);
     } catch (e) {
-      if (alive.current) {
+      if (
+        alive.current &&
+        token === generation.current &&
+        sequence === listQuery.current
+      ) {
         setError((e as Error).message);
         if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
           setRows([]);
@@ -146,6 +158,11 @@ export function MethodsPanel({
       ) {
         setError((e as Error).message);
         if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
+          generation.current++;
+          listQuery.current++;
+          setRows([]);
+          setSource(undefined);
+          attempt.current = undefined;
           setDetail(undefined);
           setBase(undefined);
           setDraft(empty);

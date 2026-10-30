@@ -31,7 +31,7 @@
 
 “知识库 → 方法与模板”支持从已保存成果整理 SOP、模板、案例、量规和术语。人工与 AI 共用服务：先保存候选，由员工确认验证依据后发布；支持版本修订、撤回，以及在纪要、周报和成果修改中复用确切版本。AI 不能自行验证、发布为公司规则或改变员工确认的操作。工作区级发布需要管理员；企业会话来源的方法仍限来源项目。
 
-本轮本地 95 数据库、36 界面、19 单元与 3 原生执行器测试通过，真实来源/受限容器新增场景待该提交 CI；没有真实模型或公司验收结论。[方法资产、权限、回执与迁移](docs/METHODS.md) · [实际桌面界面](docs/images/methods-desktop.png) · [手机界面](docs/images/methods-mobile.png)。
+主体实现的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40999699396) 三个 job 成功、177 项首轮通过，含真实来源与受限容器；后续界面输入隔离及失权清理增量的 5 项定向 UI 通过，最终完整 CI 待核验；没有真实模型或公司验收结论。[方法资产、权限、回执与迁移](docs/METHODS.md) · [实际桌面界面](docs/images/methods-desktop.png) · [手机界面](docs/images/methods-mobile.png)。
 
 ## 本地开发
 

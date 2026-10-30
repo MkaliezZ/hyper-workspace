@@ -283,6 +283,88 @@ test("AI candidate creation and revision retain manual drafts until explicit rel
     .click();
   await expect(content).toHaveValue(/演示候选方法/);
 });
+test("A denied method read clears private drafts and discards an earlier delayed list response", async ({
+  page,
+}) => {
+  const { project, panel } = await seed(page);
+  await panel
+    .getByRole("textbox", { name: "方法标题", exact: true })
+    .fill("合成来源私有方法");
+  await panel
+    .getByRole("textbox", { name: "方法内容", exact: true })
+    .fill("源访问失效后不应恢复的合成正文");
+  await panel
+    .getByRole("button", { name: "保存候选方法", exact: true })
+    .click();
+  await expect(
+    panel.getByRole("textbox", { name: "方法标题", exact: true }),
+  ).toHaveValue("合成来源私有方法");
+  const method = (
+    await (
+      await page.request.get("/api/projects/" + project.id + "/methods")
+    ).json()
+  )[0];
+  let release!: () => void,
+    arrive!: () => void,
+    settle!: () => void,
+    first = true;
+  const gate = new Promise<void>((r) => {
+      release = r;
+    }),
+    arrived = new Promise<void>((r) => {
+      arrive = r;
+    }),
+    settled = new Promise<void>((r) => {
+      settle = r;
+    });
+  await page.route(
+    "**/api/projects/" + project.id + "/methods",
+    async (route) => {
+      if (first) {
+        first = false;
+        const response = await route.fetch();
+        arrive();
+        await gate;
+        await route.fulfill({ response });
+        settle();
+      } else await route.fulfill({ json: [] });
+    },
+  );
+  await arrived;
+  await page.route("**/api/methods/" + method.id, (route) =>
+    route.fulfill({ status: 404, json: { message: "合成来源权限已失效。" } }),
+  );
+  await panel
+    .getByRole("button", { name: "读取当前方法版本", exact: true })
+    .click();
+  await expect(
+    panel.getByRole("textbox", { name: "方法内容", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    panel.getByRole("button", {
+      name: "打开方法：合成来源私有方法",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  release();
+  await settled;
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(
+    panel.getByRole("button", {
+      name: "打开方法：合成来源私有方法",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    panel.getByRole("textbox", { name: "方法内容", exact: true }),
+  ).toHaveCount(0);
+});
+
 for (const mode of ["human", "ai"])
   test(`Late ${mode} method responses cannot restore private drafts or a Run after project switch`, async ({
     page,
