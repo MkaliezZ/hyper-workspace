@@ -57,13 +57,17 @@
 
 [范围、权限、迁移与实际证据](docs/PROJECT-DIRECTORY-ASSIGNMENTS.md) · [桌面](docs/images/task-assignment-desktop.png) · [手机](docs/images/task-assignment-mobile.png)。当前是项目范围目录和明确身份分配，完整组织通讯录、部门树与讨论中自动消歧仍待补齐。
 
-当前实现 `7de26bb353dc2c267644784e38f673bd13322ac0` 的 [CI 41075340989](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41075340989) 三个 job 全部成功，227 项首轮通过：25 单元/配置、3 下载器、8 解析、132 数据库、4 原生执行器、42 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。CI 使用合成账号/资料和协议模型，不等于公司全量验收。 实际 DeepSeek Flash 的目录回读与明确员工 ID 分配两个合成小样例通过，[实际模型记录](docs/REAL-MODEL-SMOKE.md)。
+目录分配实现 `7de26bb353dc2c267644784e38f673bd13322ac0` 的 [CI 41075340989](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41075340989) 三个 job 全部成功，227 项首轮通过：25 单元/配置、3 下载器、8 解析、132 数据库、4 原生执行器、42 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。CI 使用合成账号/资料和协议模型，不等于公司全量验收。 实际 DeepSeek Flash 的目录回读与明确员工 ID 分配两个合成小样例通过，[实际模型记录](docs/REAL-MODEL-SMOKE.md)。
 
 ## 企业消息附件
 
 企业会话支持接收附件卡片、当前来源查看及 8 MiB 内受限下载。打开/下载时重新检查会话、确切消息/文件、版本与当前权限；隐藏下载、删除或撤权后拒绝读取，HTML 等按二进制附件下载。AI 上下文只取得明确标记的附件引用，不凭文件名宣称读取正文。
 
-[协议、权限与验证边界](docs/MESSAGE-ATTACHMENTS.md) · [桌面](docs/images/message-attachments-desktop.png) · [手机](docs/images/message-attachments-mobile.png)。本地 139 数据库、25 单元、类型/构建、冻结包和完整 43 UI 重跑已通过；真实来源 CI 结果待记录。产品内上传、附件发送及相应 AI 执行/投递对账仍在开发，整体尚未交付。
+[协议、权限与验证边界](docs/MESSAGE-ATTACHMENTS.md) · [桌面](docs/images/message-attachments-desktop.png) · [手机](docs/images/message-attachments-mobile.png)。本地 139 数据库、25 单元、类型/构建、冻结包和完整 43 UI 重跑已通过。
+
+修正实现 `0449f94a0ddd9ac0c8be146bf2bd6ff43ca074a4` 的 [CI 41083527775](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41083527775) 三个 job 全部成功，共 236 项首轮通过：25 单元/配置、3 下载器、8 解析、139 数据库、4 原生执行器、43 UI、10 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。真实 Nextcloud 合成账号验证附件接收、发送者/接收者二进制下载与安全响应头、浏览器下载、移除成员和原件删除后的拒绝读取；不等于真实公司资料验收。
+
+产品内上传、附件发送及相应 AI 执行/投递对账仍在开发，整体尚未交付。
 
 ## 任务说明与澄清
 
