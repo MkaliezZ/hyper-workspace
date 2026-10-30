@@ -57,6 +57,8 @@
 
 [范围、权限、迁移与实际证据](docs/PROJECT-DIRECTORY-ASSIGNMENTS.md) · [桌面](docs/images/task-assignment-desktop.png) · [手机](docs/images/task-assignment-mobile.png)。当前是项目范围目录和明确身份分配，完整组织通讯录、部门树与讨论中自动消歧仍待补齐。
 
+当前实现 `7de26bb353dc2c267644784e38f673bd13322ac0` 的 [CI 41075340989](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41075340989) 三个 job 全部成功，227 项首轮通过：25 单元/配置、3 下载器、8 解析、132 数据库、4 原生执行器、42 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。CI 使用合成账号/资料和协议模型，不等于公司全量验收。 实际 DeepSeek Flash 的目录回读与明确员工 ID 分配两个合成小样例通过，[实际模型记录](docs/REAL-MODEL-SMOKE.md)。
+
 ## 任务说明与澄清
 
 项目“任务说明”页可人工或通过 AI 整理目标、范围、约束和完成标准，提出必要问题。员工回答并确认当前版本后，可绑定版本发起纪要、周报或成果修改；说明被改动或重新打开时，旧引用不能继续产生业务动作。DSH/Hermes 共用说明、答案与回执，不依赖私有检查点。

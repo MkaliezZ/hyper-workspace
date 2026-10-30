@@ -341,14 +341,26 @@
     }
   },
   "projectDirectoryAndAssignments": {
-    "status": "local-full-ui-and-components-verified-ci-pending",
+    "status": "full-ci-and-local-real-provider-synthetic-sample-verified",
     "contract": "docs/PROJECT-DIRECTORY-ASSIGNMENTS.md",
     "migration": "db/migrations/022_task_assignment.sql",
     "mapping": "P02/P04/P07/P08 C00/C03/C05/C07 A01/A02/A06/A10 E01/E02/E04/E07/E09/E10 subsets",
     "directory": "Current source participants mapped by provider/workspace/remote UID to active product members; internal projects use current workspace members. No name inference, guest promotion, automatic provisioning or role grants. Explicit unsupported scale >2000 fails closed.",
     "assignment": "Exact employee-confirmed task/version/ID or null; shared manual/AI service, current scope rechecked before action, transaction membership/source binding/version checks, atomic audit/versions/receipts, stable history survives membership removal; no external send",
     "engines": "directory_report/directory.read and assign_task/task.assign; empty model args, target identity from host plan; native DSH read, Hermes assign, DSH clear protocol case passed",
-    "localEvidence": "25 unit/config, 132 database, type/build, full 42 Chromium desktop/mobile cases and expanded native DSH directory / Hermes assign / DSH clear case passed; screenshots inspected; CI real-source/container changes pending",
-    "limits": "No full organization directory, department tree, automatic natural-language employee disambiguation, source/database distributed atomicity, real company acceptance or full E01-E10"
+    "localEvidence": "25 unit/config, 132 database, type/build, all 42 Chromium desktop/mobile cases and expanded native DSH directory / Hermes assign / DSH clear case passed; screenshots inspected",
+    "limits": "No full organization directory, department tree, automatic natural-language employee disambiguation, source/database distributed atomicity, real company acceptance or full E01-E10",
+    "realProviderEvidence": {
+      "model": "deepseek-flash",
+      "date": "2026-10-30",
+      "dshRun": "d5881d45-ad8f-4203-a82b-67e8cb06f372",
+      "hermesRun": "6f318632-c794-4999-b5bb-f7f8272c080c",
+      "scope": "Actual product employee directory, explicit synthetic employee ID assignment, canonical task/version/Run history and explicit unassignment readback; one complete provider request per Run; not real company source or full E01-E10 acceptance"
+    },
+    "initialFailureRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41074283284",
+    "initialFailure": "Deployment 3 pass/1 fail: prior exact eight synthetic model requests became nine after one explicit assignment. Assignment/persistence assertions passed; corrected exact count to nine, kept zero violations; subsequent full CI and all four container cases passed.",
+    "evidenceCommit": "7de26bb353dc2c267644784e38f673bd13322ac0",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41075340989",
+    "evidenceScope": "227 first-attempt checks across three successful jobs: 25 unit/config, 3 downloader, 8 extraction, 132 database, 4 native runtime, 42 UI, 9 real source, 4 container; exact source UID mapping, native Hermes assignment, source revocation denial; restricted container native DSH assignment and ID/history/Run survival across DB/API/Worker restart; type/build, both npm audits and frozen package; synthetic CI model/data only"
   }
 }

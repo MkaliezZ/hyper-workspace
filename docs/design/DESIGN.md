@@ -85,3 +85,20 @@ Browser plugin not available，使用项目 Playwright Chromium；本机 http://
 Browser plugin not available，沿用 Playwright Chromium；本地 http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。URL/标题、非空内容、无 Vite overlay、控制台健康和实际对象回读均通过；完整 41 UI 本地及 CI 首轮通过。桌面/手机截图已逐一查看，无横向溢出，表单与操作可滚动访问。首轮通用标签匹配超时，按可访问 combobox 名称定位后通过；原 trace 保留在受限忽略目录。
 
 [桌面](../images/work-brief-desktop.png) · [手机](../images/work-brief-mobile.png)。截图为合成资料；未测 Safari/Firefox、正式员工量规及公司环境。业务/原生/来源/容器与实际模型小样例的证据见 [说明契约](../WORK-BRIEFS.md)。
+
+## 项目成员与员工分配 — 2026-10-30
+
+验证路径：任务 → 项目成员（按姓名/UID/产品 ID 筛选） → 修改待办 → 选择确切员工 → 确认并保存 → AI 清除 → 回读版本/历史 → 手机布局 → 拒绝目录读取与迟到响应清理。人工和 AI 共用身份范围；文字标记与员工 ID 绑定明确分开。
+
+Browser plugin not available，使用仓库 Playwright Chromium；http://127.0.0.1:5173，桌面 1504×1045/手机 390×844，完整 42 项界面回归本机首轮通过。
+
+| 检查           | 结果                                                              |
+| -------------- | ----------------------------------------------------------------- |
+| 页面身份与内容 | URL、Hyper Workspace 标题、项目成员/任务字段及实际 ID 可见        |
+| 框架 overlay   | 无 Vite overlay 或页面运行异常                                    |
+| 控制台         | 无相关 error/warning；登录前 401 和用例主动拒绝的 403 已分别识别  |
+| 交互回读       | 绑定 ID、规范姓名、v2 历史和 AI 清除后的 v3 均来自实际 API/Worker |
+| 响应布局       | 两种宽度截图逐一查看；对话框/页面无横向溢出，操作和历史可滚动访问 |
+| 缓存与迟到响应 | 拒绝后同时清理同项目目录视图、搜索及模型选项，旧请求不能恢复名单  |
+
+[桌面截图](../images/task-assignment-desktop.png) · [手机截图](../images/task-assignment-mobile.png)。全为合成资料；Safari/Firefox、正式员工量规和公司环境未测。源码/原生/来源/容器证据见 [成员与分配契约](../PROJECT-DIRECTORY-ASSIGNMENTS.md)。
