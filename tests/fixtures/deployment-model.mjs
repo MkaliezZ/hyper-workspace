@@ -57,42 +57,46 @@ createServer(async (req, res) => {
   const text = JSON.stringify({
     text: "Synthetic container model result.",
     actions: [
-      methodDraft
-        ? {
-            tool: "method.write",
-            args: {
-              title: "Synthetic container method",
-              kind: "sop",
-              content:
-                "synthetic-container-method-guidance: check evidence before saving.",
-            },
-          }
-        : methodManagement
-          ? { tool: "method.manage", args: {} }
-          : taskRevision
+      input.includes("Host-bound task assignment.")
+        ? { tool: "task.assign", args: {} }
+        : input.includes("Host-bound project directory query.")
+          ? { tool: "directory.read", args: {} }
+          : methodDraft
             ? {
-                tool: "task.update",
+                tool: "method.write",
                 args: {
-                  title: "synthetic-container-task-update",
-                  status: "done",
+                  title: "Synthetic container method",
+                  kind: "sop",
+                  content:
+                    "synthetic-container-method-guidance: check evidence before saving.",
                 },
               }
-            : review
-              ? { tool: "artifact.review", args: {} }
-              : followUp
-                ? { tool: "follow_up.check", args: {} }
-                : revision
-                  ? {
-                      tool: "artifact.revise",
-                      args: { content: "synthetic-container-version-two" },
-                    }
-                  : {
-                      tool: "artifact.create",
-                      args: {
-                        title: "Container native artifact",
-                        content: "synthetic-container-version-one",
-                      },
+            : methodManagement
+              ? { tool: "method.manage", args: {} }
+              : taskRevision
+                ? {
+                    tool: "task.update",
+                    args: {
+                      title: "synthetic-container-task-update",
+                      status: "done",
                     },
+                  }
+                : review
+                  ? { tool: "artifact.review", args: {} }
+                  : followUp
+                    ? { tool: "follow_up.check", args: {} }
+                    : revision
+                      ? {
+                          tool: "artifact.revise",
+                          args: { content: "synthetic-container-version-two" },
+                        }
+                      : {
+                          tool: "artifact.create",
+                          args: {
+                            title: "Container native artifact",
+                            content: "synthetic-container-version-one",
+                          },
+                        },
     ],
   });
   if (body.stream) {

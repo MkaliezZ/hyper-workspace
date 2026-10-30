@@ -1,3 +1,4 @@
+import { ProjectMembers } from "./components/MemberPanels";
 import { WorkBriefPanel } from "./components/WorkBriefPanel";
 import type { BriefReference } from "@hyper/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -548,6 +549,15 @@ export function App() {
               />
             ) : tab === "tasks" ? (
               <div className="task-workspace">
+                <ProjectMembers
+                  key={view.user.id + ":" + view.project.id}
+                  view={view}
+                  run={run}
+                  onRun={(value) => {
+                    if (loadedProject.current === view.project.id)
+                      setRun(value);
+                  }}
+                />
                 <TasksPanel
                   tasks={view.tasks}
                   query={query}

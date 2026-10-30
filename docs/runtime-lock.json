@@ -339,5 +339,16 @@
       "hermesRun": "120f4155-949d-49af-b7d7-5309377d0593",
       "scope": "DSH asked two required questions; synthetic employee answers and explicit confirmation persisted; Hermes saved an artifact with audience/date/synthetic label and pinned brief source; both real-provider usage ledgers settled; no formal human quality rubric or company acceptance"
     }
+  },
+  "projectDirectoryAndAssignments": {
+    "status": "local-full-ui-and-components-verified-ci-pending",
+    "contract": "docs/PROJECT-DIRECTORY-ASSIGNMENTS.md",
+    "migration": "db/migrations/022_task_assignment.sql",
+    "mapping": "P02/P04/P07/P08 C00/C03/C05/C07 A01/A02/A06/A10 E01/E02/E04/E07/E09/E10 subsets",
+    "directory": "Current source participants mapped by provider/workspace/remote UID to active product members; internal projects use current workspace members. No name inference, guest promotion, automatic provisioning or role grants. Explicit unsupported scale >2000 fails closed.",
+    "assignment": "Exact employee-confirmed task/version/ID or null; shared manual/AI service, current scope rechecked before action, transaction membership/source binding/version checks, atomic audit/versions/receipts, stable history survives membership removal; no external send",
+    "engines": "directory_report/directory.read and assign_task/task.assign; empty model args, target identity from host plan; native DSH read, Hermes assign, DSH clear protocol case passed",
+    "localEvidence": "25 unit/config, 132 database, type/build, full 42 Chromium desktop/mobile cases and expanded native DSH directory / Hermes assign / DSH clear case passed; screenshots inspected; CI real-source/container changes pending",
+    "limits": "No full organization directory, department tree, automatic natural-language employee disambiguation, source/database distributed atomicity, real company acceptance or full E01-E10"
   }
 }

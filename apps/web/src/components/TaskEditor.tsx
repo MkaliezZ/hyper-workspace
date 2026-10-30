@@ -1,10 +1,14 @@
+import { TaskAssignmentPanel } from "./MemberPanels";
 import { useEffect, useRef, useState } from "react";
 import type { Task, WorkspaceView } from "@hyper/contracts";
 import { api, mutation } from "../api";
 import type { ModelSummary } from "./ModelSettings";
 interface History {
   version: number;
-  snapshot: Pick<Task, "title" | "assignee" | "dueDate" | "status">;
+  snapshot: Pick<
+    Task,
+    "title" | "assignee" | "assigneeId" | "dueDate" | "status"
+  >;
   actorName?: string;
   channel: string;
   createdAt: string;
@@ -40,6 +44,7 @@ export function TaskEditor({
     [engine, setEngine] = useState("dsh"),
     [modelId, setModelId] = useState(""),
     [models, setModels] = useState<ModelSummary[]>([]);
+  const [assigning, setAssigning] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
@@ -201,7 +206,11 @@ export function TaskEditor({
   return (
     <section className="task-editor" aria-label="待办修改">
       <p className="muted small">
-        仅修改当前项目的这条待办。负责人是文字标记，未绑定员工账号；记录“已完成”不代表实际工作已独立验收，也不会发送外部通知。
+        仅修改当前项目的这条待办。
+        {detail?.current.assigneeId
+          ? "负责人已绑定明确员工 ID，请通过员工分配入口改派。"
+          : "当前负责人是文字标记，未绑定员工账号。"}
+        记录“已完成”不代表实际工作已独立验收，也不会发送外部通知。
       </p>
       {error ? (
         <p className="error-banner" role="alert">
@@ -227,7 +236,7 @@ export function TaskEditor({
           ) : null}
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || assigning}
             onClick={() => {
               setError("");
               void load(true);
@@ -260,7 +269,7 @@ export function TaskEditor({
                 required
                 maxLength={300}
                 value={fields.title}
-                disabled={busy}
+                disabled={busy || assigning}
                 onChange={(e) =>
                   setFields({ ...fields, title: e.target.value })
                 }
@@ -273,7 +282,7 @@ export function TaskEditor({
                 required
                 maxLength={100}
                 value={fields.assignee}
-                disabled={busy}
+                disabled={busy || assigning || !!base.assigneeId}
                 onChange={(e) =>
                   setFields({ ...fields, assignee: e.target.value })
                 }
@@ -286,7 +295,7 @@ export function TaskEditor({
                   aria-label="待办截止日期"
                   type="date"
                   value={fields.dueDate}
-                  disabled={busy}
+                  disabled={busy || assigning}
                   onChange={(e) =>
                     setFields({ ...fields, dueDate: e.target.value })
                   }
@@ -297,7 +306,7 @@ export function TaskEditor({
                 <select
                   aria-label="待办状态"
                   value={fields.status}
-                  disabled={busy}
+                  disabled={busy || assigning}
                   onChange={(e) =>
                     setFields({
                       ...fields,
@@ -310,7 +319,10 @@ export function TaskEditor({
                 </select>
               </label>
             </div>
-            <button className="primary" disabled={busy || stale || !dirty}>
+            <button
+              className="primary"
+              disabled={busy || assigning || stale || !dirty}
+            >
               保存待办修改
             </button>
           </form>
@@ -381,6 +393,7 @@ export function TaskEditor({
                 className="primary"
                 disabled={
                   busy ||
+                  assigning ||
                   pending ||
                   stale ||
                   dirty ||
@@ -392,6 +405,15 @@ export function TaskEditor({
               </button>
             </form>
           ) : null}
+          <TaskAssignmentPanel
+            view={view}
+            task={base}
+            run={run}
+            onRun={onRun}
+            onSaved={load}
+            onBusy={setAssigning}
+            blocked={dirty || stale || busy || pending}
+          />
           <h3>最近版本（最多 20 条）</h3>
           <ol className="task-version-history">
             {detail.history.map((item) => (
@@ -405,8 +427,13 @@ export function TaskEditor({
                     : `${item.actorName ?? "员工"} · ${item.channel === "ai" ? "AI 修改" : "人工修改"}`}
                 </p>
                 <small>
-                  {item.snapshot.assignee} ·{" "}
-                  {item.snapshot.dueDate ?? "未设日期"} ·{" "}
+                  {item.snapshot.assignee}
+                  {item.snapshot.assigneeId
+                    ? " · 员工 ID " + item.snapshot.assigneeId
+                    : item.snapshot.assigneeId === null
+                      ? " · 未绑定员工"
+                      : " · 旧版本未记录员工 ID"}{" "}
+                  · {item.snapshot.dueDate ?? "未设日期"} ·{" "}
                   {item.snapshot.status === "done" ? "已标记完成" : "待处理"}
                 </small>
               </li>

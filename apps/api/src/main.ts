@@ -1,3 +1,6 @@
+import { DirectoryService } from "./core/directory.js";
+import { TaskAssignmentService } from "./core/task-assignments.js";
+import { TaskAssignmentInput } from "@hyper/contracts";
 import { WorkBriefInput } from "@hyper/contracts";
 import { WorkBriefService } from "./core/work-briefs.js";
 import "reflect-metadata";
@@ -291,6 +294,29 @@ class ApiController {
       input.roomId,
       input.name,
       input.goal,
+    );
+  }
+  @Get("projects/:id/directory") async directory(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new DirectoryService(db).read(await subject(req), uuid(id));
+  }
+  @Post("tasks/:id/assignment") async assignTask(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const s = await subject(req),
+      input = TaskAssignmentInput.parse(body);
+    if (input.plan.taskId !== uuid(id))
+      throw new BadRequestException("员工分配目标不匹配。");
+    const task = await service.task(s, uuid(id));
+    return new TaskAssignmentService(db).save(
+      s,
+      task.current.projectId,
+      input.plan,
+      input.idempotencyKey,
     );
   }
   @Get("projects/:id/work-briefs") async briefs(

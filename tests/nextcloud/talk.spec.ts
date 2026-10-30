@@ -243,6 +243,11 @@ test("Source project scope survives both real engines and blocks results after r
       expect(text).not.toContain(sentinel);
       expect(text).not.toContain("protocol-fixture-model-result");
     }
+    if (
+      text.includes("Host-bound task assignment.") ||
+      text.includes("Host-bound project directory query.")
+    )
+      expect(text).not.toContain(sentinel);
     if (text.includes("native-follow-up-fixture"))
       expect(text).not.toContain(sentinel);
     if (text.includes("Host-bound artifact review decision.")) {
@@ -723,6 +728,63 @@ test("Source project scope survives both real engines and blocks results after r
         ).status(),
       ).toBe(404);
     }
+    const directoryPath =
+      origin + "/api/projects/" + workspace.project.id + "/directory";
+    const membersResponse = await actor.context.request.get(directoryPath);
+    expect(membersResponse.status()).toBe(200);
+    const members = await membersResponse.json();
+    const employee = members.rows.find((p: any) => p.id === workspace.user.id);
+    expect(employee).toMatchObject({
+      sourceUid: "talk-bob",
+      state: "available",
+    });
+    expect((await outside.context.request.get(directoryPath)).status()).toBe(
+      404,
+    );
+    const beforeAssignment = await (
+      await actor.context.request.get(origin + "/api/tasks/" + task.id)
+    ).json();
+    const assignmentResponse = await actor.context.request.post(
+      origin + "/api/runs",
+      {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          workflow: "assign_task",
+          taskAssignmentPlan: {
+            taskId: task.id,
+            expectedVersion: beforeAssignment.current.version,
+            assigneeId: employee.id,
+            confirmed: true,
+          },
+          engine: "hermes",
+          modelProfileId: profile.id,
+          instruction:
+            "Execute only the explicit employee UID assignment, never send notifications or grant membership",
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(assignmentResponse.status()).toBe(201);
+    const assignmentRun = await assignmentResponse.json();
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await actor.context.request.get(
+                origin + "/api/runs/" + assignmentRun.id,
+              )
+            ).json()
+          ).state,
+        { timeout: 60000, intervals: [700] },
+      )
+      .toBe("succeeded");
+    const assignedTask = await (
+      await actor.context.request.get(origin + "/api/tasks/" + task.id)
+    ).json();
+    expect(assignedTask.current.assigneeId).toBe(employee.id);
+    expect(assignedTask.history[0].snapshot.assigneeId).toBe(employee.id);
     const methodRunResponse = await actor.context.request.post(
       origin + "/api/runs",
       {
@@ -917,6 +979,7 @@ test("Source project scope survives both real engines and blocks results after r
         })
       ).status(),
     ).toBe(404);
+    expect((await actor.context.request.get(directoryPath)).status()).toBe(404);
     expect(revokedSchedule).toEqual({
       checks_started: 1,
       last_run_id: savedSchedule.last_run_id,

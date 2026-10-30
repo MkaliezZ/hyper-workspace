@@ -1,3 +1,5 @@
+import { TaskAssignmentService } from "./task-assignments.js";
+import { DirectoryService } from "./directory.js";
 import { WorkBriefService } from "./work-briefs.js";
 import { WorkBriefContent } from "@hyper/contracts";
 import { randomUUID } from "node:crypto";
@@ -321,39 +323,45 @@ export class RunProcessor {
         run.workflow === "discussion_to_minutes" ||
         run.workflow === "project_report"
           ? ["artifact.create", "project.report"]
-          : run.workflow === "manage_brief"
-            ? [
-                ["create", "revise"].includes(run.brief_plan.operation)
-                  ? "brief.write"
-                  : "brief.manage",
-              ]
-            : run.workflow === "manage_spending"
-              ? ["spending.manage"]
-              : run.workflow === "usage_report"
-                ? ["usage.report"]
-                : run.workflow === "configure_policy"
-                  ? ["policy.configure"]
-                  : run.workflow === "manage_method"
-                    ? [
-                        ["create", "revise"].includes(run.method_plan.operation)
-                          ? "method.write"
-                          : "method.manage",
-                      ]
-                    : run.workflow === "revise_artifact"
-                      ? ["artifact.revise"]
-                      : run.workflow === "revise_task"
-                        ? ["task.update"]
-                        : run.workflow === "review_artifact"
-                          ? ["artifact.review"]
-                          : run.workflow === "follow_up"
-                            ? ["follow_up.check"]
-                            : run.workflow === "configure_follow_up"
-                              ? ["follow_up.configure"]
-                              : run.workflow === "draft_reply"
-                                ? ["communication.draft"]
-                                : isFileWorkflow(run.workflow)
-                                  ? ["file.reading.save"]
-                                  : [];
+          : run.workflow === "assign_task"
+            ? ["task.assign"]
+            : run.workflow === "directory_report"
+              ? ["directory.read"]
+              : run.workflow === "manage_brief"
+                ? [
+                    ["create", "revise"].includes(run.brief_plan.operation)
+                      ? "brief.write"
+                      : "brief.manage",
+                  ]
+                : run.workflow === "manage_spending"
+                  ? ["spending.manage"]
+                  : run.workflow === "usage_report"
+                    ? ["usage.report"]
+                    : run.workflow === "configure_policy"
+                      ? ["policy.configure"]
+                      : run.workflow === "manage_method"
+                        ? [
+                            ["create", "revise"].includes(
+                              run.method_plan.operation,
+                            )
+                              ? "method.write"
+                              : "method.manage",
+                          ]
+                        : run.workflow === "revise_artifact"
+                          ? ["artifact.revise"]
+                          : run.workflow === "revise_task"
+                            ? ["task.update"]
+                            : run.workflow === "review_artifact"
+                              ? ["artifact.review"]
+                              : run.workflow === "follow_up"
+                                ? ["follow_up.check"]
+                                : run.workflow === "configure_follow_up"
+                                  ? ["follow_up.configure"]
+                                  : run.workflow === "draft_reply"
+                                    ? ["communication.draft"]
+                                    : isFileWorkflow(run.workflow)
+                                      ? ["file.reading.save"]
+                                      : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -367,6 +375,11 @@ export class RunProcessor {
         throw new Error("一次执行规则配置只接受一个明确操作。");
       if (run.workflow === "usage_report" && result.actions.length !== 1)
         throw new Error("一次用量查询只接受一个实际回读操作。");
+      if (
+        ["assign_task", "directory_report"].includes(run.workflow) &&
+        result.actions.length !== 1
+      )
+        throw new Error("一次成员操作只接受一个明确动作。");
       if (run.workflow === "manage_brief" && result.actions.length !== 1)
         throw new Error("一次任务说明操作只接受一个明确动作。");
       if (run.workflow === "manage_spending" && result.actions.length !== 1)
@@ -456,6 +469,8 @@ export class RunProcessor {
           run.workflow !== "usage_report" &&
           run.workflow !== "manage_spending" &&
           run.workflow !== "manage_brief" &&
+          run.workflow !== "assign_task" &&
+          run.workflow !== "directory_report" &&
           run.workflow !== "review_artifact" &&
           run.workflow !== "revise_task" &&
           run.workflow !== "manage_method" &&
@@ -485,21 +500,25 @@ export class RunProcessor {
                       ? "定时跟进配置已保存。"
                       : run.workflow === "configure_policy"
                         ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
-                        : run.workflow === "manage_brief"
-                          ? "任务说明操作已保存；仍需完成必要澄清并确认当前版本后才能按说明执行。"
-                          : run.workflow === "usage_report"
-                            ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
-                            : run.workflow === "manage_spending"
-                              ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
-                              : run.workflow === "review_artifact"
-                                ? "已记录员工对指定成果版本的验收决定。"
-                                : run.workflow === "manage_method"
-                                  ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
-                                  : run.workflow === "revise_task"
-                                    ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                                    : isFileWorkflow(run.workflow)
-                                      ? "个人文件解读已保存。"
-                                      : result.text,
+                        : run.workflow === "assign_task"
+                          ? "已按明确员工身份保存分配记录；不表示已通知该员工或扩大权限。"
+                          : run.workflow === "directory_report"
+                            ? "已回读当前项目成员目录；未自动建号或授予权限。"
+                            : run.workflow === "manage_brief"
+                              ? "任务说明操作已保存；仍需完成必要澄清并确认当前版本后才能按说明执行。"
+                              : run.workflow === "usage_report"
+                                ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
+                                : run.workflow === "manage_spending"
+                                  ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
+                                  : run.workflow === "review_artifact"
+                                    ? "已记录员工对指定成果版本的验收决定。"
+                                    : run.workflow === "manage_method"
+                                      ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                                      : run.workflow === "revise_task"
+                                        ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                                        : isFileWorkflow(run.workflow)
+                                          ? "个人文件解读已保存。"
+                                          : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -572,6 +591,24 @@ export class RunProcessor {
   ) {
     if (!toolsForWorkflow(run.workflow).includes(action.tool))
       throw new Error("本次工作类型未授权该业务动作。");
+    const memberScope = ["task.assign", "directory.read"].includes(action.tool)
+      ? await this.service.conversation(s, run.conversation_id)
+      : undefined;
+    const assignment =
+      action.tool === "task.assign"
+        ? await new TaskAssignmentService(this.service.db).prepare(
+            s,
+            memberScope.project_id,
+            run.task_assignment_plan,
+          )
+        : undefined;
+    const directory =
+      action.tool === "directory.read"
+        ? await new DirectoryService(this.service.db).read(
+            s,
+            memberScope.project_id,
+          )
+        : undefined;
     return this.service.db.tx(async (c) => {
       await ExecutionPolicyService.lock(c, s.workspaceId);
       await new ExecutionPolicyService(this.service.db).check(
@@ -604,6 +641,8 @@ export class RunProcessor {
         }
       }
 
+      if (assignment)
+        await lockTask(c, s, assignment.plan.taskId, memberScope.project_id);
       // Match scheduled checks: target schedule before Run/member locks.
       if (configuration)
         await FollowUpScheduleService.lockTarget(c, s, configuration);
@@ -701,7 +740,39 @@ export class RunProcessor {
       if (!conv && !isFileWorkflow(run.workflow))
         throw new Error("Conversation unavailable.");
       let receipt: Record<string, unknown>;
-      if (action.tool === "brief.write" || action.tool === "brief.manage") {
+      if (action.tool === "task.assign") {
+        z.object({}).strict().parse(action.args);
+        receipt = await new TaskAssignmentService(this.service.db).apply(
+          c,
+          s,
+          conv.project_id,
+          run.task_assignment_plan,
+          assignment?.proof,
+          "assignment:" + run.id,
+          run.id,
+        );
+        await appendEvent(c, run.id, "task.updated", receipt);
+      } else if (action.tool === "directory.read") {
+        z.object({}).strict().parse(action.args);
+        const binding = (
+          await c.query(
+            "SELECT * FROM cw_project_sources WHERE project_id=$1 AND workspace_id=$2",
+            [conv.project_id, s.workspaceId],
+          )
+        ).rows[0];
+        if (stableDigest(binding ?? null) !== directory!.bindingHash)
+          throw new Error("成员来源已变化，请重新读取。");
+        receipt = {
+          tool: "directory.read",
+          projectId: conv.project_id,
+          checkedAt: directory!.checkedAt,
+          scope: directory!.scope,
+          rows: directory!.rows,
+        };
+      } else if (
+        action.tool === "brief.write" ||
+        action.tool === "brief.manage"
+      ) {
         const writing = ["create", "revise"].includes(run.brief_plan.operation);
         if (writing !== (action.tool === "brief.write"))
           throw new Error("任务说明操作不匹配。");

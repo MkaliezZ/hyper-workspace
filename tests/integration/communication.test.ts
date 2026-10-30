@@ -1,3 +1,5 @@
+import { DirectoryService } from "../../apps/api/src/core/directory.js";
+import { TaskAssignmentService } from "../../apps/api/src/core/task-assignments.js";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -38,6 +40,8 @@ type Room = {
   readDenied: boolean;
   posts: number;
   readAlias?: string;
+  directory?: any[];
+  directoryFailure?: number;
 };
 const rooms = new Map<string, Room>();
 let nextId = 100;
@@ -131,6 +135,24 @@ const server = createServer(async (req, res) => {
   });
   if (parsed.pathname.endsWith("/v4/room")) {
     json([...rooms.values()].filter((r) => r.members.has(uid)).map(metadata));
+    return;
+  }
+  if (parsed.pathname.endsWith("/participants")) {
+    const target = rooms.get(parsed.pathname.split("/").at(-2)!);
+    if (!target || !target.members.has(uid) || target.directoryFailure) {
+      res.writeHead(target?.directoryFailure ?? 404);
+      res.end("{}");
+      return;
+    }
+    json(
+      target.directory ??
+        [...target.members].map((actorId) => ({
+          actorType: "users",
+          actorId,
+          displayName: actorId,
+          participantType: 3,
+        })),
+    );
     return;
   }
   if (parsed.pathname.includes("/v4/room/")) directRoomQueries++;
@@ -1954,4 +1976,199 @@ test("Combined private file and selected reading obey the input byte limit befor
   assert.match((await work.getRun(s(), revision.id)).error, /100 KB/);
   assert.equal(calls, 1);
   assert.equal((await new FileReadingService(db).get(s(), id)).version, 1);
+});
+
+test("Project directory uses exact current source UIDs, excludes guests and never provisions unknown employees", async () => {
+  const r = room(["alice", "bob", "unmapped"]),
+    ws = new WorkspaceService(db, engineRegistry());
+  r.directory = [
+    {
+      actorType: "users",
+      actorId: "alice",
+      displayName: "Same name",
+      participantType: 3,
+    },
+    {
+      actorType: "users",
+      actorId: "bob",
+      displayName: "Same name",
+      participantType: 3,
+    },
+    {
+      actorType: "users",
+      actorId: "unmapped",
+      displayName: "New employee",
+      participantType: 3,
+    },
+    {
+      actorType: "guests",
+      actorId: "outsider",
+      displayName: "Spoofed same name",
+      participantType: 4,
+    },
+    {
+      actorType: "groups",
+      actorId: "bob",
+      displayName: "Group",
+      participantType: 3,
+    },
+  ];
+  const project = await ws.createTalkProject(
+      s(),
+      r.id,
+      "Directory source fixture",
+      "Exact identities only",
+    ),
+    directory = new DirectoryService(db);
+  const view = await directory.read(s(), project.id);
+  assert.equal(view.rows.length, 3);
+  assert.equal(view.rows.find((p) => p.sourceUid === "alice")!.id, s().id);
+  assert.equal(view.rows.find((p) => p.sourceUid === "bob")!.id, s("bob").id);
+  assert.equal(view.rows.find((p) => p.sourceUid === "unmapped")!.id, null);
+  assert.equal(
+    view.rows.find((p) => p.sourceUid === "unmapped")!.state,
+    "unavailable",
+  );
+  await assert.rejects(directory.read(s("outsider"), project.id));
+  await assert.rejects(
+    directory.resolve(s(), project.id, s("outsider").id),
+    /当前可分配/,
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_external_identities WHERE remote_uid='unmapped' AND workspace_id=$1",
+        [workspace],
+      )
+    ).rowCount,
+    0,
+  );
+  r.directoryFailure = 503;
+  await assert.rejects(directory.resolve(s(), project.id, s("bob").id));
+  r.directoryFailure = undefined;
+  r.directory = [...r.directory, r.directory[0]];
+  await assert.rejects(directory.read(s(), project.id), /重复身份/);
+});
+test("AI assignment rechecks target source membership after model work and retains stable historical identity after removal", async () => {
+  process.env.DEMO_MODE = "true";
+  const r = room(),
+    engines = engineRegistry(),
+    ws = new WorkspaceService(db, engines),
+    directory = new DirectoryService(db),
+    assignments = new TaskAssignmentService(db);
+  const project = await ws.createTalkProject(
+      s(),
+      r.id,
+      "Assignment source fixture",
+      "No granting source permissions",
+    ),
+    task = await ws.createTask(s(), project.conversationId, {
+      title: "Scoped task",
+      assignee: "Same label",
+      dueDate: null,
+    });
+  let a = await assignments.save(
+    s(),
+    project.id,
+    {
+      taskId: task.id,
+      expectedVersion: 1,
+      assigneeId: s("bob").id,
+      confirmed: true,
+    },
+    randomUUID(),
+  );
+  assert.equal(a.assigneeId, s("bob").id);
+  assert.equal(a.sourceUid, "bob");
+  const adapter = engines.get("fixture")!;
+  adapter.execute = async () => {
+    r.members.delete("bob");
+    return {
+      text: "Pretend sent notification",
+      evidence: "fixture",
+      actions: [{ tool: "task.assign", args: {} }],
+    };
+  };
+  // The real source subject cannot use fixture; use a bounded test adapter with native-compatible routing.
+  const original = engines.get("dsh")!;
+  original.describeCapabilities = () => ({
+    configured: true,
+    operations: ["assign_task"],
+    evidence: "protocol-fixture",
+  });
+  original.execute = adapter.execute;
+  const model = await ws.saveModel(s(), {
+    name: "Assignment protocol model",
+    provider: "openai-compatible",
+    endpoint: process.env.NEXTCLOUD_URL + "/v1",
+    model: "fixture",
+    purpose: "chat",
+    scope: "personal",
+    apiKey: "synthetic-assignment-key",
+  });
+  const run = await ws.startRun(s(), {
+    conversationId: project.conversationId,
+    engine: "dsh",
+    workflow: "assign_task",
+    taskAssignmentPlan: {
+      taskId: task.id,
+      expectedVersion: a.version,
+      assigneeId: s("bob").id,
+      confirmed: true,
+    },
+    modelProfileId: model.id,
+    instruction: "Explicit identity; recheck before writing",
+    idempotencyKey: randomUUID(),
+  });
+  await new RunProcessor(ws).process(run.id);
+  const result = await ws.getRun(s(), run.id);
+  assert.equal(result.state, "failed");
+  assert.equal((await ws.task(s(), task.id)).current.version, a.version);
+  assert.equal((await ws.task(s(), task.id)).current.assigneeId, s("bob").id);
+  assert.ok(
+    !(await directory.read(s(), project.id)).rows.some(
+      (p) => p.id === s("bob").id,
+    ),
+  );
+  await assert.rejects(
+    assignments.save(
+      s(),
+      project.id,
+      {
+        taskId: task.id,
+        expectedVersion: a.version,
+        assigneeId: s("bob").id,
+        confirmed: true,
+      },
+      randomUUID(),
+    ),
+  );
+  a = await assignments.save(
+    s(),
+    project.id,
+    {
+      taskId: task.id,
+      expectedVersion: a.version,
+      assigneeId: null,
+      confirmed: true,
+    },
+    randomUUID(),
+  );
+  assert.equal(a.assigneeId, null);
+  assert.equal(a.assignee, "待分配");
+  r.members.delete("alice");
+  await assert.rejects(directory.read(s(), project.id));
+  await assert.rejects(
+    assignments.save(
+      s(),
+      project.id,
+      {
+        taskId: task.id,
+        expectedVersion: a.version,
+        assigneeId: null,
+        confirmed: true,
+      },
+      randomUUID(),
+    ),
+  );
 });

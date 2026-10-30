@@ -164,7 +164,72 @@ test(
       );
       assert.equal(fixture.calls(), before);
       assert.deepEqual(fixture.violations, []);
-      assert.equal(fixture.calls(), 4);
+      const employeeId = randomUUID();
+      await db.pool.query(
+        "INSERT INTO cw_users(id,name)VALUES($1,'Native employee target')",
+        [employeeId],
+      );
+      await db.pool.query(
+        "INSERT INTO cw_members(workspace_id,user_id,role)VALUES($1,$2,'member')",
+        [subject.workspaceId, employeeId],
+      );
+      const task = await service.createTask(subject, project.conversationId, {
+        title: "Native employee assignment",
+        assignee: "Label only",
+        dueDate: null,
+      });
+      const memberRun = async (
+        engine: "dsh" | "hermes",
+        workflow: "assign_task" | "directory_report",
+        plan?: any,
+      ) => {
+        const started = await service.startRun(
+          subject,
+          RunInput.parse({
+            conversationId: project.conversationId,
+            engine,
+            workflow,
+            ...(plan ? { taskAssignmentPlan: plan } : {}),
+            modelProfileId: model.id,
+            instruction:
+              "Read the actual current directory or execute only the explicit employee identity plan",
+            idempotencyKey: randomUUID(),
+          }),
+        );
+        await processor.process(started.id);
+        const result = await service.getRun(subject, started.id);
+        assert.equal(result.state, "succeeded", result.error);
+        assert.equal(result.result.evidence, "runtime");
+        return result.result.receipts[0];
+      };
+      const people = await memberRun("dsh", "directory_report");
+      assert.ok(people.rows.some((p: any) => p.id === employeeId));
+      const assigned = await memberRun("hermes", "assign_task", {
+        taskId: task.id,
+        expectedVersion: 1,
+        assigneeId: employeeId,
+        confirmed: true,
+      });
+      assert.equal(assigned.assigneeId, employeeId);
+      assert.equal(
+        (await service.task(subject, task.id)).current.assigneeId,
+        employeeId,
+      );
+      const cleared = await memberRun("dsh", "assign_task", {
+        taskId: task.id,
+        expectedVersion: assigned.version,
+        assigneeId: null,
+        confirmed: true,
+      });
+      assert.equal(cleared.assigneeId, null);
+      assert.equal(
+        (await service.task(subject, task.id)).history.find(
+          (v: any) => v.version === assigned.version,
+        ).snapshot.assigneeId,
+        employeeId,
+      );
+      assert.deepEqual(fixture.violations, []);
+      assert.equal(fixture.calls(), 7);
     } finally {
       await db.close();
       fixture.server.closeAllConnections();

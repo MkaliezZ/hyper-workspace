@@ -325,6 +325,44 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       version: 2,
       status: "done",
     });
+    const directory = await (
+      await context.request.get(
+        origin + "/api/projects/" + workspace.project.id + "/directory",
+      )
+    ).json();
+    expect(directory.rows.some((p: any) => p.id === workspace.user.id)).toBe(
+      true,
+    );
+    const assignmentResponse = await context.request.post(
+      origin + "/api/runs",
+      {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          workflow: "assign_task",
+          taskAssignmentPlan: {
+            taskId: task.id,
+            expectedVersion: 2,
+            assigneeId: workspace.user.id,
+            confirmed: true,
+          },
+          engine: "dsh",
+          modelProfileId: modelId,
+          instruction:
+            "Only this exact employee identity; no notifications or access grants",
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(assignmentResponse.status()).toBe(201);
+    const assignmentRun = await completed(
+      context.request,
+      (await assignmentResponse.json()).id,
+    );
+    expect(assignmentRun.result.receipts[0]).toMatchObject({
+      assigneeId: workspace.user.id,
+      version: 3,
+    });
     const methodResponse = await context.request.post(origin + "/api/runs", {
       headers: { Origin: origin },
       data: {
@@ -501,14 +539,18 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     expect(restoredTask.current).toMatchObject({
       id: task.id,
       title: "synthetic-container-task-update",
-      version: 2,
+      version: 3,
+      assigneeId: workspace.user.id,
       status: "done",
     });
-    expect(restoredTask.history).toHaveLength(2);
+    expect(restoredTask.history).toHaveLength(3);
     expect(restoredTask.history[0]).toMatchObject({
       channel: "ai",
-      sourceRunId: taskRun.id,
+      sourceRunId: assignmentRun.id,
     });
+    expect(
+      restoredTask.history.find((v: any) => v.version === 2),
+    ).toMatchObject({ channel: "ai", sourceRunId: taskRun.id });
     const saved = await (
       await context.request.get(origin + "/api/artifacts/" + artifactId)
     ).json();

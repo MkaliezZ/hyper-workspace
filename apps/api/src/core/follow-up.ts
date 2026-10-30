@@ -3,8 +3,14 @@ import type { PoolClient } from "pg";
 import type { Subject, Task } from "@hyper/contracts";
 import { stableDigest } from "./credentials.js";
 
-type Field = "title" | "assignee" | "status" | "dueDate";
-const fields: Field[] = ["title", "assignee", "status", "dueDate"];
+type Field = "title" | "assignee" | "assigneeId" | "status" | "dueDate";
+const fields: Field[] = [
+  "title",
+  "assignee",
+  "assigneeId",
+  "status",
+  "dueDate",
+];
 interface Change {
   kind: "added" | "updated" | "removed";
   id: string;
@@ -34,7 +40,7 @@ export class FollowUpService {
     projectId: string,
   ): Promise<Task[]> {
     const result = await c.query(
-      `SELECT id,title,assignee,status,to_char(due_date,'YYYY-MM-DD') AS "dueDate"
+      `SELECT id,title,assignee,assignee_id AS "assigneeId",status,to_char(due_date,'YYYY-MM-DD') AS "dueDate"
        FROM cw_tasks WHERE workspace_id=$1 AND project_id=$2 ORDER BY id LIMIT 1001`,
       [workspaceId, projectId],
     );
@@ -76,7 +82,13 @@ export class FollowUpService {
     if (previous) {
       for (const task of tasks) {
         const old = before.get(task.id);
-        const changed = old ? fields.filter((f) => old[f] !== task[f]) : [];
+        const changed = old
+          ? fields.filter((f) =>
+              f === "assigneeId"
+                ? (old[f] ?? null) !== (task[f] ?? null)
+                : old[f] !== task[f],
+            )
+          : [];
         if (!old || changed.length)
           changes.push({
             kind: old ? "updated" : "added",
@@ -165,6 +177,7 @@ export class FollowUpService {
     const labels: Record<Field, string> = {
       title: "事项",
       assignee: "负责人",
+      assigneeId: "员工身份",
       status: "状态",
       dueDate: "截止日期",
     };

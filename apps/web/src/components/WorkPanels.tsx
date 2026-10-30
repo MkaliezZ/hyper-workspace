@@ -138,7 +138,12 @@ export function TasksPanel({
               </span>
               {t.title}
             </button>
-            <span>{t.assignee}</span>
+            <span>
+              {t.assignee}
+              <small className="muted">
+                {t.assigneeId ? " · 员工 ID 已绑定" : " · 文字标记"}
+              </small>
+            </span>
             <span className="task-due-actions">
               <span>{t.dueDate ?? "未设置"}</span>
               <button

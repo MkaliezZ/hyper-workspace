@@ -180,6 +180,16 @@ export class NextcloudTalkProvider implements CommunicationProvider {
     if (!room) throw new SourceRejected(404);
     return room;
   }
+  async participants(id:string) {
+    await this.room(id);
+    const {data}=await this.ocs("v4/room/"+TalkToken.parse(id)+"/participants?format=json&includeStatus=0");
+    const parsed=z.array(z.object({actorType:z.string(),actorId:z.string().min(1).max(255),displayName:z.string().max(1000),participantType:z.number().int()})).max(2000).safeParse(data);
+    if(!parsed.success) throw new ServiceUnavailableException("企业成员目录格式或规模不受支持。");
+    const rows=parsed.data.filter(p=>p.actorType==="users"&&[1,2,3].includes(p.participantType));
+    if(!rows.some(p=>p.actorId===this.remoteUid)) throw new SourceRejected(404);
+    if(new Set(rows.map(p=>p.actorId)).size!==rows.length) throw new ServiceUnavailableException("企业成员目录存在重复身份，未作姓名推断。");
+    return rows.map(p=>({uid:p.actorId,name:p.displayName||p.actorId}));
+  }
   private async read(
     id: string,
     before?: string,

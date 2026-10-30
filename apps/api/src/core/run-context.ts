@@ -1,3 +1,4 @@
+import { TaskAssignmentService } from "./task-assignments.js";
 import { WorkBriefService } from "./work-briefs.js";
 import type { Subject } from "@hyper/contracts";
 import { isFileWorkflow } from "@hyper/contracts";
@@ -106,6 +107,43 @@ async function baseRunContext(
     };
   }
   const conversation = await service.conversation(subject, run.conversation_id);
+  if (run.workflow === "directory_report")
+    return {
+      context:
+        "Host-bound project directory query. Propose exactly one directory.read with empty args. The host reads the current project scope. Do not choose a project, employee, identity, permissions or recipients. No messages, files or people list included.",
+      sourceIds: [],
+      contextRefs: [],
+      live: true,
+    };
+  if (run.workflow === "assign_task") {
+    const prepared = await new TaskAssignmentService(service.db).prepare(
+      subject,
+      conversation.project_id,
+      run.task_assignment_plan,
+    );
+    return {
+      context:
+        "Host-bound task assignment. Propose exactly one task.assign with empty args. The employee explicitly chose the task version and exact employee ID (or unassignment). The host enforces current membership and source UID mapping. Do not choose a person by name, change targets, grant permissions, create identities or claim a notification was sent. No discussion included.\n" +
+        JSON.stringify({
+          plan: prepared.plan,
+          employeeChoice: prepared.proof
+            ? {
+                id: prepared.proof.userId,
+                name: prepared.proof.name,
+                sourceUid: prepared.proof.sourceUid,
+              }
+            : null,
+        }),
+      sourceIds: [],
+      contextRefs: [
+        "task-assignment:" +
+          prepared.plan.taskId +
+          "@" +
+          prepared.plan.expectedVersion,
+      ],
+      live: true,
+    };
+  }
   if (run.workflow === "manage_brief") {
     const current = await new WorkBriefService(service.db).prepare(
       subject,
@@ -237,6 +275,7 @@ async function baseRunContext(
             id: current.id,
             title: current.title,
             assignee: current.assignee,
+            assigneeId: current.assigneeId ?? null,
             dueDate: current.dueDate,
             status: current.status,
             version: current.version,

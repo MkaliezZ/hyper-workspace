@@ -31,7 +31,7 @@ export async function createProjectTask(
     await c.query(
       `INSERT INTO cw_tasks(id,workspace_id,project_id,title,assignee,due_date,created_by,source_run_id)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-      RETURNING id,title,assignee,to_char(due_date,'YYYY-MM-DD') AS "dueDate",status,version`,
+      RETURNING id,title,assignee,assignee_id AS "assigneeId",to_char(due_date,'YYYY-MM-DD') AS "dueDate",status,version`,
       [
         randomUUID(),
         subject.workspaceId,
@@ -56,7 +56,7 @@ export async function lockTask(
 ) {
   const row = (
     await c.query(
-      `SELECT id,project_id,title,assignee,to_char(due_date,'YYYY-MM-DD') AS "dueDate",status,version
+      `SELECT id,project_id,title,assignee,assignee_id AS "assigneeId",to_char(due_date,'YYYY-MM-DD') AS "dueDate",status,version
      FROM cw_tasks WHERE id=$1 AND workspace_id=$2 AND ($3::uuid IS NULL OR project_id=$3) FOR UPDATE`,
       [id, subject.workspaceId, projectId ?? null],
     )
@@ -65,7 +65,7 @@ export async function lockTask(
   return row;
 }
 
-async function recordTaskVersion(
+export async function recordTaskVersion(
   c: PoolClient,
   subject: Subject,
   task: any,
@@ -74,6 +74,7 @@ async function recordTaskVersion(
   const snapshot = {
     title: task.title,
     assignee: task.assignee,
+    assigneeId: task.assigneeId ?? null,
     dueDate: task.dueDate,
     status: task.status,
   };
@@ -113,6 +114,14 @@ export async function patchProjectTask(
     patch.expectedVersion !== current.version
   )
     throw new ConflictException("待办已更新，请重新读取当前版本后再修改。");
+  if (
+    current.assigneeId &&
+    patch.assignee !== undefined &&
+    patch.assignee !== current.assignee
+  )
+    throw new ConflictException(
+      "此待办已绑定员工，请通过员工分配入口更改负责人。",
+    );
   // Direct seed/legacy inserts may lack tracked history. Capture only the
   // current pre-edit state; never infer who made earlier changes or when.
   await c.query(
@@ -141,7 +150,7 @@ export async function patchProjectTask(
     await c.query(
       `UPDATE cw_tasks SET title=COALESCE($2,title),assignee=COALESCE($3,assignee),
     due_date=CASE WHEN $4 THEN $5::date ELSE due_date END,status=COALESCE($6,status),version=version+1
-    WHERE id=$1 AND version=$7 RETURNING id,title,assignee,to_char(due_date,'YYYY-MM-DD') AS "dueDate",status,version`,
+    WHERE id=$1 AND version=$7 RETURNING id,title,assignee,assignee_id AS "assigneeId",to_char(due_date,'YYYY-MM-DD') AS "dueDate",status,version`,
       [
         id,
         patch.title ?? null,

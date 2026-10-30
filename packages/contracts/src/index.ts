@@ -43,12 +43,26 @@ export const Workflow = z.enum([
   "usage_report",
   "manage_spending",
   "manage_brief",
+  "assign_task",
+  "directory_report",
   "chat",
   "draft_reply",
   "read_file",
   "revise_file_reading",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
+export const TaskAssignmentPlan = z
+  .object({
+    taskId: z.uuid(),
+    expectedVersion: z.number().int().positive(),
+    assigneeId: z.uuid().nullable(),
+    confirmed: z.literal(true),
+  })
+  .strict();
+export type TaskAssignmentPlan = z.infer<typeof TaskAssignmentPlan>;
+export const TaskAssignmentInput = z
+  .object({ plan: TaskAssignmentPlan, idempotencyKey: z.uuid() })
+  .strict();
 export const WorkBriefContent = z
   .object({
     title: z.string().trim().min(1).max(200),
@@ -331,6 +345,7 @@ export const RunInput = z
     spendingPlan: ModelSpendingPlan.optional(),
     briefPlan: WorkBriefPlan.optional(),
     briefRef: BriefReference.optional(),
+    taskAssignmentPlan: TaskAssignmentPlan.optional(),
     taskRules: ExecutionRules.omit({ dailyRuns: true }).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
@@ -463,6 +478,8 @@ export interface PlannedAction {
     | "spending.manage"
     | "brief.write"
     | "brief.manage"
+    | "task.assign"
+    | "directory.read"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -518,6 +535,10 @@ export function toolsForWorkflow(
       return ["spending.manage"];
     case "manage_brief":
       return ["brief.write", "brief.manage"];
+    case "assign_task":
+      return ["task.assign"];
+    case "directory_report":
+      return ["directory.read"];
     case "chat":
       return [];
     case "draft_reply":
@@ -556,6 +577,7 @@ export interface Task {
   id: string;
   title: string;
   assignee: string;
+  assigneeId?: string | null;
   status: "open" | "done";
   dueDate: string | null;
   version?: number;

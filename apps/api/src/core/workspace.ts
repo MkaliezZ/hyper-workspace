@@ -1,3 +1,4 @@
+import { TaskAssignmentService } from "./task-assignments.js";
 import { WorkBriefService } from "./work-briefs.js";
 import {
   BadRequestException,
@@ -67,7 +68,7 @@ export class WorkspaceService {
         [project.conversationId, s.workspaceId],
       ),
       this.db.pool.query(
-        "SELECT id,title,assignee,status,to_char(due_date,'YYYY-MM-DD') AS \"dueDate\",version FROM cw_tasks WHERE project_id=$1 AND workspace_id=$2 ORDER BY created_at,id",
+        'SELECT id,title,assignee,assignee_id AS "assigneeId",status,to_char(due_date,\'YYYY-MM-DD\') AS "dueDate",version FROM cw_tasks WHERE project_id=$1 AND workspace_id=$2 ORDER BY created_at,id',
         [project.id, s.workspaceId],
       ),
       this.db.pool.query(
@@ -181,7 +182,7 @@ export class WorkspaceService {
     await assertMember(this.db, s);
     const target = (
       await this.db.pool.query(
-        `SELECT id,project_id AS "projectId",title,assignee,status,to_char(due_date,'YYYY-MM-DD') AS "dueDate",version
+        `SELECT id,project_id AS "projectId",title,assignee,assignee_id AS "assigneeId",status,to_char(due_date,'YYYY-MM-DD') AS "dueDate",version
       FROM cw_tasks WHERE id=$1 AND workspace_id=$2 AND ($3::uuid IS NULL OR project_id=$3)`,
         [id, s.workspaceId, projectId ?? null],
       )
@@ -477,6 +478,49 @@ export class WorkspaceService {
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
+    if (
+      input.taskAssignmentPlan ||
+      ["assign_task", "directory_report"].includes(input.workflow)
+    ) {
+      if (
+        (input.workflow === "assign_task") !== !!input.taskAssignmentPlan ||
+        input.artifactId ||
+        input.taskId ||
+        input.methodRefs?.length ||
+        input.briefRef ||
+        input.briefPlan
+      )
+        throw new BadRequestException(
+          "请从员工分配或成员目录入口选择明确范围。",
+        );
+      const prior = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (prior) {
+        if (
+          prior.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: prior.id, state: prior.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes(input.workflow)
+      )
+        throw new BadRequestException("执行器未声明此成员能力。");
+      if (input.taskAssignmentPlan)
+        await new TaskAssignmentService(this.db).prepare(
+          s,
+          conversation.project_id,
+          input.taskAssignmentPlan,
+        );
+    }
     if (
       input.briefPlan ||
       input.briefRef ||
@@ -778,7 +822,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref,task_assignment_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -805,6 +849,7 @@ export class WorkspaceService {
         input.spendingPlan ?? null,
         input.briefPlan ?? null,
         input.briefRef ?? null,
+        input.taskAssignmentPlan ?? null,
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };
@@ -837,7 +882,7 @@ export class WorkspaceService {
       );
     else await this.conversation(s, target.conversation_id);
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",execution_policy_snapshot AS "executionPolicy",brief_ref AS "briefRef",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",execution_policy_snapshot AS "executionPolicy",brief_ref AS "briefRef",task_assignment_plan AS "taskAssignmentPlan",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");
