@@ -252,5 +252,15 @@
     "previousEvidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40999699396",
     "previousEvidenceCommit": "5ef6be012caa24cb73d14b6a55180a4ae3a55461",
     "previousEvidenceScope": "177 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 95 database, 3 native runtime, 36 UI, 9 real source, 4 container; real source DSH generation/Hermes reuse and revocation; restricted container DSH create/publish/restart/Hermes withdrawal; synthetic sources/models only"
+  },
+  "realModelSmoke": {
+    "date": "2026-10-30",
+    "model": "deepseek-flash",
+    "provider": "openai-compatible",
+    "status": "local-real-provider-synthetic-business-sample-passed",
+    "contract": "docs/REAL-MODEL-SMOKE.md",
+    "scope": "Product model configuration and verification, native DSH minutes plus two actual tasks, native Hermes revision of the same artifact v1 to v2; nine readback checks and expected-content inspection; 32 runtime files scanned without full plaintext key",
+    "limits": "Local demo identity and synthetic data, assignee text labels not enterprise UID mapping; no full business, embedding, multi-model, human-rubric, billing or production acceptance",
+    "secrets": "Restricted local configuration and encrypted product profile only; no credentials or private reports committed"
   }
 }

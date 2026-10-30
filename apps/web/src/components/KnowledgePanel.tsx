@@ -4,6 +4,7 @@ import { api, mutation } from "../api";
 import { SourceFilesPanel } from "./SourceFilesPanel";
 import { MethodsPanel } from "./MethodsPanel";
 import type { WorkspaceView } from "@hyper/contracts";
+import { usePageTransition } from "../hooks/usePageTransition";
 interface KnowledgeResult {
   id: string;
   title: string;
@@ -36,6 +37,7 @@ export function KnowledgePanel({
   const [tab, setTab] = useState<"search" | "files" | "methods">("search");
   const [results, setResults] = useState<KnowledgeResult[]>([]),
     [notice, setNotice] = useState("");
+  const surface = usePageTransition<HTMLDivElement>(tab);
   const hasFileResults = results.some((row) => row.type === "source_file");
   useEffect(() => {
     if (!hasFileResults) return;
@@ -78,7 +80,7 @@ export function KnowledgePanel({
     };
   }, [hasFileResults]);
   return (
-    <div className="work-panel">
+    <div className="work-panel" ref={surface}>
       <div className="tabs" role="tablist" aria-label="资料操作">
         <button
           role="tab"

@@ -1938,3 +1938,20 @@ p {
     display: grid;
   }
 }
+.rail-actions button,
+.nav-item,
+.project-list button,
+.tabs button {
+  transition:
+    background-color 140ms ease-out,
+    color 140ms ease-out,
+    border-color 140ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-actions button,
+  .nav-item,
+  .project-list button,
+  .tabs button {
+    transition: none;
+  }
+}

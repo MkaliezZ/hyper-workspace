@@ -4,7 +4,7 @@
 
 面向企业内部的 AI 协作 IM：讨论有沉淀，行动有回执，成果能修改，经验能复用。蓝、白、黑配色；拥有自己的业务核心与企业资产服务。
 
-**开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。真实模型质量、AI 自主通信投递、Files 扩展、Calendar 和完整业务验收仍待完成。
+**开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。已用真实 DeepSeek Flash 在本机完成 DSH 纪要/两条待办和 Hermes 同一成果续改的小样例，[结果与边界](docs/REAL-MODEL-SMOKE.md)。更多真实模型质量、AI 自主通信投递、Files 扩展、Calendar 和完整业务验收仍待完成。
 
 ## 实际界面
 
@@ -13,6 +13,8 @@
 ![Hyper Workspace 桌面界面](docs/images/workspace-desktop.png)
 
 [查看移动端截图](docs/images/workspace-mobile.png) · [设计参考与核对记录](docs/design/DESIGN.md)
+
+导航、项目及标签切换采用约 180ms 淡入和轻微上移；不会因后台刷新反复播放，开启系统“减少动态效果”时关闭。
 
 ## 技术架构
 

@@ -25,6 +25,7 @@ import { FollowUpPanel } from "./components/FollowUpPanel";
 import { ArtifactReviewPanel } from "./components/ArtifactReviewPanel";
 import { artifactStatusLabel } from "@hyper/contracts";
 import { TaskEditor } from "./components/TaskEditor";
+import { usePageTransition } from "./hooks/usePageTransition";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
@@ -70,6 +71,9 @@ export function App() {
     [modelProfileId, setModelProfileId] = useState("");
   const [edit, setEdit] = useState(""),
     [feedback, setFeedback] = useState("");
+  const pageSurface = usePageTransition<HTMLElement>(
+    view ? `${view.user.id}:${view.project.id}:${section}:${tab}` : undefined,
+  );
   const load = useCallback(async (projectId?: string) => {
     const version = ++loadVersion.current;
     const clearPrivateDrafts = () => {
@@ -340,7 +344,7 @@ export function App() {
           })
         }
       />
-      <main className="main-pane">
+      <main className="main-pane" ref={pageSurface}>
         <MainHeader
           title={projectTitle}
           enterprise={section === "enterprise"}
