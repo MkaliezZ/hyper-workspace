@@ -57,6 +57,8 @@
 
 [说明、权限、迁移与边界](docs/WORK-BRIEFS.md) · [桌面](docs/images/work-brief-desktop.png) · [手机](docs/images/work-brief-mobile.png)。当前为说明入口的明确澄清闭环，通用自然语言歧义路由和完整业务验收仍待完成。
 
+说明实现 `5daf7e67ea44c16abb3c32344d2fde01c10e3a18` 的 [CI 41043632497](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41043632497) 三个 job 全部成功，218 项首轮通过：25 单元/配置、3 下载器、8 解析、124 数据库、4 原生执行器、41 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。CI 使用合成资料和协议模型，不能代替公司验收。 实际 DeepSeek Flash 的 DSH 澄清 → 合成回答/确认 → Hermes 绑定成果小样例通过，[实际模型证据](docs/REAL-MODEL-SMOKE.md)。
+
 ## 本地开发
 
 需要 Node.js 24 与可用的 PostgreSQL（安装 pgvector）。容器运行包见下方自部署章节。

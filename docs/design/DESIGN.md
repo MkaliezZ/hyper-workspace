@@ -77,3 +77,11 @@ Browser plugin not available，使用项目 Playwright Chromium；本机 http://
 | 视觉与响应布局     | 两种宽度截图已查看，无横向溢出，金额/表单和操作可访问                                         |
 
 [桌面截图](../images/model-spending-desktop.png) · [手机截图](../images/model-spending-mobile.png)。截图全部为合成资料；范围、费用精度和回退见 [模块契约](../MODEL-SPENDING.md)。
+
+## 任务说明与澄清 — 2026-10-30
+
+路径：项目 → 任务说明草稿 → 员工回答 → 确认当前版本 → 绑定 Worker 成果 → AI 修改且保留人工草稿 → 明确读取新版本 → 失权清理。新页沿用蓝白黑，移动端四个项目标签可见；说明明确提示项目成员可见，确认与实际工作完成分开。
+
+Browser plugin not available，沿用 Playwright Chromium；本地 http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。URL/标题、非空内容、无 Vite overlay、控制台健康和实际对象回读均通过；完整 41 UI 本地及 CI 首轮通过。桌面/手机截图已逐一查看，无横向溢出，表单与操作可滚动访问。首轮通用标签匹配超时，按可访问 combobox 名称定位后通过；原 trace 保留在受限忽略目录。
+
+[桌面](../images/work-brief-desktop.png) · [手机](../images/work-brief-mobile.png)。截图为合成资料；未测 Safari/Firefox、正式员工量规及公司环境。业务/原生/来源/容器与实际模型小样例的证据见 [说明契约](../WORK-BRIEFS.md)。
