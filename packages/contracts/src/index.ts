@@ -39,12 +39,38 @@ export const Workflow = z.enum([
   "review_artifact",
   "follow_up",
   "configure_follow_up",
+  "configure_policy",
   "chat",
   "draft_reply",
   "read_file",
   "revise_file_reading",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
+export const ExecutionRules = z
+  .object({
+    maxContextBytes: z.number().int().min(1024).max(100000).optional(),
+    maxOutputTokens: z.number().int().min(64).max(4096).optional(),
+    maxDurationSeconds: z.number().int().min(5).max(180).optional(),
+    maxActions: z.number().int().min(0).max(30).optional(),
+    engines: z.array(EngineId).max(3).optional(),
+    workflows: z.array(Workflow).max(32).optional(),
+    dailyRuns: z.number().int().min(0).max(10000).optional(),
+    expression: z.enum(["concise", "balanced", "detailed"]).optional(),
+  })
+  .strict();
+export type ExecutionRules = z.infer<typeof ExecutionRules>;
+export const ExecutionPolicyPlan = z
+  .object({
+    scope: z.enum(["workspace", "project", "personal"]),
+    expectedRevision: z.number().int().min(0),
+    rules: ExecutionRules,
+    confirmed: z.literal(true),
+  })
+  .strict();
+export type ExecutionPolicyPlan = z.infer<typeof ExecutionPolicyPlan>;
+export const ExecutionPolicyInput = ExecutionPolicyPlan.extend({
+  idempotencyKey: z.uuid(),
+}).strict();
 export function isFileWorkflow(workflow: string) {
   return workflow === "read_file" || workflow === "revise_file_reading";
 }
@@ -197,6 +223,8 @@ export const RunInput = z
     expectedTaskVersion: z.number().int().positive().optional(),
     methodPlan: MethodPlan.optional(),
     methodRefs: z.array(MethodReference).max(3).optional(),
+    policyPlan: ExecutionPolicyPlan.optional(),
+    taskRules: ExecutionRules.omit({ dailyRuns: true }).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
   .strict();
@@ -323,6 +351,7 @@ export interface PlannedAction {
     | "task.update"
     | "method.write"
     | "method.manage"
+    | "policy.configure"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -347,6 +376,7 @@ export interface EngineRequest {
     apiKey?: string;
   };
   signal: AbortSignal;
+  limits?: { maxOutputTokens: number; maxDurationSeconds: number };
   onProgress: (text: string) => Promise<void>;
 }
 export function toolsForWorkflow(
@@ -369,6 +399,8 @@ export function toolsForWorkflow(
       return ["follow_up.check"];
     case "configure_follow_up":
       return ["follow_up.configure"];
+    case "configure_policy":
+      return ["policy.configure"];
     case "chat":
       return [];
     case "draft_reply":

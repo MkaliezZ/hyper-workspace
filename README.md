@@ -35,6 +35,12 @@
 
 最终实现 `3015eaa` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41001696525) 三个 job 成功、178 项首轮通过，含 37 界面、双执行器、真实来源权限与受限容器重启/撤回；输入隔离和失权后的迟到响应清理也已覆盖；没有真实模型或公司验收结论。[方法资产、权限、回执与迁移](docs/METHODS.md) · [实际桌面界面](docs/images/methods-desktop.png) · [手机界面](docs/images/methods-mobile.png)。
 
+## 执行规则
+
+“设置 → 执行规则”支持工作区、项目和个人限制；发起任务时可以进一步收紧单次限制。允许执行器/工作类型取交集，支持上下文字节、输出 token、时间、业务动作和每日执行次数上限。人工保存与 AI 按已确认方案代保存共用服务，保留版本、回执和运行快照；模型不能自行改权限。
+
+每日次数是获准执行的 Run 数，尚不是供应商调用数、token 用量或费用账单。[规则契约、额度口径与迁移](docs/EXECUTION-POLICY.md) · [桌面界面](docs/images/execution-policy-desktop.png) · [手机界面](docs/images/execution-policy-mobile.png)。本地规则与双原生执行器、页面验证已通过，完整提交 CI 待核验。
+
 ## 本地开发
 
 需要 Node.js 24 与可用的 PostgreSQL（安装 pgvector）。容器运行包见下方自部署章节。

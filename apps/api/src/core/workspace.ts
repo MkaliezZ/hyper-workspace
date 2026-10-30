@@ -31,6 +31,7 @@ import { FollowUpScheduleService } from "./follow-up-schedules.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
 import { createProjectTask, patchProjectTask } from "./tasks.js";
 import { MethodsService } from "./methods.js";
+import { ExecutionPolicyService } from "./execution-policy.js";
 
 export class WorkspaceService {
   constructor(
@@ -539,6 +540,37 @@ export class WorkspaceService {
         input.methodRefs,
       );
     }
+    if (input.workflow === "configure_policy") {
+      if (!input.policyPlan || input.artifactId)
+        throw new BadRequestException("请明确指定执行规则与范围。");
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("configure_policy")
+      )
+        throw new BadRequestException("执行器未声明执行规则配置能力。");
+      const prior = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (prior) {
+        if (
+          prior.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: prior.id, state: prior.state, created: false };
+      }
+      await new ExecutionPolicyService(this.db).prepare(
+        s,
+        conversation.project_id,
+        input.policyPlan,
+      );
+    } else if (input.policyPlan)
+      throw new BadRequestException("此工作类型不接受执行规则配置。");
     if (input.workflow === "configure_follow_up") {
       if (!input.followUpPlan || input.artifactId)
         throw new BadRequestException("请明确指定跟进配置与范围。");
@@ -658,7 +690,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -680,6 +712,8 @@ export class WorkspaceService {
         input.expectedTaskVersion ?? null,
         input.methodPlan ?? null,
         JSON.stringify(input.methodRefs ?? []),
+        input.policyPlan ?? null,
+        input.taskRules ?? {},
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };
@@ -712,7 +746,7 @@ export class WorkspaceService {
       );
     else await this.conversation(s, target.conversation_id);
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",execution_policy_snapshot AS "executionPolicy",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");

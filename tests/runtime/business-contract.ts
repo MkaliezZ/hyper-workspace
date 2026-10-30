@@ -94,6 +94,13 @@ export function modelFixture(
     const configureFollowUp = JSON.stringify(body.messages).includes(
       "Host-bound follow-up plan.",
     );
+    const configurePolicy = JSON.stringify(body.messages).includes(
+      "Host-bound execution policy plan.",
+    );
+    if (configurePolicy && cap !== 128)
+      violations.push(
+        "Execution policy token bound was not passed to the native runtime",
+      );
     const artifactReview = JSON.stringify(body.messages).includes(
       "Host-bound artifact review decision.",
     );
@@ -123,65 +130,68 @@ export function modelFixture(
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        methodDraft
-          ? {
-              tool: "method.write",
-              args: {
-                title: "Protocol fixture method candidate",
-                kind: "sop",
-                content:
-                  "protocol-fixture-method-guidance: check evidence before output.",
-              },
-            }
-          : methodManagement
-            ? { tool: "method.manage", args: {} }
-            : taskRevision
-              ? {
-                  tool: "task.update",
-                  args: {
-                    title: "protocol-fixture-task-update",
-                    status: "done",
-                  },
-                }
-              : artifactReview
-                ? { tool: "artifact.review", args: {} }
-                : configureFollowUp
-                  ? { tool: "follow_up.configure", args: {} }
-                  : followUp
-                    ? { tool: "follow_up.check", args: {} }
-                    : fileReading
-                      ? {
-                          tool: "file.reading.save",
-                          args: {
-                            content:
-                              (fileReadingRevision
-                                ? "private-native-file-revision-"
-                                : "private-native-file-reading-") + employee,
-                          },
-                        }
-                      : draftReply
+        configurePolicy
+          ? { tool: "policy.configure", args: {} }
+          : methodDraft
+            ? {
+                tool: "method.write",
+                args: {
+                  title: "Protocol fixture method candidate",
+                  kind: "sop",
+                  content:
+                    "protocol-fixture-method-guidance: check evidence before output.",
+                },
+              }
+            : methodManagement
+              ? { tool: "method.manage", args: {} }
+              : taskRevision
+                ? {
+                    tool: "task.update",
+                    args: {
+                      title: "protocol-fixture-task-update",
+                      status: "done",
+                    },
+                  }
+                : artifactReview
+                  ? { tool: "artifact.review", args: {} }
+                  : configureFollowUp
+                    ? { tool: "follow_up.configure", args: {} }
+                    : followUp
+                      ? { tool: "follow_up.check", args: {} }
+                      : fileReading
                         ? {
-                            tool: "communication.draft",
+                            tool: "file.reading.save",
                             args: {
-                              content: "private-native-reply-draft-" + employee,
+                              content:
+                                (fileReadingRevision
+                                  ? "private-native-file-revision-"
+                                  : "private-native-file-reading-") + employee,
                             },
                           }
-                        : revision
+                        : draftReply
                           ? {
-                              tool: "artifact.revise",
+                              tool: "communication.draft",
                               args: {
                                 content:
-                                  "protocol-fixture-revision " + revision,
+                                  "private-native-reply-draft-" + employee,
                               },
                             }
-                          : {
-                              tool: "artifact.create",
-                              args: {
-                                title: "Native runtime test " + employee,
-                                content:
-                                  "protocol-fixture-model-result " + employee,
+                          : revision
+                            ? {
+                                tool: "artifact.revise",
+                                args: {
+                                  content:
+                                    "protocol-fixture-revision " + revision,
+                                },
+                              }
+                            : {
+                                tool: "artifact.create",
+                                args: {
+                                  title: "Native runtime test " + employee,
+                                  content:
+                                    "protocol-fixture-model-result " + employee,
+                                },
                               },
-                            },
       ],
     });
     if (body.stream) {
@@ -791,6 +801,31 @@ export async function exerciseNativeBusiness(
     allRuns.push(
       ...(await verifyMethods(service, processor, employees[0]!, engine)),
     );
+    const employee = employees[0]!;
+    const policyRun = await service.startRun(employee.subject, {
+      conversationId: employee.conversation,
+      engine,
+      workflow: "configure_policy",
+      instruction:
+        "Apply only the confirmed synthetic personal execution rule.",
+      policyPlan: {
+        scope: "personal",
+        expectedRevision: 0,
+        rules: { maxOutputTokens: 256, expression: "concise" },
+        confirmed: true,
+      },
+      taskRules: { maxOutputTokens: 128 },
+      modelProfileId: employee.modelId,
+      idempotencyKey: randomUUID(),
+    });
+    allRuns.push(policyRun.id);
+    await processor.process(policyRun.id);
+    const policyResult = await service.getRun(employee.subject, policyRun.id);
+    assert.equal(policyResult.state, "succeeded", policyResult.error);
+    assert.equal(policyResult.result.receipts[0].scope, "personal");
+    assert.equal(policyResult.result.receipts[0].rules.maxOutputTokens, 256);
+    assert.equal(policyResult.executionPolicy.effective.maxOutputTokens, 128);
+    assert.deepEqual(fixture.violations, []);
     for (const id of allRuns) {
       const events = JSON.stringify(
         (

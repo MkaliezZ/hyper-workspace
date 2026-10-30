@@ -6,6 +6,7 @@ import type {
   WorkspaceView,
   CommunicationRoom,
   ReplyDraft,
+  ExecutionRules,
 } from "@hyper/contracts";
 import { Plus, ArrowRight, LoaderCircle, X } from "lucide-react";
 import { api, mutation, ApiError } from "./api";
@@ -25,6 +26,7 @@ import { FollowUpPanel } from "./components/FollowUpPanel";
 import { ArtifactReviewPanel } from "./components/ArtifactReviewPanel";
 import { artifactStatusLabel } from "@hyper/contracts";
 import { TaskEditor } from "./components/TaskEditor";
+import { ExecutionPolicyPanel } from "./components/ExecutionPolicyPanel";
 import { usePageTransition } from "./hooks/usePageTransition";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
@@ -69,6 +71,8 @@ export function App() {
     [run, setRun] = useState<any>(null);
   const [runModels, setRunModels] = useState<ModelSummary[]>([]),
     [modelProfileId, setModelProfileId] = useState("");
+  const [settingsTab, setSettingsTab] = useState("models");
+  const [taskRules, setTaskRules] = useState<ExecutionRules>({});
   const [edit, setEdit] = useState(""),
     [feedback, setFeedback] = useState("");
   const pageSurface = usePageTransition<HTMLElement>(
@@ -95,6 +99,7 @@ export function App() {
       setWorkflow("discussion_to_minutes");
       setRunModels([]);
       setModelProfileId("");
+      setTaskRules({});
     };
     try {
       const value = await api<WorkspaceView>(
@@ -163,6 +168,7 @@ export function App() {
   }, [load]);
   useEffect(() => {
     if (dialog !== "run") return;
+    setTaskRules({});
     let alive = true;
     void api<ModelSummary[]>("/models")
       .then((models) => {
@@ -585,7 +591,38 @@ export function App() {
           />
         ) : null}
         {section === "settings" ? (
-          <ModelSettings view={view} busy={busy} act={act} />
+          <>
+            <div className="tabs" role="tablist" aria-label="设置分类">
+              <button
+                role="tab"
+                aria-selected={settingsTab === "models"}
+                className={settingsTab === "models" ? "active" : ""}
+                onClick={() => setSettingsTab("models")}
+              >
+                模型连接
+              </button>
+              <button
+                role="tab"
+                aria-selected={settingsTab === "policy"}
+                className={settingsTab === "policy" ? "active" : ""}
+                onClick={() => setSettingsTab("policy")}
+              >
+                执行规则
+              </button>
+            </div>
+            {settingsTab === "models" ? (
+              <ModelSettings view={view} busy={busy} act={act} />
+            ) : (
+              <ExecutionPolicyPanel
+                key={view.user.id + view.project.id}
+                view={view}
+                run={run}
+                onRun={(r) => {
+                  if (loadedProject.current === view.project.id) setRun(r);
+                }}
+              />
+            )}
+          </>
         ) : null}
       </main>
       {section !== "enterprise" ? (
@@ -753,6 +790,7 @@ export function App() {
                   workflow,
                   engine,
                   instruction,
+                  taskRules,
                   ...(engine !== "fixture" && modelProfileId
                     ? { modelProfileId }
                     : {}),
@@ -842,6 +880,39 @@ export function App() {
                 ? "验证保存成果与业务回执，不代表模型执行效果。"
                 : "使用服务端配置的执行器；未连接时会明确报告。"}
             </p>
+            <details>
+              <summary>本次执行限制</summary>
+              <p className="muted small">
+                空白继承工作区、项目和个人规则；本次设置只能进一步收紧限制。
+              </p>
+              {(
+                [
+                  ["maxOutputTokens", "本次输出上限（token）", 64, 4096],
+                  ["maxDurationSeconds", "本次时限（秒）", 5, 180],
+                  ["maxActions", "本次动作上限", 0, 30],
+                  ["maxContextBytes", "本次上下文上限（字节）", 1024, 100000],
+                ] as const
+              ).map(([key, label, min, max]) => (
+                <label key={key}>
+                  {label}
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    value={taskRules[key] ?? ""}
+                    onChange={(e) =>
+                      setTaskRules({
+                        ...taskRules,
+                        [key]:
+                          e.target.value === ""
+                            ? undefined
+                            : Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+              ))}
+            </details>
             {incompatibleRunModel ? (
               <p role="status" className="muted small">
                 请选择与执行服务兼容的模型连接。

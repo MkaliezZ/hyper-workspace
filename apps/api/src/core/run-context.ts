@@ -11,6 +11,7 @@ import {
 } from "./follow-up-schedules.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
 import { MethodsService } from "./methods.js";
+import { ExecutionPolicyService } from "./execution-policy.js";
 export async function assertRunScope(
   service: WorkspaceService,
   s: Subject,
@@ -95,6 +96,28 @@ export async function loadRunContext(
     };
   }
   const conversation = await service.conversation(subject, run.conversation_id);
+  if (run.workflow === "configure_policy") {
+    const prepared = await new ExecutionPolicyService(service.db).prepare(
+      subject,
+      conversation.project_id,
+      run.policy_plan,
+    );
+    return {
+      context:
+        "Host-bound execution policy plan. Propose exactly one policy.configure with empty args. The employee confirmed the exact scope, rules and revision. Do not choose permissions, scope or values. No discussion is included.\n" +
+        JSON.stringify(prepared),
+      sourceIds: [],
+      contextRefs: [
+        "execution-policy:" +
+          prepared.plan.scope +
+          ":" +
+          prepared.scopeId +
+          "@" +
+          prepared.plan.expectedRevision,
+      ],
+      live: true,
+    };
+  }
   if (run.workflow === "manage_method") {
     const prepared = await new MethodsService(service.db).prepare(
       subject,

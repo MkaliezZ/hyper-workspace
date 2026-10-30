@@ -982,6 +982,37 @@ p {
   margin-top: 26px;
   max-width: 460px;
 }
+.policy-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.policy-fields select[multiple] {
+  min-height: 100px;
+}
+.policy-fields .policy-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.6;
+}
+.policy-confirm input {
+  width: auto;
+  margin-top: 5px;
+}
+.policy-summary {
+  margin: 18px 0 10px;
+  padding: 14px 16px;
+  border: 1px solid #dbe6fc;
+  border-radius: 8px;
+  background: #f5f8ff;
+  color: #435775;
+  font-size: 13px;
+  line-height: 1.7;
+}
 .settings-section {
   margin-top: 38px;
 }

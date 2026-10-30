@@ -26,6 +26,9 @@ const api =
   process.env.HYPER_MODEL_PROVIDER === "anthropic"
     ? "anthropic-messages"
     : "openai-completions";
+const maxTokens = Number(process.env.HYPER_MODEL_MAX_TOKENS ?? 4096);
+if (!Number.isInteger(maxTokens) || maxTokens < 64 || maxTokens > 4096)
+  throw new Error("Invalid output token limit.");
 const model = process.env.HYPER_MODEL_NAME;
 if (!model) throw new Error("A per-run model is required.");
 const profile = join(home, "profiles", "hyper");
@@ -61,7 +64,7 @@ const patch = [
               apiKeyEnv: "HYPER_MODEL_API_KEY",
               api,
               baseURL: endpoint.toString().replace(/\/$/, ""),
-              defaultMaxTokens: 4096,
+              defaultMaxTokens: maxTokens,
               retryPolicy: { mode: "normal", maxRetries: 0 },
               models: [
                 { id: model, contextWindow: 65536, reasoningEfforts: false },

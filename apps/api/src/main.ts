@@ -37,6 +37,7 @@ import {
   FollowUpConfiguration,
   ArtifactReviewInput,
   MethodActionInput,
+  ExecutionPolicyInput,
 } from "@hyper/contracts";
 import { Database, DEMO } from "./db/database.js";
 import { authenticate, issueSession } from "./core/security.js";
@@ -59,6 +60,7 @@ import { FileReadingService } from "./core/file-readings.js";
 import { FollowUpScheduleService } from "./core/follow-up-schedules.js";
 import { ArtifactReviewService } from "./core/artifact-reviews.js";
 import { MethodsService } from "./core/methods.js";
+import { ExecutionPolicyService } from "./core/execution-policy.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
@@ -562,6 +564,25 @@ class ApiController {
     @Param("id") id: string,
   ) {
     return communication.reconcile(await subject(req), uuid(id));
+  }
+  @Get("projects/:id/execution-policy") async executionPolicy(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new ExecutionPolicyService(db).view(await subject(req), uuid(id));
+  }
+  @Post("projects/:id/execution-policy") async saveExecutionPolicy(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const { idempotencyKey, ...plan } = ExecutionPolicyInput.parse(body);
+    return new ExecutionPolicyService(db).save(
+      await subject(req),
+      uuid(id),
+      plan,
+      idempotencyKey,
+    );
   }
   @Get("models") async models(@Req() req: Request) {
     return service.models(await subject(req));

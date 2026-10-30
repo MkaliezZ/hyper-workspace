@@ -274,5 +274,20 @@
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41016502773",
     "evidenceScope": "178 first-attempt checks across three successful jobs, including 37 UI; no real provider credentials in CI; Safari/Firefox not exercised",
     "mapping": "P08 C00/C04 A08 E08 subset"
+  },
+  "executionPolicy": {
+    "status": "local-verified-ci-pending",
+    "mapping": "P03/P04/P07/P08 C05/C07 A01/A10 E03/E04/E09/E10 subset",
+    "scopes": [
+      "workspace",
+      "project",
+      "personal",
+      "per-run restrictive taskRules"
+    ],
+    "controls": "intersected engines/workflows, context bytes, output token cap, duration, business action count and atomic UTC daily admitted-Run counts",
+    "authority": "current member/admin roles, exact confirmed AI plan, CAS revision, idempotent audit and admission snapshot; no model-selected policy values",
+    "runtimeEvidence": "3 native DSH/Hermes/switch cases include actual HTTP max_tokens=128 and confirmed personal rule application; protocol model only",
+    "localEvidence": "104 database cases (9 new execution-policy cases), 19 unit/configuration, type/build, 3 native runtime cases and all 38 Chromium UI cases passed; desktop/mobile screenshots inspected; CI final result pending",
+    "limits": "not provider request/token/currency accounting; non-Run calls excluded; defaults 100000 context bytes/4096 output tokens/180s/30 business actions; no full C07 or E01-E10 acceptance"
   }
 }

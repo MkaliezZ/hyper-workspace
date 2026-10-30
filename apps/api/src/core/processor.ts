@@ -21,6 +21,10 @@ import { ArtifactReviewService } from "./artifact-reviews.js";
 import { createProjectTask, patchProjectTask, lockTask } from "./tasks.js";
 import { MethodsService } from "./methods.js";
 import { ModelService } from "./models.js";
+import {
+  ExecutionPolicyService,
+  ExecutionLimitError,
+} from "./execution-policy.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
 import { FollowUpService } from "./follow-up.js";
 import {
@@ -160,6 +164,9 @@ export class RunProcessor {
     }, 1000);
     let scopeTimer: ReturnType<typeof setInterval> | undefined;
     let scopeChecking = false;
+    let lastSourceCheck = Date.now();
+    const executionPolicy = new ExecutionPolicyService(db);
+    let contextBytes: number | undefined;
     const event = (kind: any, data: Record<string, unknown>) =>
       db.tx((c) => appendEvent(c, runId, kind, data));
     try {
@@ -177,24 +184,46 @@ export class RunProcessor {
         identityCredentialId: run.identity_credential_id ?? undefined,
       };
       await assertMember(db, subject);
+      run.execution_policy_snapshot = await executionPolicy.admit(subject, run);
       await event("run.started", {
         engine: run.engine,
         evidence: run.engine === "fixture" ? "fixture" : "runtime-unverified",
         policyVersion: run.policy_version,
         modelProfileId: run.model_profile_id,
+        executionPolicy: run.execution_policy_snapshot,
+      });
+      await event("usage.updated", {
+        kind: "execution-admission",
+        count: 1,
+        dayBoundary: "UTC",
+        note: "计数是获准执行次数，不是供应商请求数、token 或费用。",
       });
       const scope = await loadRunContext(this.service, subject, run);
       const { context, sourceIds, contextRefs } = scope;
-      if (scope.live)
+      if (run.execution_policy_snapshot)
         scopeTimer = setInterval(() => {
           if (scopeChecking) return;
           scopeChecking = true;
-          void assertRunScope(this.service, subject, run)
-            .catch(() => abort.abort(new Error("来源权限或版本已变化。")))
+          const checkSource =
+            scope.live && Date.now() - lastSourceCheck >= 15000;
+          if (checkSource) lastSourceCheck = Date.now();
+          void Promise.all([
+            executionPolicy.check(db.pool, subject, run, contextBytes),
+            ...(checkSource
+              ? [assertRunScope(this.service, subject, run)]
+              : []),
+          ])
+            .catch((error) =>
+              abort.abort(
+                error instanceof ExecutionLimitError
+                  ? error
+                  : new Error("来源权限、版本或有效执行规则已变化。"),
+              ),
+            )
             .finally(() => {
               scopeChecking = false;
             });
-        }, 15000);
+        }, 1000);
       const snapshot = await db.pool.query(
         "UPDATE cw_runs SET context_refs=$2 WHERE id=$1 AND lease_owner=$3 AND state='running' RETURNING id",
         [runId, JSON.stringify(contextRefs), lease],
@@ -226,12 +255,13 @@ export class RunProcessor {
             );
       await assertRunScope(this.service, subject, run);
       abort.signal.throwIfAborted();
-      if (Buffer.byteLength(context + run.instruction, "utf8") > 100000) {
-        if (isFileWorkflow(run.workflow)) throw new ReadingInputLimit();
-        throw new Error(
-          "当前上下文超过 100 KB，请缩小讨论范围或拆分成果后重试。",
-        );
-      }
+      contextBytes = Buffer.byteLength(context + run.instruction, "utf8");
+      const limits = await executionPolicy.check(
+        db.pool,
+        subject,
+        run,
+        contextBytes,
+      );
       await new MethodsService(db).recordPrepared(subject, run);
       await assertRunScope(this.service, subject, run);
       const result = await adapter.execute({
@@ -243,7 +273,11 @@ export class RunProcessor {
         policy:
           policy.product_principle +
           "\n" +
-          policy.policies.map((p: any) => p.id + " " + p.principle).join("\n"),
+          policy.policies.map((p: any) => p.id + " " + p.principle).join("\n") +
+          "\nEmployee expression preference: " +
+          limits.expression +
+          ". This changes presentation only; preserve required facts, uncertainty and action receipts.",
+        limits,
         workdir,
         model: modelConnection,
         signal: abort.signal,
@@ -255,6 +289,13 @@ export class RunProcessor {
           }),
       });
       abort.signal.throwIfAborted();
+      await executionPolicy.check(
+        db.pool,
+        subject,
+        run,
+        contextBytes,
+        result.actions.length,
+      );
       const allowed = toolsForWorkflow(run.workflow);
       if (result.actions.some((action) => !allowed.includes(action.tool)))
         throw new Error("本次工作类型未授权该业务动作。");
@@ -262,27 +303,29 @@ export class RunProcessor {
         run.workflow === "discussion_to_minutes" ||
         run.workflow === "project_report"
           ? ["artifact.create", "project.report"]
-          : run.workflow === "manage_method"
-            ? [
-                ["create", "revise"].includes(run.method_plan.operation)
-                  ? "method.write"
-                  : "method.manage",
-              ]
-            : run.workflow === "revise_artifact"
-              ? ["artifact.revise"]
-              : run.workflow === "revise_task"
-                ? ["task.update"]
-                : run.workflow === "review_artifact"
-                  ? ["artifact.review"]
-                  : run.workflow === "follow_up"
-                    ? ["follow_up.check"]
-                    : run.workflow === "configure_follow_up"
-                      ? ["follow_up.configure"]
-                      : run.workflow === "draft_reply"
-                        ? ["communication.draft"]
-                        : isFileWorkflow(run.workflow)
-                          ? ["file.reading.save"]
-                          : [];
+          : run.workflow === "configure_policy"
+            ? ["policy.configure"]
+            : run.workflow === "manage_method"
+              ? [
+                  ["create", "revise"].includes(run.method_plan.operation)
+                    ? "method.write"
+                    : "method.manage",
+                ]
+              : run.workflow === "revise_artifact"
+                ? ["artifact.revise"]
+                : run.workflow === "revise_task"
+                  ? ["task.update"]
+                  : run.workflow === "review_artifact"
+                    ? ["artifact.review"]
+                    : run.workflow === "follow_up"
+                      ? ["follow_up.check"]
+                      : run.workflow === "configure_follow_up"
+                        ? ["follow_up.configure"]
+                        : run.workflow === "draft_reply"
+                          ? ["communication.draft"]
+                          : isFileWorkflow(run.workflow)
+                            ? ["file.reading.save"]
+                            : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -292,6 +335,8 @@ export class RunProcessor {
         throw new Error("一次修订必须对应一个明确的成果版本。");
       if (run.workflow === "manage_method" && result.actions.length !== 1)
         throw new Error("一次方法管理只接受一个明确操作。");
+      if (run.workflow === "configure_policy" && result.actions.length !== 1)
+        throw new Error("一次执行规则配置只接受一个明确操作。");
       if (run.workflow === "revise_task" && result.actions.length !== 1)
         throw new Error("一次待办修改必须只对应一个明确版本。");
       if (run.workflow === "review_artifact" && result.actions.length !== 1)
@@ -318,11 +363,23 @@ export class RunProcessor {
             sourceIds,
             result.evidence,
             "configuration" in scope ? scope.configuration : undefined,
+            contextBytes,
+            result.actions.length,
           ),
         );
       }
       await assertRunScope(this.service, subject, run);
       await db.tx(async (c) => {
+        await ExecutionPolicyService.lock(c, subject.workspaceId);
+        // A confirmed policy change may disable its own workflow; its committed receipt still completes.
+        if (run.workflow !== "configure_policy")
+          await executionPolicy.check(
+            c,
+            subject,
+            run,
+            contextBytes,
+            result.actions.length,
+          );
         await assertScheduledRun(c, run, true);
         const member = await c.query(
           "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
@@ -346,6 +403,7 @@ export class RunProcessor {
           run.workflow !== "draft_reply" &&
           run.workflow !== "follow_up" &&
           run.workflow !== "configure_follow_up" &&
+          run.workflow !== "configure_policy" &&
           run.workflow !== "review_artifact" &&
           run.workflow !== "revise_task" &&
           run.workflow !== "manage_method" &&
@@ -373,15 +431,17 @@ export class RunProcessor {
                     ? receipts[0]!.summary
                     : run.workflow === "configure_follow_up"
                       ? "定时跟进配置已保存。"
-                      : run.workflow === "review_artifact"
-                        ? "已记录员工对指定成果版本的验收决定。"
-                        : run.workflow === "manage_method"
-                          ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
-                          : run.workflow === "revise_task"
-                            ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                            : isFileWorkflow(run.workflow)
-                              ? "个人文件解读已保存。"
-                              : result.text,
+                      : run.workflow === "configure_policy"
+                        ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
+                        : run.workflow === "review_artifact"
+                          ? "已记录员工对指定成果版本的验收决定。"
+                          : run.workflow === "manage_method"
+                            ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                            : run.workflow === "revise_task"
+                              ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                              : isFileWorkflow(run.workflow)
+                                ? "个人文件解读已保存。"
+                                : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -407,7 +467,8 @@ export class RunProcessor {
         const state = actions.rowCount ? "recovery_required" : "failed";
         const message = isFileWorkflow(run.workflow)
           ? error instanceof ReadingVersionConflict ||
-            error instanceof ReadingInputLimit
+            error instanceof ReadingInputLimit ||
+            error instanceof ExecutionLimitError
             ? error.message
             : "文件阅读未完成，请检查来源、模型或重新发起。"
           : error instanceof Error
@@ -445,10 +506,20 @@ export class RunProcessor {
     sourceIds: string[],
     evidence: "fixture" | "runtime",
     configuration?: PreparedFollowUp,
+    contextBytes?: number,
+    actionCount?: number,
   ) {
     if (!toolsForWorkflow(run.workflow).includes(action.tool))
       throw new Error("本次工作类型未授权该业务动作。");
     return this.service.db.tx(async (c) => {
+      await ExecutionPolicyService.lock(c, s.workspaceId);
+      await new ExecutionPolicyService(this.service.db).check(
+        c,
+        s,
+        run,
+        contextBytes,
+        actionCount,
+      );
       await assertScheduledRun(c, run, true);
       // Match scheduled checks: target schedule before Run/member locks.
       if (configuration)
@@ -538,7 +609,17 @@ export class RunProcessor {
       if (!conv && !isFileWorkflow(run.workflow))
         throw new Error("Conversation unavailable.");
       let receipt: Record<string, unknown>;
-      if (action.tool === "file.reading.save") {
+      if (action.tool === "policy.configure") {
+        z.object({}).strict().parse(action.args);
+        receipt = await new ExecutionPolicyService(this.service.db).apply(
+          c,
+          s,
+          conv.project_id,
+          run.policy_plan,
+          "configure-policy:" + run.id,
+          run.id,
+        );
+      } else if (action.tool === "file.reading.save") {
         const input = z
           .object({ content: z.string().trim().min(1).max(20000) })
           .strict()
