@@ -122,7 +122,7 @@ export async function loadRunContext(
     const view = await new ModelUsageService(service.db).view(subject);
     return {
       context:
-        "Host-bound personal model usage query. Propose exactly one usage.report with empty args. The host reads the authenticated employee's current ledger. Missing usage is unknown, never zero. No costs or invoices are configured. Do not select actors, periods, profiles or recipients.\n" +
+        "Host-bound personal model usage query. Propose exactly one usage.report with empty args. The host reads the authenticated employee's current ledger. Missing usage and unpriced costs are unknown, never zero. Available cost estimates and employee declarations are not verified supplier invoices; preserve currency and uncertainty. Do not select actors, periods, profiles or recipients.\n" +
         JSON.stringify({
           summary: view.summary,
           costs: view.costs,
