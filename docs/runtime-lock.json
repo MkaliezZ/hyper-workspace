@@ -369,7 +369,9 @@
     "mapping": "P02/P04/P07/P08 C00/C02/C05 A03/A04/A05/A10 E02/E04/E07/E08/E09 subsets",
     "scope": "Typed Talk v23.0.12 file-share references, current employee/room/message/file/etag protected canonical source opens and bounded 8 MiB DAV downloads; opaque attachment headers; post-read revocation and version checks",
     "ai": "Shared project context supplies explicitly unread references to both engines; no automatic body ingestion or multimedia understanding",
-    "localEvidence": "139 database, 25 unit, type/build/frozen package and three enterprise-message UI cases passed; desktop/mobile screenshots inspected; full UI and real Nextcloud CI pending",
-    "limits": "No upload/send or AI attachment delivery/reconciliation yet; no cross-system atomic authorization, offline byte recall or real company acceptance"
+    "localEvidence": "139 database, 25 unit, type/build/frozen package and all 43 Chromium UI cases passed on repeat; first full UI 42 pass/1 empty 500 at project creation during dev reload window retained with trace; no assertions weakened; desktop/mobile screenshots inspected; real Nextcloud CI pending",
+    "limits": "No upload/send or AI attachment delivery/reconciliation yet; no cross-system atomic authorization, offline byte recall or real company acceptance",
+    "initialFailureRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41081148119",
+    "initialFailure": "verify/deployment success; real source 9 pass/1 fail: Talk serializes parsed file shares as comment with empty systemMessage, so requiring the internal file_shared marker skipped valid attachments. Fixed provider and fixture to match wire serialization; no download/permission assertions removed; full new CI pending."
   }
 }

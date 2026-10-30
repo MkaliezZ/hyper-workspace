@@ -4,7 +4,7 @@
 
 ## 输入与来源
 
-Nextcloud Talk 是消息/附件引用的权威，Files 是原文件的权威。仅解析固定 Talk `v23.0.12` 的 `systemMessage=file_shared`、`messageType=comment`、`messageParameters.file.type=file`。普通富文本对象不能变成可下载文件；删除/过期、格式不合法、源文件已不可用时不生成附件链接。
+Nextcloud Talk 是消息/附件引用的权威，Files 是原文件的权威。接收固定 Talk `v23.0.12` 服务端生成的 `messageType=comment`、`messageParameters.file.type=file`，并完整校验文件字段；普通富对象的 `object` 槽位不授权文件。Talk 将内部 `file_shared` 转为 comment 后，[JSON 序列化器](https://github.com/nextcloud/spreed/blob/v23.0.12/lib/Model/Message.php#L196) 会清空 `systemMessage`，不能要求线上的响应保留内部事件名。普通富文本对象不能变成可下载文件；删除/过期、格式不合法、源文件已不可用时不生成附件链接。
 
 产品消息返回受限的文件 ID、名称、字节数、MIME、etag 与下载提示。源 URL、用户挂载路径、预览/联系人照片、分享口令及来源凭据不返回浏览器或模型。文件名/说明作为普通文本显示。附件是活文件引用，历史消息不是文件内容快照；文件更新或重命名后的信息以来源为准。
 
@@ -18,7 +18,7 @@ Nextcloud Talk 是消息/附件引用的权威，Files 是原文件的权威。�
 
 `GET .../:file/download?etag=...` 在同一 `CommunicationService.attachment` 中额外执行：
 
-1. 当前 Talk 下载策略与只读权限位；当前员工 Files 挂载路径经严格分段验证。
+1. 当前 Talk 下载策略与读取权限位；当前员工 Files 挂载路径经严格分段验证。
 2. DAV stat 的文件 ID、etag、大小与 Talk 引用一致；etag 的 DAV 引号与节点原值作规范比较。
 3. 条件 GET、来源响应 etag、实际长度、分块读取上限均核对；最多缓冲 8 MiB，不解压/解析附件。
 4. 读取后重新 stat、探测实际读取权限，重读当前消息/附件和会话，再校验产品成员与连接未变化。中途删文件、撤权、隐藏下载或更改版本时丢弃缓冲内容。
@@ -38,6 +38,16 @@ Nextcloud Talk 是消息/附件引用的权威，Files 是原文件的权威。�
 
 无需新迁移。配置仍为 Nextcloud 当前员工连接、`NEXTCLOUD_TALK_ENABLED`、`NEXTCLOUD_FILES_ENABLED`；不增加公共文件服务或模型密钥。回退代码即可去掉新读取入口和卡片，不修改原文件/消息/现有资产。
 
-本地已通过 139 项数据库测试（新增 7 项，含真实 HTTP/DAV 协议 fixture 的中途撤权）、25 单元、类型/构建、冻结包；企业消息 3 项 UI 验证通过，桌面/手机截图已查看。新真实 Nextcloud 用例涵盖 Talk 房间分享、接收者挂载、双方二进制下载/安全响应头、浏览器下载、房间移除与原件删除，待当前提交 CI 实测，不将 fixture 写成来源通过。
+本地已通过 139 项数据库测试（新增 7 项，含真实 HTTP/DAV 协议 fixture 的中途撤权）、25 单元、类型/构建、冻结包；完整 43 项 UI 重跑通过，企业消息 3 项交互与桌面/手机截图已查看；首轮完整回归在开发重载窗口观察到空 500（42 过/1 失败），原 trace 保留，未弱化断言。新真实 Nextcloud 用例涵盖 Talk 房间分享、接收者挂载、双方二进制下载/安全响应头、浏览器下载、房间移除与原件删除，待当前提交 CI 实测，不将 fixture 写成来源通过。
 
 尚未验证真实公司账号/资料、Safari/Firefox、完整 E01–E10、附件上传/投递/AI 动作、任意大小流式下载、多媒体理解。截图与 CI 数据均为合成资料。
+
+## 接续实现约束（尚未实现）
+
+后续需同时补齐“从 Files 选择已有文件分享”和“本机上传后分享”，人工与 AI 调用相同服务。目标房间、文件 ID/路径/版本和授权范围由员工确认并由后端绑定；模型不能自行选择接收方或扩权。以持久发送意图、独立关联 ID、来源分享对象和实际房间消息回读作为证据，未知结果进入待核对，核对不重新投递。分享的是活文件引用，版本前置检查不等于 DAV 与 OCS 分享的跨系统原子快照。
+
+固定版本的 [RoomShareProvider.create](https://github.com/nextcloud/spreed/blob/v23.0.12/lib/Share/RoomShareProvider.php#L122-L127) 在同一文件/房间重复分享时，先派发重复分享事件，再返回 403。因此不能复用文字发送“4xx 就证明未执行”的分类，也不能据错误响应盲重试。现有分享可能已有更宽权限，不能把本次请求只读声明成全部历史授权已收紧。
+
+外部调用应在产品持久意图建立之后、数据库长事务之外执行；Run 取消/租约过期/进程退出不能擦去已发出的分享。即使业务动作记录尚未保存，发送结果不明也不能标成确定无副作用的失败。本机上传需限定原始字节大小、独立随机路径/不覆盖、版本/校验和回读与中断后对账，避免全局提高 JSON 限额或使用共享可写执行器目录。此段是接续约束，不代表相应 API、数据表、AI 动作或恢复链路已完成。
+
+首轮 [CI 41081148119](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41081148119) 的 verify 与 deployment 成功，来源 9 过/1 失败：内部 file_shared 事件经序列化变为 comment/空 systemMessage，旧解析条件漏掉附件卡片。已修正并让 fixture 使用实际线上格式，保留下载、当前消息/文件与权限断言；真实来源结果等待修正提交重跑。

@@ -112,3 +112,5 @@ Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0
 [桌面](../images/message-attachments-desktop.png) · [手机](../images/message-attachments-mobile.png)。均为合成界面资料。真实来源权限与二进制响应头另由来源 CI 核验，不能从 UI fixture 推断已通过。
 
 完整界面首轮 42 通过、1 失败：定时跟进迟到响应场景在创建项目时收到空 500，JSON 解码失败，原 trace 已保留在受限忽略目录。与开发模式代码重载窗口重合，尚不能仅凭此认定产品逻辑缺陷；停止源码写入后重跑完整界面，并以 CI 独立启动结果复核，不弱化断言。
+
+停止源码写入后的完整 43 项 UI 重跑全部通过（3.7 分钟）；原失败场景也通过。保留首轮失败，不把重跑记成首轮通过；独立 CI 结果待回填。

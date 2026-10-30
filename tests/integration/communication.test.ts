@@ -63,7 +63,7 @@ function attachmentFixture() {
     timestamp: Math.floor(Date.now() / 1000),
     message: "{file}\n合成附件说明",
     messageType: "comment",
-    systemMessage: "file_shared",
+    systemMessage: "",
     referenceId: "",
     messageParameters: {
       file: {
@@ -82,13 +82,14 @@ function attachmentFixture() {
     },
   };
   r.messages.push(raw);
+  const selectedEtag = raw.messageParameters.file.etag;
   const read = (download = true, actor = s()) =>
     service.attachment(
       actor,
       r.id,
       String(raw.id),
       file.id,
-      raw.messageParameters.file.etag,
+      selectedEtag,
       download,
     );
   return { r, file, raw, read };
@@ -409,13 +410,14 @@ test("Talk file shares expose only bounded metadata and construct trusted source
 });
 test("Ordinary rich objects, invalid file metadata, deleted shares and expired shares cannot become attachments", async () => {
   const { r, raw, read } = attachmentFixture();
-  raw.systemMessage = "";
+  const file = raw.messageParameters.file;
+  (raw as any).messageParameters = { object: file };
   assert.equal(
     (await service.messages(s(), r.id)).messages[0]!.attachments,
     undefined,
   );
   await assert.rejects(read(false));
-  raw.systemMessage = "file_shared";
+  raw.messageParameters = { file };
   raw.messageParameters.file.id = "../fake";
   assert.equal(
     (await service.messages(s(), r.id)).messages[0]!.attachments,

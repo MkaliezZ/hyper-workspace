@@ -66,6 +66,16 @@ test("Real Talk attachments resolve recipient files, download opaque bytes and r
     bob = await login(browser, "talk-bob"),
     outsider = await login(browser, "talk-outsider");
   try {
+    const native = await talk(
+      "talk-bob",
+      "v1/chat/" + room.token + "?lookIntoFuture=0&setReadMarker=0&limit=100",
+    );
+    const sourceAttachment = native.find(
+      (message: any) => message.messageParameters?.file?.name === filename,
+    );
+    expect(Boolean(sourceAttachment)).toBe(true);
+    expect(sourceAttachment.messageType).toBe("comment");
+    expect(sourceAttachment.systemMessage).toBe("");
     let selected: any;
     await expect
       .poll(async () => {

@@ -80,8 +80,13 @@ const FileParameter = z.object({
 function fileReference(
   raw: z.infer<typeof Message>,
 ): { attachment: CommunicationAttachment; path: string[] | null } | undefined {
-  // Only the pinned Talk file-share event is authoritative. Never follow rich-object URLs.
-  if (raw.systemMessage !== "file_shared" || raw.messageType !== "comment")
+  // Talk's serializer clears systemMessage after converting file_shared to a comment.
+  // Only the server-produced `file` slot with the complete file schema is accepted;
+  // object_shared/mentions/link previews in other slots cannot authorize a file read.
+  if (
+    raw.messageType !== "comment" ||
+    !["", "file_shared"].includes(raw.systemMessage)
+  )
     return;
   const parsed = FileParameter.safeParse(
     (raw.messageParameters as Record<string, unknown>).file,
