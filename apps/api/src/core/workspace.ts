@@ -30,6 +30,7 @@ import { ModelService } from "./models.js";
 import { FollowUpScheduleService } from "./follow-up-schedules.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
 import { createProjectTask, patchProjectTask } from "./tasks.js";
+import { MethodsService } from "./methods.js";
 
 export class WorkspaceService {
   constructor(
@@ -268,7 +269,7 @@ export class WorkspaceService {
       s,
       r.rows.filter((row) => row.fileSource).map((row) => row.id),
     );
-    return r.rows
+    return (await MethodsService.filterAssets(this.db, r.rows))
       .filter((row) => !row.project_id || current.has(row.project_id))
       .filter(
         (row) =>
@@ -473,6 +474,71 @@ export class WorkspaceService {
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
+    if (input.workflow === "manage_method") {
+      if (
+        !input.methodPlan ||
+        input.artifactId ||
+        input.taskId ||
+        input.methodRefs?.length
+      )
+        throw new BadRequestException("请从方法入口指定唯一操作和范围。");
+      const old = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (old) {
+        if (
+          old.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: old.id, state: old.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("manage_method")
+      )
+        throw new BadRequestException("执行器未声明方法管理能力。");
+      await new MethodsService(this.db).prepare(
+        s,
+        input.methodPlan,
+        conversation.project_id,
+      );
+    } else if (input.methodPlan)
+      throw new BadRequestException("此工作类型不接受方法管理计划。");
+    if (input.methodRefs?.length) {
+      if (
+        ![
+          "discussion_to_minutes",
+          "project_report",
+          "revise_artifact",
+        ].includes(input.workflow)
+      )
+        throw new BadRequestException("此工作类型不能复用方法。");
+      const old = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (old) {
+        if (
+          old.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: old.id, state: old.state, created: false };
+      }
+      await new MethodsService(this.db).references(
+        s,
+        conversation.project_id,
+        input.methodRefs,
+      );
+    }
     if (input.workflow === "configure_follow_up") {
       if (!input.followUpPlan || input.artifactId)
         throw new BadRequestException("请明确指定跟进配置与范围。");
@@ -592,7 +658,7 @@ export class WorkspaceService {
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
     const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
       [
         id,
         s.workspaceId,
@@ -612,6 +678,8 @@ export class WorkspaceService {
         input.artifactReviewPlan ?? null,
         input.taskId ?? null,
         input.expectedTaskVersion ?? null,
+        input.methodPlan ?? null,
+        JSON.stringify(input.methodRefs ?? []),
       ],
     );
     if (r.rowCount) return { ...r.rows[0], created: true };
@@ -644,7 +712,7 @@ export class WorkspaceService {
       );
     else await this.conversation(s, target.conversation_id);
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");

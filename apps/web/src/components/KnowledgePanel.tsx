@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { FileText, Search } from "lucide-react";
 import { api, mutation } from "../api";
 import { SourceFilesPanel } from "./SourceFilesPanel";
+import { MethodsPanel } from "./MethodsPanel";
+import type { WorkspaceView } from "@hyper/contracts";
 interface KnowledgeResult {
   id: string;
   title: string;
@@ -16,16 +18,22 @@ export function KnowledgePanel({
   demo,
   filesEnabled,
   engines,
+  view,
+  run,
+  onRun,
 }: {
   busy: boolean;
   act: (fn: () => Promise<void>) => Promise<boolean>;
   demo: boolean;
   filesEnabled: boolean;
   engines: Record<string, import("@hyper/contracts").EngineCapabilities>;
+  view: WorkspaceView;
+  run: any;
+  onRun: (run: any) => void;
 }) {
   const [query, setQuery] = useState(""),
     [mode, setMode] = useState("keyword");
-  const [tab, setTab] = useState<"search" | "files">("search");
+  const [tab, setTab] = useState<"search" | "files" | "methods">("search");
   const [results, setResults] = useState<KnowledgeResult[]>([]),
     [notice, setNotice] = useState("");
   const hasFileResults = results.some((row) => row.type === "source_file");
@@ -91,8 +99,26 @@ export function KnowledgePanel({
         >
           企业文件
         </button>
+        <button
+          role="tab"
+          className={tab === "methods" ? "active" : ""}
+          aria-selected={tab === "methods"}
+          onClick={() => {
+            setResults([]);
+            setTab("methods");
+          }}
+        >
+          方法与模板
+        </button>
       </div>
-      {tab === "files" ? (
+      {tab === "methods" ? (
+        <MethodsPanel
+          key={view.user.id + ":" + view.project.id}
+          view={view}
+          run={run}
+          onRun={onRun}
+        />
+      ) : tab === "files" ? (
         <SourceFilesPanel
           enabled={filesEnabled}
           demo={demo}

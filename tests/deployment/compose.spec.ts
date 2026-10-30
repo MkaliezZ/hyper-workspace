@@ -280,6 +280,56 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       version: 2,
       status: "done",
     });
+    const methodResponse = await context.request.post(origin + "/api/runs", {
+      headers: { Origin: origin },
+      data: {
+        conversationId: workspace.project.conversationId,
+        workflow: "manage_method",
+        methodPlan: {
+          operation: "create",
+          sourceArtifactId: artifactId,
+          expectedSourceVersion: 2,
+        },
+        engine: "dsh",
+        modelProfileId: modelId,
+        instruction:
+          "Create only a candidate from the selected synthetic artifact.",
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(methodResponse.status()).toBe(201);
+    const methodCreated = await completed(
+        context.request,
+        (await methodResponse.json()).id,
+      ),
+      method = methodCreated.result.receipts[0];
+    const methodAction = async (plan: any) => {
+      const response = await context.request.post(
+        origin + "/api/projects/" + workspace.project.id + "/methods/actions",
+        {
+          headers: { Origin: origin },
+          data: { plan, idempotencyKey: randomUUID() },
+        },
+      );
+      expect(response.status()).toBe(201);
+      return response.json();
+    };
+    const methodVerified = await methodAction({
+      operation: "verify",
+      methodId: method.id,
+      expectedVersion: 1,
+      expectedRevision: 1,
+      evidence: "Synthetic employee verification before container restart.",
+      confirmed: true,
+    });
+    const methodPublished = await methodAction({
+      operation: "publish",
+      methodId: method.id,
+      expectedVersion: 1,
+      expectedRevision: methodVerified.revision,
+      scope: "project",
+      confirmed: true,
+    });
     const schedulePath =
       origin +
       "/api/conversations/" +
@@ -343,6 +393,53 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     await expect(
       page.getByRole("textbox", { name: "成果内容", exact: true }),
     ).toHaveValue("synthetic-container-version-two");
+    const restoredMethod = await (
+      await context.request.get(origin + "/api/methods/" + method.id)
+    ).json();
+    expect(restoredMethod.current).toMatchObject({
+      id: method.id,
+      version: 1,
+      revision: methodPublished.revision,
+      state: "published",
+      verification: "employee_verified",
+      sourceArtifactId: artifactId,
+      sourceVersion: 2,
+    });
+    expect(restoredMethod.versions).toHaveLength(1);
+    expect(restoredMethod.actions).toHaveLength(3);
+    const withdrawalResponse = await context.request.post(
+      origin + "/api/runs",
+      {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          workflow: "manage_method",
+          methodPlan: {
+            operation: "withdraw",
+            methodId: method.id,
+            expectedVersion: 1,
+            expectedRevision: methodPublished.revision,
+            reason: "Synthetic employee retirement after restart.",
+            confirmed: true,
+          },
+          engine: "hermes",
+          modelProfileId: modelId,
+          instruction: "Execute only the confirmed method retirement.",
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(withdrawalResponse.status()).toBe(201);
+    const withdrawal = await completed(
+      context.request,
+      (await withdrawalResponse.json()).id,
+    );
+    expect(withdrawal.result.receipts[0]).toMatchObject({
+      id: method.id,
+      state: "withdrawn",
+      version: 1,
+      revision: 4,
+    });
     const restoredTask = await (
       await context.request.get(origin + "/api/tasks/" + task.id)
     ).json();
@@ -452,7 +549,7 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         `process.stdout.write(await(await fetch('http://model-fixture:8100/stats')).text())`,
       ),
     );
-    expect(stats.calls).toBe(6);
+    expect(stats.calls).toBe(8);
     expect(stats.violations).toBe(0);
   } finally {
     await context.close();

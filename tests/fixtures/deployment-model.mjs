@@ -45,30 +45,54 @@ createServer(async (req, res) => {
   const review = input.includes("Host-bound artifact review decision.");
   const taskRevision = input.includes("Host-bound task revision.");
   if (review && /synthetic-container-version/.test(input)) violations++;
+  const methodDraft = input.includes("Host-bound method draft.");
+  const methodManagement = input.includes("Host-bound method management.");
+  if (
+    methodManagement &&
+    /synthetic-container-method-guidance|synthetic-container-version/.test(
+      input,
+    )
+  )
+    violations++;
   const text = JSON.stringify({
     text: "Synthetic container model result.",
     actions: [
-      taskRevision
+      methodDraft
         ? {
-            tool: "task.update",
-            args: { title: "synthetic-container-task-update", status: "done" },
+            tool: "method.write",
+            args: {
+              title: "Synthetic container method",
+              kind: "sop",
+              content:
+                "synthetic-container-method-guidance: check evidence before saving.",
+            },
           }
-        : review
-          ? { tool: "artifact.review", args: {} }
-          : followUp
-            ? { tool: "follow_up.check", args: {} }
-            : revision
-              ? {
-                  tool: "artifact.revise",
-                  args: { content: "synthetic-container-version-two" },
-                }
-              : {
-                  tool: "artifact.create",
-                  args: {
-                    title: "Container native artifact",
-                    content: "synthetic-container-version-one",
-                  },
+        : methodManagement
+          ? { tool: "method.manage", args: {} }
+          : taskRevision
+            ? {
+                tool: "task.update",
+                args: {
+                  title: "synthetic-container-task-update",
+                  status: "done",
                 },
+              }
+            : review
+              ? { tool: "artifact.review", args: {} }
+              : followUp
+                ? { tool: "follow_up.check", args: {} }
+                : revision
+                  ? {
+                      tool: "artifact.revise",
+                      args: { content: "synthetic-container-version-two" },
+                    }
+                  : {
+                      tool: "artifact.create",
+                      args: {
+                        title: "Container native artifact",
+                        content: "synthetic-container-version-one",
+                      },
+                    },
     ],
   });
   if (body.stream) {

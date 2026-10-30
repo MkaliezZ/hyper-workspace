@@ -215,7 +215,7 @@ test("Real one-to-one Talk messages are available without importing them into pr
 test("Source project scope survives both real engines and blocks results after real room revocation", async ({
   browser,
 }) => {
-  test.setTimeout(360000);
+  test.setTimeout(420000);
   const room = await talk("talk-alice", "v4/room", "POST", {
     roomType: "2",
     roomName: "Hyper AI Scoped Room",
@@ -234,6 +234,11 @@ test("Source project scope survives both real engines and blocks results after r
   const seen = new Set<string>();
   const fixture = modelFixture(["synthetic-source-model-key"], async (body) => {
     const text = JSON.stringify(body.messages);
+    if (
+      text.includes("Host-bound method draft.") ||
+      text.includes("Host-bound method management.")
+    )
+      expect(text).not.toContain(sentinel);
     if (text.includes("Host-bound task revision.")) {
       expect(text).not.toContain(sentinel);
       expect(text).not.toContain("protocol-fixture-model-result");
@@ -669,9 +674,144 @@ test("Source project scope survives both real engines and blocks results after r
         ).status(),
       ).toBe(404);
     }
+    const methodRunResponse = await actor.context.request.post(
+      origin + "/api/runs",
+      {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          workflow: "manage_method",
+          methodPlan: {
+            operation: "create",
+            sourceArtifactId: reviewedArtifactId,
+            expectedSourceVersion: 1,
+          },
+          engine: "dsh",
+          modelProfileId: profile.id,
+          instruction:
+            "From this selected source artifact, save only a candidate method.",
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(methodRunResponse.status()).toBe(201);
+    const methodRun = await methodRunResponse.json();
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await actor.context.request.get(
+                origin + "/api/runs/" + methodRun.id,
+              )
+            ).json()
+          ).state,
+        { timeout: 60000, intervals: [700] },
+      )
+      .toBe("succeeded");
+    const candidate = (
+      await (
+        await actor.context.request.get(origin + "/api/runs/" + methodRun.id)
+      ).json()
+    ).result.receipts[0];
+    expect(candidate).toMatchObject({
+      state: "candidate",
+      verification: "candidate",
+      sourceArtifactId: reviewedArtifactId,
+      sourceVersion: 1,
+    });
+    expect(
+      (
+        await outside.context.request.get(
+          origin + "/api/methods/" + candidate.id,
+        )
+      ).status(),
+    ).toBe(404);
+    const methodAction = async (plan: any) => {
+      const response = await actor.context.request.post(
+        origin + "/api/projects/" + workspace.project.id + "/methods/actions",
+        {
+          headers: { Origin: origin },
+          data: { plan, idempotencyKey: randomUUID() },
+        },
+      );
+      expect(response.status()).toBe(201);
+      return response.json();
+    };
+    const verified = await methodAction({
+      operation: "verify",
+      methodId: candidate.id,
+      expectedVersion: 1,
+      expectedRevision: 1,
+      evidence: "Synthetic employee source-scope validation declaration.",
+      confirmed: true,
+    });
+    const published = await methodAction({
+      operation: "publish",
+      methodId: candidate.id,
+      expectedVersion: 1,
+      expectedRevision: verified.revision,
+      scope: "project",
+      confirmed: true,
+    });
+    const reuseResponse = await actor.context.request.post(
+      origin + "/api/runs",
+      {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          workflow: "project_report",
+          engine: "hermes",
+          modelProfileId: profile.id,
+          instruction:
+            "Apply the selected published method as guidance, not current facts.",
+          methodRefs: [
+            { id: candidate.id, version: 1, revision: published.revision },
+          ],
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(reuseResponse.status()).toBe(201);
+    const methodReuse = await reuseResponse.json();
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await actor.context.request.get(
+                origin + "/api/runs/" + methodReuse.id,
+              )
+            ).json()
+          ).state,
+        { timeout: 60000, intervals: [700] },
+      )
+      .toBe("succeeded");
+    expect(
+      (
+        await (
+          await actor.context.request.get(
+            origin + "/api/methods/" + candidate.id,
+          )
+        ).json()
+      ).uses[0],
+    ).toMatchObject({
+      runId: methodReuse.id,
+      version: 1,
+      revision: published.revision,
+      state: "succeeded",
+    });
+    expect(
+      (
+        await outside.context.request.get(
+          origin + "/api/methods/" + candidate.id,
+        )
+      ).status(),
+    ).toBe(404);
     const taskBeforeRevocation = (
       await db.pool.query("SELECT version FROM cw_tasks WHERE id=$1", [task.id])
     ).rows[0].version;
+    expect(fixture.violations).toEqual([]);
     currentEngine = "revoked";
     revoke = true;
     const interrupted = await start("dsh", "follow_up");
@@ -730,6 +870,16 @@ test("Source project scope survives both real engines and blocks results after r
     expect(
       (
         await actor.context.request.get(origin + "/api/runs/" + interrupted.id)
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await actor.context.request.get(origin + "/api/methods/" + candidate.id)
+      ).status(),
+    ).toBe(404);
+    expect(
+      (
+        await actor.context.request.get(origin + "/api/runs/" + methodReuse.id)
       ).status(),
     ).toBe(404);
     expect(

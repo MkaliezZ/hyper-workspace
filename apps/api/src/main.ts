@@ -36,6 +36,7 @@ import {
   CommunicationSendInput,
   FollowUpConfiguration,
   ArtifactReviewInput,
+  MethodActionInput,
 } from "@hyper/contracts";
 import { Database, DEMO } from "./db/database.js";
 import { authenticate, issueSession } from "./core/security.js";
@@ -57,6 +58,7 @@ import {
 import { FileReadingService } from "./core/file-readings.js";
 import { FollowUpScheduleService } from "./core/follow-up-schedules.js";
 import { ArtifactReviewService } from "./core/artifact-reviews.js";
+import { MethodsService } from "./core/methods.js";
 import { TalkToken, TalkCursor } from "./providers/nextcloud-talk.js";
 import { IdentityService } from "./core/identity.js";
 import { nextcloudConfig } from "./providers/nextcloud.js";
@@ -220,6 +222,29 @@ class ApiController {
     @Query("projectId") pid?: string,
   ) {
     return service.view(await subject(req), pid ? uuid(pid) : undefined);
+  }
+  @Get("projects/:id/methods") async listMethods(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new MethodsService(db).list(await subject(req), uuid(id));
+  }
+  @Get("methods/:id") async getMethod(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new MethodsService(db).get(await subject(req), uuid(id));
+  }
+  @Post("projects/:id/methods/actions") async methodAction(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    return new MethodsService(db).record(
+      await subject(req),
+      uuid(id),
+      MethodActionInput.parse(body),
+    );
   }
   @Post("projects") async project(@Req() req: Request, @Body() body: unknown) {
     const input = z

@@ -568,6 +568,11 @@ export function App() {
         ) : null}
         {section === "knowledge" ? (
           <KnowledgePanel
+            view={view}
+            run={run}
+            onRun={(value) => {
+              if (loadedProject.current === view.project.id) setRun(value);
+            }}
             busy={busy}
             act={act}
             demo={view.user.demo}

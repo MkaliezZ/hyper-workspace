@@ -22,6 +22,7 @@ export const EventKind = z.enum([
   "action.completed",
   "artifact.updated",
   "task.updated",
+  "method.updated",
   "usage.updated",
   "run.completed",
   "run.failed",
@@ -34,6 +35,7 @@ export const Workflow = z.enum([
   "project_report",
   "revise_artifact",
   "revise_task",
+  "manage_method",
   "review_artifact",
   "follow_up",
   "configure_follow_up",
@@ -85,6 +87,91 @@ export const ArtifactReviewInput = ArtifactReviewPlan.extend({
   idempotencyKey: z.uuid(),
 }).strict();
 export type ArtifactReviewInput = z.infer<typeof ArtifactReviewInput>;
+export const MethodDraft = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    kind: z.enum(["sop", "template", "case", "rubric", "glossary"]),
+    content: z.string().trim().min(1).max(12000),
+  })
+  .strict();
+export type MethodDraft = z.infer<typeof MethodDraft>;
+const methodTarget = {
+  methodId: z.uuid(),
+  expectedVersion: z.number().int().positive(),
+  expectedRevision: z.number().int().positive(),
+};
+export const MethodPlan = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("create"),
+      sourceArtifactId: z.uuid(),
+      expectedSourceVersion: z.number().int().positive(),
+    })
+    .strict(),
+  z.object({ operation: z.literal("revise"), ...methodTarget }).strict(),
+  z
+    .object({
+      operation: z.literal("verify"),
+      ...methodTarget,
+      evidence: z.string().trim().min(1).max(4000),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("publish"),
+      ...methodTarget,
+      scope: z.enum(["project", "workspace"]),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("withdraw"),
+      ...methodTarget,
+      reason: z.string().trim().min(1).max(4000),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+]);
+export type MethodPlan = z.infer<typeof MethodPlan>;
+export const MethodActionInput = z
+  .object({
+    plan: MethodPlan,
+    draft: MethodDraft.optional(),
+    idempotencyKey: z.uuid(),
+  })
+  .strict();
+export type MethodActionInput = z.infer<typeof MethodActionInput>;
+export const MethodReference = z
+  .object({
+    id: z.uuid(),
+    version: z.number().int().positive(),
+    revision: z.number().int().positive(),
+  })
+  .strict();
+export type MethodReference = z.infer<typeof MethodReference>;
+export interface MethodAsset {
+  id: string;
+  projectId: string;
+  projectName: string;
+  maintainerId: string;
+  maintainerName: string;
+  sourceArtifactId: string;
+  sourceTitle: string;
+  sourceVersion: number;
+  version: number;
+  revision: number;
+  state: "candidate" | "published" | "withdrawn";
+  verification: "candidate" | "employee_verified";
+  evidence: string;
+  scope: "project" | "workspace";
+  title: string;
+  kind: MethodDraft["kind"];
+  content: string;
+  canManage: boolean;
+  canPublishWorkspace: boolean;
+}
 export function artifactStatusLabel(status: string) {
   return (
     (
@@ -108,6 +195,8 @@ export const RunInput = z
     artifactReviewPlan: ArtifactReviewPlan.optional(),
     taskId: z.uuid().optional(),
     expectedTaskVersion: z.number().int().positive().optional(),
+    methodPlan: MethodPlan.optional(),
+    methodRefs: z.array(MethodReference).max(3).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
   .strict();
@@ -232,6 +321,8 @@ export interface PlannedAction {
     | "artifact.review"
     | "task.create"
     | "task.update"
+    | "method.write"
+    | "method.manage"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -270,6 +361,8 @@ export function toolsForWorkflow(
       return ["artifact.revise"];
     case "revise_task":
       return ["task.update"];
+    case "manage_method":
+      return ["method.write", "method.manage"];
     case "review_artifact":
       return ["artifact.review"];
     case "follow_up":

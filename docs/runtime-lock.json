@@ -236,5 +236,14 @@
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40974156265",
     "evidenceCommit": "9376aa9d73e6f76a381622d4857b4d025b93931a",
     "evidenceScope": "165 first-attempt checks across three successful jobs: 19 unit, 3 downloader, 8 extraction, 87 database, 3 native runtime, 32 UI, 9 real source, 4 container; real Nextcloud DSH edit/Hermes no-op receipts and source revocation, restricted container Hermes edit/history survival after DB/API/Worker restart; synthetic sources/models only"
+  },
+  "methodAssets": {
+    "status": "local-verified-source-container-ci-pending",
+    "contract": "docs/METHODS.md",
+    "migration": "db/migrations/017_method_assets.sql",
+    "scope": "Artifact-version-derived candidates, employee verification, role-bound publication, content/governance revisions, withdrawal and pinned reuse in minutes/reports/artifact revisions; source-bound methods stay in origin project, no policy mutation",
+    "localEvidence": "95 full database, 36 full UI, 19 unit, 3 native runtime, typecheck/build and frozen baseline; eight method database cases repeated after withdrawn-reference Run replay fix; first full UI 35 passed/one auth read interrupted by a concurrent local API edit, then 36 clean after code stabilized",
+    "assetIndex": "Published only, canonical directory/cache binding and version checks before embedding/return; withdrawal invalidates vectors and rejects in-flight business writes; selected method usage records context preparation plus actual Run state, not proof of model success",
+    "mapping": "P04/P05/P06/P07/P08 C02/C04/C06/C07 A06/A07/A08/A09/A10 E01/E02/E04/E05/E06/E07/E09/E10 subsets"
   }
 }

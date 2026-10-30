@@ -6,6 +6,7 @@ import { assertMember } from "./security.js";
 import { ProjectAccess } from "./project-access.js";
 import { SourceFileService } from "./source-files.js";
 import { ModelService, embed } from "./models.js";
+import { MethodsService } from "./methods.js";
 
 /** Text index v1: one vector per short asset. Source content remains authoritative. */
 export class KnowledgeService {
@@ -18,10 +19,16 @@ export class KnowledgeService {
     const fileAccess = await files.verify(s, ids);
     const rows = (
       await this.db.pool.query(
-        "SELECT id,title,content,source_version,project_id,EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) AS \"fileSource\" FROM cw_assets WHERE id=ANY($1::uuid[]) AND workspace_id=$2 AND deleted_at IS NULL AND validity='active' AND (visibility='workspace' OR owner_id=$3) AND (project_id IS NULL OR project_id=ANY($4::uuid[])) AND (NOT EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) OR id=ANY($5::uuid[])) ORDER BY id",
+        'SELECT id,title,content,source_version,source_version AS "sourceVersion",source_ref AS "sourceRef",project_id,EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) AS "fileSource" FROM cw_assets WHERE id=ANY($1::uuid[]) AND workspace_id=$2 AND deleted_at IS NULL AND validity=\'active\' AND (visibility=\'workspace\' OR owner_id=$3) AND (project_id IS NULL OR project_id=ANY($4::uuid[])) AND (NOT EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) OR id=ANY($5::uuid[])) ORDER BY id',
         [ids, s.workspaceId, s.id, visible, [...fileAccess.allowed.keys()]],
       )
     ).rows;
+    if (
+      (await MethodsService.filterAssets(this.db, rows)).length !== rows.length
+    )
+      throw new NotFoundException(
+        "方法未发布、已撤回或资产版本不一致，未发送给向量模型。",
+      );
     if (rows.length !== new Set(ids).size)
       throw new NotFoundException("部分资料不存在或无权访问。");
     if (rows.some((row) => (row.title + "\n" + row.content).length > 20000))
@@ -64,7 +71,7 @@ export class KnowledgeService {
       )
         continue;
       const result = await this.db.pool.query(
-        "UPDATE cw_assets SET embedding=$1::vector,embedding_profile_id=$2,embedding_model=$3,embedding_dimensions=$4,embedding_source_version=source_version,embedding_version='text-v1',indexed_at=clock_timestamp() WHERE id=$5 AND workspace_id=$6 AND source_version=$7 AND deleted_at IS NULL AND validity='active' AND (visibility='workspace' OR owner_id=$8) AND EXISTS(SELECT 1 FROM cw_members WHERE workspace_id=$6 AND user_id=$8) RETURNING id",
+        "UPDATE cw_assets SET embedding=$1::vector,embedding_profile_id=$2,embedding_model=$3,embedding_dimensions=$4,embedding_source_version=source_version,embedding_version='text-v1',indexed_at=clock_timestamp() WHERE id=$5 AND workspace_id=$6 AND source_version=$7 AND deleted_at IS NULL AND validity='active' AND (visibility='workspace' OR owner_id=$8) AND (NOT EXISTS(SELECT 1 FROM cw_methods m WHERE m.id=cw_assets.id) OR EXISTS(SELECT 1 FROM cw_methods m WHERE m.id=cw_assets.id AND m.state='published' AND m.workspace_id=cw_assets.workspace_id AND m.project_id=cw_assets.project_id AND m.current_version::text||':'||m.revision::text=cw_assets.source_version)) AND EXISTS(SELECT 1 FROM cw_members WHERE workspace_id=$6 AND user_id=$8) RETURNING id",
         [
           JSON.stringify(vectors[i]),
           connection.id,
@@ -115,7 +122,7 @@ export class KnowledgeService {
       s,
       result.rows.filter((row) => row.fileSource).map((row) => row.id),
     );
-    return result.rows
+    return (await MethodsService.filterAssets(this.db, result.rows))
       .filter((row) => !row.project_id || current.has(row.project_id))
       .filter(
         (row) =>

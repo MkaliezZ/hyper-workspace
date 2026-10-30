@@ -10,6 +10,8 @@ import { RunProcessor } from "../../apps/api/src/core/processor.js";
 import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
 import type { Subject } from "@hyper/contracts";
 import { FollowUpScheduleService } from "../../apps/api/src/core/follow-up-schedules.js";
+import { MethodsService } from "../../apps/api/src/core/methods.js";
+import type { MethodPlan } from "@hyper/contracts";
 
 type NativeEngine = "dsh" | "hermes";
 interface Employee {
@@ -105,52 +107,81 @@ export function modelFixture(
       )
     )
       violations.push("Review dispatch included artifact content");
+    const methodDraft = JSON.stringify(body.messages).includes(
+      "Host-bound method draft.",
+    );
+    const methodManagement = JSON.stringify(body.messages).includes(
+      "Host-bound method management.",
+    );
+    if (
+      methodManagement &&
+      /protocol-fixture-model-result|protocol-fixture-method-guidance/.test(
+        JSON.stringify(body.messages),
+      )
+    )
+      violations.push("Method management dispatch included body");
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        taskRevision
+        methodDraft
           ? {
-              tool: "task.update",
-              args: { title: "protocol-fixture-task-update", status: "done" },
+              tool: "method.write",
+              args: {
+                title: "Protocol fixture method candidate",
+                kind: "sop",
+                content:
+                  "protocol-fixture-method-guidance: check evidence before output.",
+              },
             }
-          : artifactReview
-            ? { tool: "artifact.review", args: {} }
-            : configureFollowUp
-              ? { tool: "follow_up.configure", args: {} }
-              : followUp
-                ? { tool: "follow_up.check", args: {} }
-                : fileReading
-                  ? {
-                      tool: "file.reading.save",
-                      args: {
-                        content:
-                          (fileReadingRevision
-                            ? "private-native-file-revision-"
-                            : "private-native-file-reading-") + employee,
-                      },
-                    }
-                  : draftReply
-                    ? {
-                        tool: "communication.draft",
-                        args: {
-                          content: "private-native-reply-draft-" + employee,
-                        },
-                      }
-                    : revision
+          : methodManagement
+            ? { tool: "method.manage", args: {} }
+            : taskRevision
+              ? {
+                  tool: "task.update",
+                  args: {
+                    title: "protocol-fixture-task-update",
+                    status: "done",
+                  },
+                }
+              : artifactReview
+                ? { tool: "artifact.review", args: {} }
+                : configureFollowUp
+                  ? { tool: "follow_up.configure", args: {} }
+                  : followUp
+                    ? { tool: "follow_up.check", args: {} }
+                    : fileReading
                       ? {
-                          tool: "artifact.revise",
+                          tool: "file.reading.save",
                           args: {
-                            content: "protocol-fixture-revision " + revision,
+                            content:
+                              (fileReadingRevision
+                                ? "private-native-file-revision-"
+                                : "private-native-file-reading-") + employee,
                           },
                         }
-                      : {
-                          tool: "artifact.create",
-                          args: {
-                            title: "Native runtime test " + employee,
-                            content:
-                              "protocol-fixture-model-result " + employee,
-                          },
-                        },
+                      : draftReply
+                        ? {
+                            tool: "communication.draft",
+                            args: {
+                              content: "private-native-reply-draft-" + employee,
+                            },
+                          }
+                        : revision
+                          ? {
+                              tool: "artifact.revise",
+                              args: {
+                                content:
+                                  "protocol-fixture-revision " + revision,
+                              },
+                            }
+                          : {
+                              tool: "artifact.create",
+                              args: {
+                                title: "Native runtime test " + employee,
+                                content:
+                                  "protocol-fixture-model-result " + employee,
+                              },
+                            },
       ],
     });
     if (body.stream) {
@@ -399,6 +430,102 @@ async function verifyArtifactReview(
   assert.equal(next.reviews.length, 2);
   assert.equal(next.versions[1].status, "changes_requested");
   return runs;
+}
+
+async function verifyMethods(
+  service: WorkspaceService,
+  processor: RunProcessor,
+  employee: Employee,
+  engine: NativeEngine,
+) {
+  const methods = new MethodsService(service.db),
+    source = await service.artifact(employee.subject, employee.artifactId!);
+  const projectId = (
+    await service.conversation(employee.subject, employee.conversation)
+  ).project_id;
+  const perform = async (plan: MethodPlan) => {
+    const run = await service.startRun(employee.subject, {
+      conversationId: employee.conversation,
+      workflow: "manage_method",
+      methodPlan: plan,
+      engine,
+      modelProfileId: employee.modelId,
+      instruction: "Use only the selected source and confirmed operation.",
+      idempotencyKey: randomUUID(),
+    });
+    await processor.process(run.id);
+    const result = await service.getRun(employee.subject, run.id);
+    assert.equal(result.state, "succeeded", result.error);
+    return { run, result };
+  };
+  const created = await perform({
+      operation: "create",
+      sourceArtifactId: employee.artifactId!,
+      expectedSourceVersion: source.current.version,
+    }),
+    m = created.result.result.receipts[0];
+  assert.equal(m.state, "candidate");
+  assert.equal(m.verification, "candidate");
+  const verified = await methods.record(employee.subject, projectId, {
+    plan: {
+      operation: "verify",
+      methodId: m.id,
+      expectedVersion: m.version,
+      expectedRevision: m.revision,
+      evidence: "Synthetic employee verification declaration.",
+      confirmed: true,
+    },
+    idempotencyKey: randomUUID(),
+  });
+  const published = await perform({
+    operation: "publish",
+    methodId: m.id,
+    expectedVersion: verified.version,
+    expectedRevision: verified.revision,
+    scope: "project",
+    confirmed: true,
+  });
+  const current = (await methods.get(employee.subject, m.id)).current;
+  const reuse = await service.startRun(employee.subject, {
+    conversationId: employee.conversation,
+    workflow: "project_report",
+    engine,
+    modelProfileId: employee.modelId,
+    instruction:
+      "Apply the selected published method as guidance, keep current facts separate.",
+    methodRefs: [
+      { id: m.id, version: current.version, revision: current.revision },
+    ],
+    idempotencyKey: randomUUID(),
+  });
+  await processor.process(reuse.id);
+  const result = await service.getRun(employee.subject, reuse.id);
+  assert.equal(result.state, "succeeded", result.error);
+  assert.ok(
+    result.contextRefs.includes(
+      "method:" + m.id + "@" + current.version + "#" + current.revision,
+    ),
+  );
+  assert.equal(
+    (await methods.get(employee.subject, m.id)).uses[0].runId,
+    reuse.id,
+  );
+  await methods.record(employee.subject, projectId, {
+    plan: {
+      operation: "withdraw",
+      methodId: m.id,
+      expectedVersion: current.version,
+      expectedRevision: current.revision,
+      reason: "Synthetic retirement after reuse.",
+      confirmed: true,
+    },
+    idempotencyKey: randomUUID(),
+  });
+  assert.equal(
+    (await methods.get(employee.subject, m.id)).current.state,
+    "withdrawn",
+  );
+  return [created.run.id, published.run.id, reuse.id];
 }
 
 async function verifyTaskRevision(
@@ -660,6 +787,9 @@ export async function exerciseNativeBusiness(
     );
     allRuns.push(
       await verifyTaskRevision(service, processor, employees[0]!, engine),
+    );
+    allRuns.push(
+      ...(await verifyMethods(service, processor, employees[0]!, engine)),
     );
     for (const id of allRuns) {
       const events = JSON.stringify(

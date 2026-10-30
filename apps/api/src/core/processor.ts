@@ -19,6 +19,7 @@ import { stableDigest } from "./credentials.js";
 import { reviseArtifactVersion, lockArtifact } from "./artifacts.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
 import { createProjectTask, patchProjectTask, lockTask } from "./tasks.js";
+import { MethodsService } from "./methods.js";
 import { ModelService } from "./models.js";
 import { assertRunScope, loadRunContext } from "./run-context.js";
 import { FollowUpService } from "./follow-up.js";
@@ -231,6 +232,8 @@ export class RunProcessor {
           "当前上下文超过 100 KB，请缩小讨论范围或拆分成果后重试。",
         );
       }
+      await new MethodsService(db).recordPrepared(subject, run);
+      await assertRunScope(this.service, subject, run);
       const result = await adapter.execute({
         runId,
         subject,
@@ -259,21 +262,27 @@ export class RunProcessor {
         run.workflow === "discussion_to_minutes" ||
         run.workflow === "project_report"
           ? ["artifact.create", "project.report"]
-          : run.workflow === "revise_artifact"
-            ? ["artifact.revise"]
-            : run.workflow === "revise_task"
-              ? ["task.update"]
-              : run.workflow === "review_artifact"
-                ? ["artifact.review"]
-                : run.workflow === "follow_up"
-                  ? ["follow_up.check"]
-                  : run.workflow === "configure_follow_up"
-                    ? ["follow_up.configure"]
-                    : run.workflow === "draft_reply"
-                      ? ["communication.draft"]
-                      : isFileWorkflow(run.workflow)
-                        ? ["file.reading.save"]
-                        : [];
+          : run.workflow === "manage_method"
+            ? [
+                ["create", "revise"].includes(run.method_plan.operation)
+                  ? "method.write"
+                  : "method.manage",
+              ]
+            : run.workflow === "revise_artifact"
+              ? ["artifact.revise"]
+              : run.workflow === "revise_task"
+                ? ["task.update"]
+                : run.workflow === "review_artifact"
+                  ? ["artifact.review"]
+                  : run.workflow === "follow_up"
+                    ? ["follow_up.check"]
+                    : run.workflow === "configure_follow_up"
+                      ? ["follow_up.configure"]
+                      : run.workflow === "draft_reply"
+                        ? ["communication.draft"]
+                        : isFileWorkflow(run.workflow)
+                          ? ["file.reading.save"]
+                          : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -281,6 +290,8 @@ export class RunProcessor {
         throw new Error("执行器没有提出本次工作要求的成果操作，不能报告完成。");
       if (run.workflow === "revise_artifact" && result.actions.length !== 1)
         throw new Error("一次修订必须对应一个明确的成果版本。");
+      if (run.workflow === "manage_method" && result.actions.length !== 1)
+        throw new Error("一次方法管理只接受一个明确操作。");
       if (run.workflow === "revise_task" && result.actions.length !== 1)
         throw new Error("一次待办修改必须只对应一个明确版本。");
       if (run.workflow === "review_artifact" && result.actions.length !== 1)
@@ -337,6 +348,7 @@ export class RunProcessor {
           run.workflow !== "configure_follow_up" &&
           run.workflow !== "review_artifact" &&
           run.workflow !== "revise_task" &&
+          run.workflow !== "manage_method" &&
           !isFileWorkflow(run.workflow)
         )
           await c.query(
@@ -363,11 +375,13 @@ export class RunProcessor {
                       ? "定时跟进配置已保存。"
                       : run.workflow === "review_artifact"
                         ? "已记录员工对指定成果版本的验收决定。"
-                        : run.workflow === "revise_task"
-                          ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                          : isFileWorkflow(run.workflow)
-                            ? "个人文件解读已保存。"
-                            : result.text,
+                        : run.workflow === "manage_method"
+                          ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                          : run.workflow === "revise_task"
+                            ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                            : isFileWorkflow(run.workflow)
+                              ? "个人文件解读已保存。"
+                              : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -439,6 +453,29 @@ export class RunProcessor {
       // Match scheduled checks: target schedule before Run/member locks.
       if (configuration)
         await FollowUpScheduleService.lockTarget(c, s, configuration);
+      if (run.method_refs?.length || run.workflow === "manage_method") {
+        const scope = (
+          await c.query(
+            "SELECT project_id FROM cw_conversations WHERE id=$1 AND workspace_id=$2",
+            [run.conversation_id, s.workspaceId],
+          )
+        ).rows[0];
+        if (!scope) throw new Error("方法项目范围不可用。");
+        if (run.method_refs?.length)
+          await MethodsService.lockReferences(
+            c,
+            s,
+            scope.project_id,
+            run.method_refs,
+          );
+        if (run.workflow === "manage_method")
+          await MethodsService.lockTarget(
+            c,
+            s,
+            run.method_plan,
+            scope.project_id,
+          );
+      }
       if (run.workflow === "revise_task") {
         const target = (
           await c.query(
@@ -507,6 +544,26 @@ export class RunProcessor {
           .strict()
           .parse(action.args);
         receipt = await FileReadingService.save(c, s, run, input.content);
+      } else if (
+        action.tool === "method.write" ||
+        action.tool === "method.manage"
+      ) {
+        const writing = ["create", "revise"].includes(
+          run.method_plan.operation,
+        );
+        if ((action.tool === "method.write") !== writing)
+          throw new Error("方法操作与员工指定计划不符。");
+        if (!writing) z.object({}).strict().parse(action.args);
+        receipt = await MethodsService.apply(
+          c,
+          s,
+          conv.project_id,
+          run.method_plan,
+          writing ? action.args : undefined,
+          run.id + ":" + index,
+          run.id,
+        );
+        await appendEvent(c, run.id, "method.updated", receipt);
       } else if (action.tool === "task.update") {
         const input = TaskRewrite.parse(action.args);
         receipt = {
@@ -663,6 +720,22 @@ export class RunProcessor {
           )),
         };
       } else throw new Error("Tool is not allowed.");
+      if (
+        ["artifact.create", "project.report", "artifact.revise"].includes(
+          action.tool,
+        )
+      )
+        for (const ref of run.method_refs ?? [])
+          await c.query(
+            `INSERT INTO cw_asset_links(id,workspace_id,from_id,to_id,relation,source_version) VALUES($1,$2,$3,$4,'reused_method',$5) ON CONFLICT(workspace_id,from_id,to_id,relation) DO UPDATE SET source_version=EXCLUDED.source_version`,
+            [
+              randomUUID(),
+              s.workspaceId,
+              receipt.id,
+              ref.id,
+              ref.version + ":" + ref.revision,
+            ],
+          );
       await c.query(
         "INSERT INTO cw_actions(id,workspace_id,actor_id,run_id,tool,params_hash,idempotency_key,state,result) VALUES($1,$2,$3,$4,$5,$6,$7,'completed',$8)",
         [
