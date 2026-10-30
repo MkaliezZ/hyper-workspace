@@ -384,6 +384,8 @@
     "mapping": "P02/P04/P07/P08 C00/C02/C05/C07 A03/A04/A06/A10 E01/E02/E04/E07/E08/E09/E10 subsets",
     "scope": "Explicit current-room and exact Files identity/version selection; shared manual and DSH/Hermes attachment.share empty-args service; persisted source POST intent and reference/message/file/author readback, per-key/room idempotency, unknown outcome reconciliation without repost, private history/queued Runs",
     "localEvidence": "147 database including eight new external-send cases, 25 unit/config, full 45 Chromium desktop/mobile UI first attempt, type/build; screenshots inspected; final per-key namespace concurrency and AI unknown-delivery checks passed separately",
-    "limits": "No local upload, exact-once external effects, atomic DAV/OCS versions/permissions, offline recall, real supplier quality for this workflow, Safari/Firefox or company acceptance"
+    "limits": "No local upload, exact-once external effects, atomic DAV/OCS versions/permissions, offline recall, real supplier quality for this workflow, Safari/Firefox or company acceptance",
+    "initialFailureRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41118788352",
+    "initialFailure": "verify/deployment passed; source 8 pass/2 fail: new real attachment manual/idempotent/duplicate/native DSH+Hermes case passed; two old tests assumed the fixed default project heading Team discussion. New source project legitimately changes the alphabetic default; changed only readiness locator to authenticated workspace navigation, retaining all message/UID/permission/revocation assertions. Full fixed CI pending."
   }
 }

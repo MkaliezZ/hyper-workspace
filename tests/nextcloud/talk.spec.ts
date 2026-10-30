@@ -327,7 +327,7 @@ test("Real Talk group messages use employee credentials, read back sends and den
   try {
     for (const user of [alice, bob, outside]) {
       await expect(
-        user.page.getByRole("heading", { name: "团队讨论", exact: true }),
+        user.page.getByRole("navigation", { name: "工作区导航", exact: true }),
       ).toBeVisible();
       await user.page
         .getByRole("navigation", { name: "工作区导航" })
@@ -448,7 +448,7 @@ test("Real one-to-one Talk messages are available without importing them into pr
     user = await login(browser, "talk-alice");
   try {
     await expect(
-      user.page.getByRole("heading", { name: "团队讨论", exact: true }),
+      user.page.getByRole("navigation", { name: "工作区导航", exact: true }),
     ).toBeVisible();
     const response = await user.context.request.get(origin + "/api/talk/rooms");
     expect(response.status()).toBe(200);
