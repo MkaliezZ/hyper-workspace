@@ -646,7 +646,8 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         `process.stdout.write(await(await fetch('http://model-fixture:8100/stats')).text())`,
       ),
     );
-    expect(stats.calls).toBe(8);
+    // The explicit employee assignment adds one native request to the prior eight workflows.
+    expect(stats.calls).toBe(9);
     expect(stats.violations).toBe(0);
   } finally {
     await context.close();
