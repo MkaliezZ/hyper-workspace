@@ -60,6 +60,8 @@ docker compose --env-file .env.compose ps
 
 ## 代理、配置与数据
 
+本机附件上传使用单独二进制路径 `PUT /api/talk/attachment-uploads/:id/content`，最多 8 MiB。组织代理须允许此路径的 8 MiB 请求（例如该 location 的 `client_max_body_size 8m`），其余路径保留原限制。API 先认证，再做此路径的有界解析；不用放宽所有 JSON 请求。[上传、迁移 024 与回退](ATTACHMENT-UPLOADS.md)。
+
 容器显式 `API_HOST=0.0.0.0`；本地开发默认仍为 loopback。`SERVE_WEB=true` 仅提供固定构建目录；`/api` 继续进入业务接口，私有运行目录、`.env` 和源码不作为静态资源提供。HTTPS origin 使用 Secure cookie，本机 HTTP loopback 使用 HttpOnly/SameSite cookie；没有放宽演示登录的来源 socket 限制。
 
 组织代理需保留请求路径与 Origin、使用有效 TLS 证书，并为事件流关闭缓冲。例如 Nginx 的 upstream 可指向 `127.0.0.1:8080`，`proxy_buffering off`，`proxy_read_timeout 75s`；组织域名、证书、公司 SSO/MFA 和私有 CA 尚需在公司环境验证，不关闭证书校验来绕过连接问题。

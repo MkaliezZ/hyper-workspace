@@ -10,6 +10,7 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Param,
   Query,
   Req,
@@ -58,6 +59,8 @@ import { ModelUsageService } from "./core/model-usage.js";
 import { ModelSpendingService } from "./core/model-spending.js";
 import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
+import { AttachmentUploadService } from "./core/attachment-uploads.js";
+import { AttachmentUploadInput, MAX_ATTACHMENT_BYTES } from "@hyper/contracts";
 import { AttachmentSendService } from "./core/attachment-sends.js";
 import { AttachmentSendInput } from "@hyper/contracts";
 import { ReplyDraftService } from "./core/reply-drafts.js";
@@ -567,6 +570,59 @@ class ApiController {
   @Get("talk/rooms") async talkRooms(@Req() req: Request) {
     return communication.rooms(await subject(req));
   }
+  @Post("talk/attachment-uploads") async prepareUpload(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    return new AttachmentUploadService(db).create(
+      await subject(req),
+      AttachmentUploadInput.parse(body),
+    );
+  }
+  @Get("talk/rooms/:token/attachment-uploads") async uploadActivity(
+    @Req() req: Request,
+    @Param("token") token: string,
+  ) {
+    return new AttachmentUploadService(db).list(
+      await subject(req),
+      TalkToken.parse(token),
+    );
+  }
+  @Get("talk/attachment-uploads/:id") async uploadReceipt(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new AttachmentUploadService(db).get(await subject(req), uuid(id));
+  }
+  @Put("talk/attachment-uploads/:id/content") async uploadContent(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: Buffer,
+  ) {
+    return new AttachmentUploadService(db).upload(
+      await subject(req),
+      uuid(id),
+      body,
+    );
+  }
+  @Post("talk/attachment-uploads/:id/reconcile") async reconcileUpload(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new AttachmentUploadService(db).reconcile(
+      await subject(req),
+      uuid(id),
+    );
+  }
+  @Post("talk/attachment-uploads/:id/release") async releaseUpload(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new AttachmentUploadService(db).release(
+      await subject(req),
+      uuid(id),
+    );
+  }
   @Post("talk/rooms/:token/attachments") async sendAttachment(
     @Req() req: Request,
     @Param("token") token: string,
@@ -847,6 +903,42 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "no-store");
   next();
+});
+// Binary input is scoped to this one authenticated endpoint; JSON limits remain unchanged.
+app.use(async (req: Request, res: Response, next: NextFunction) => {
+  const match = /^\/api\/talk\/attachment-uploads\/([0-9a-f-]+)\/content$/.exec(
+    req.path,
+  );
+  if (req.method !== "PUT" || !match) return next();
+  try {
+    const info = await new AttachmentUploadService(db).authorizeContent(
+      await subject(req),
+      uuid(match[1]!),
+    );
+    if (
+      req.headers["content-type"] !== "application/octet-stream" ||
+      req.headers["content-encoding"]
+    )
+      return res.status(415).json({ message: "上传需使用原始二进制文件。" });
+    const length = req.headers["content-length"];
+    if (length !== undefined && Number(length) !== info.size)
+      return res.status(400).json({ message: "上传长度与确认记录不符。" });
+    express.raw({
+      type: "application/octet-stream",
+      limit: MAX_ATTACHMENT_BYTES,
+      inflate: false,
+    })(req, res, (error?: unknown) => {
+      if (error)
+        res.status(413).json({ message: "上传内容超过限制或请求不完整。" });
+      else next();
+    });
+  } catch (e) {
+    res
+      .status(e instanceof HttpException ? e.getStatus() : 400)
+      .json({
+        message: e instanceof HttpException ? e.message : "上传请求无效。",
+      });
+  }
 });
 if (config.serveWeb) {
   const directory = fileURLToPath(new URL("../../web/dist/", import.meta.url));

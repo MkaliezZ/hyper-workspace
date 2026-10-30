@@ -69,7 +69,7 @@
 
 从当前员工的 Files 选择已有文件，可直接发送或交给 DSH/Hermes 执行；房间、文件版本和说明由员工确认，按实际源消息回读记录结果，未知投递仅核对、不自动重发。修正实现 `a6f1b8422eed649c164e59a6569441ca22e21a1c` 的 [CI 41120571893](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41120571893) 三个 job 全部成功，共 246 项通过：25 单元/配置、3 下载器、8 解析、147 数据库、4 原生执行器、45 UI、10 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。真实 Nextcloud 合成账号已验证人工/幂等与重复分享、DSH/Hermes 投递、双方下载和撤权；模型为协议测试服务，不代表该工作流的真实供应商质量或公司验收。[发送与恢复契约](docs/ATTACHMENT-SENDING.md) · [桌面](docs/images/attachment-send-desktop.png) · [手机](docs/images/attachment-send-mobile.png)。
 
-本机上传仍待补齐，整体尚未交付。
+新增本机附件上传入口：先明确确认保存至当前员工 Files，核对原始字节后选中，再人工或交给 DSH/Hermes 分享；不自动把字节交给模型。持久上传意图、条件创建、未知核对和大小限制已接通，本地 155 数据库/HTTP、25 单元、完整 47 UI、类型/构建和冻结包通过，真实来源/容器 CI 待记录。[上传与恢复契约](docs/ATTACHMENT-UPLOADS.md) · [桌面](docs/images/attachment-upload-desktop.png) · [手机](docs/images/attachment-upload-mobile.png)。整体尚未交付。
 
 ## 任务说明与澄清
 

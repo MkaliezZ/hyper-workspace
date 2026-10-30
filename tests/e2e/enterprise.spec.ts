@@ -1,5 +1,8 @@
 import { test, expect } from "@playwright/test";
 async function workspace(page: any, request: any) {
+  await page.route("**/api/talk/rooms/*/attachment-uploads", (route: any) =>
+    route.fulfill({ json: [] }),
+  );
   await page.route("**/api/talk/rooms/*/attachment-sends", (route: any) =>
     route.fulfill({ json: { sends: [], runs: [] } }),
   );
@@ -199,7 +202,9 @@ test("Attachment selection, explicit confirmation, unknown receipts and AI queue
   await expect(
     dialog.getByRole("button", { name: "确认发送附件", exact: true }),
   ).toBeDisabled();
-  await dialog.getByRole("checkbox").check();
+  await dialog
+    .getByRole("checkbox", { name: /确认向此会话分享所选文件/ })
+    .check();
   await page.screenshot({ path: "/tmp/hyper-attachment-send-desktop.png" });
   await dialog
     .getByRole("button", { name: "确认发送附件", exact: true })
@@ -242,7 +247,9 @@ test("Attachment selection, explicit confirmation, unknown receipts and AI queue
   await dialog
     .getByRole("combobox", { name: "附件执行模型" })
     .selectOption("71000000-0000-4000-8000-000000000003");
-  await dialog.getByRole("checkbox").check();
+  await dialog
+    .getByRole("checkbox", { name: /确认向此会话分享所选文件/ })
+    .check();
   await page.setViewportSize({ width: 390, height: 844 });
   await dialog
     .getByRole("button", { name: "让 AI 发送附件", exact: true })
@@ -592,4 +599,229 @@ test("Attachment cards use protected routes, download opaque bytes and clear whe
   await page.getByRole("button", { name: "项目联调", exact: true }).click();
   await expect(page.getByRole("list", { name: "消息附件" })).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("Local upload preserves raw bytes and selects current source file before a separately confirmed AI share on desktop and mobile", async ({
+  page,
+  request,
+}) => {
+  await attachmentWorkspace(page, request);
+  const bytes = Buffer.from("合成本机资料，不自动交给模型\n"),
+    id = "72000000-0000-4000-8000-000000000001";
+  const file = {
+    id: "9011",
+    name: id + "--本机说明.md",
+    path: [id + "--本机说明.md"],
+    kind: "file",
+    size: bytes.length,
+    etag: '"uploaded-v1"',
+    mime: "text/markdown",
+    importable: true,
+  };
+  let rows: any[] = [],
+    input: any,
+    puts = 0,
+    run: any;
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => {
+    if (
+      ["error", "warning"].includes(m.type()) &&
+      !m.text().includes("401 (Unauthorized)")
+    )
+      errors.push(m.text());
+  });
+  await page.route("**/api/talk/rooms/*/attachment-uploads", (route) =>
+    route.fulfill({ json: rows }),
+  );
+  await page.route("**/api/talk/attachment-uploads", (route) => {
+    input = route.request().postDataJSON();
+    rows = [
+      { id, name: input.name, size: input.size, state: "prepared", file: null },
+    ];
+    return route.fulfill({ json: rows[0] });
+  });
+  await page.route("**/api/talk/attachment-uploads/*/content", (route) => {
+    expect(route.request().method()).toBe("PUT");
+    expect(route.request().headers()["content-type"]).toBe(
+      "application/octet-stream",
+    );
+    expect(route.request().postDataBuffer()).toEqual(bytes);
+    puts++;
+    rows = [{ ...rows[0], state: "succeeded", file }];
+    return route.fulfill({ json: rows[0] });
+  });
+  await page.route("**/api/runs", (route) => {
+    run = route.request().postDataJSON();
+    return route.fulfill({
+      json: { id: "72000000-0000-4000-8000-000000000002", state: "queued" },
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("navigation", { name: "工作区导航" })
+    .getByRole("button", { name: "企业消息", exact: true })
+    .click();
+  expect(page.url()).toBe("http://127.0.0.1:5173/");
+  await expect(page).toHaveTitle(/Hyper Workspace/);
+  await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+  await page.getByRole("button", { name: "发送附件", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "发送企业附件" }),
+    upload = dialog.getByRole("region", { name: "本机文件上传" });
+  await dialog.getByRole("button", { name: /协作资料.*文件夹/ }).click();
+  await dialog.getByRole("button", { name: /合成项目说明.md/ }).click();
+  await dialog
+    .getByRole("checkbox", { name: /确认向此会话分享所选文件/ })
+    .check();
+  await expect(upload.getByLabel("选择本机附件")).toBeEnabled();
+  await upload.getByLabel("选择本机附件").setInputFiles({
+    name: "本机说明.md",
+    mimeType: "text/markdown",
+    buffer: bytes,
+  });
+  await expect(
+    upload.getByRole("button", { name: "上传并选中", exact: true }),
+  ).toBeDisabled();
+  await upload
+    .getByRole("checkbox", { name: "确认将此文件保存到我的企业 Files" })
+    .check();
+  await page.screenshot({ path: "/tmp/hyper-attachment-upload-desktop.png" });
+  await upload.getByRole("button", { name: "上传并选中", exact: true }).click();
+  await expect(
+    dialog.getByText(/文件已保存到你的企业 Files 并选中/),
+  ).toBeVisible();
+  expect(puts).toBe(1);
+  expect(await upload.getByLabel("选择本机附件").inputValue()).toBe("");
+  expect(input.roomId).toBe("source0001");
+  expect(input.size).toBe(bytes.length);
+  expect(input.sha256).toMatch(/^[0-9a-f]{64}$/);
+  expect(input).not.toHaveProperty("content");
+  expect(run).toBeUndefined();
+  await expect(dialog.getByText("已选：", { exact: false })).toContainText(
+    file.name,
+  );
+  await expect(
+    dialog.getByRole("checkbox", { name: /确认向此会话分享所选文件/ }),
+  ).not.toBeChecked();
+  await dialog
+    .getByRole("combobox", { name: "附件执行方式" })
+    .selectOption("ai");
+  await dialog
+    .getByRole("combobox", { name: "附件执行器" })
+    .selectOption("hermes");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dialog
+    .getByRole("checkbox", { name: /确认向此会话分享所选文件/ })
+    .check();
+  await dialog
+    .getByRole("button", { name: "让 AI 发送附件", exact: true })
+    .scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/hyper-attachment-upload-mobile.png" });
+  await dialog
+    .getByRole("button", { name: "让 AI 发送附件", exact: true })
+    .click();
+  expect(run.engine).toBe("hermes");
+  expect(run.attachmentPlan.expectedFileId).toBe(file.id);
+  expect(run.attachmentPlan.expectedEtag).toBe(file.etag);
+  expect(run.attachmentPlan.path).toEqual(file.path);
+  expect(JSON.stringify(run)).not.toContain(bytes.toString());
+  expect(errors).toEqual([]);
+});
+test("Lost local upload response survives dialog reload without automatic retransmission, and oversized files are blocked", async ({
+  page,
+  request,
+}) => {
+  await attachmentWorkspace(page, request);
+  let rows: any[] = [],
+    puts = 0,
+    creates = 0;
+  const id = "73000000-0000-4000-8000-000000000001";
+  await page.route("**/api/talk/rooms/*/attachment-uploads", (route) =>
+    route.fulfill({ json: rows }),
+  );
+  await page.route("**/api/talk/attachment-uploads", (route) => {
+    creates++;
+    rows = [
+      { id, name: "合成未知.bin", size: 3, state: "prepared", file: null },
+    ];
+    return route.fulfill({ json: rows[0] });
+  });
+  await page.route("**/api/talk/attachment-uploads/*/content", (route) => {
+    puts++;
+    rows = [{ ...rows[0], state: "recovery_required", acknowledgedAt: null }];
+    return route.abort("failed");
+  });
+  await page.route("**/api/talk/attachment-uploads/*/reconcile", (route) =>
+    route.fulfill({ json: rows[0] }),
+  );
+  await page.route("**/api/talk/attachment-uploads/*/release", (route) => {
+    rows = [{ ...rows[0], acknowledgedAt: new Date().toISOString() }];
+    return route.fulfill({ json: rows[0] });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("navigation", { name: "工作区导航" })
+    .getByRole("button", { name: "企业消息", exact: true })
+    .click();
+  await page.getByRole("button", { name: "发送附件", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "发送企业附件" }),
+    upload = dialog.getByRole("region", { name: "本机文件上传" });
+  await expect(upload.getByLabel("选择本机附件")).toBeEnabled();
+  await upload.getByLabel("选择本机附件").setInputFiles({
+    name: "too-large.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.alloc(8 * 1024 * 1024 + 1),
+  });
+  await expect(upload.getByRole("alert")).toContainText("8 MiB");
+  expect(creates).toBe(0);
+  await upload.getByLabel("选择本机附件").setInputFiles({
+    name: "合成未知.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from([0, 255, 1]),
+  });
+  await upload.getByRole("checkbox").check();
+  await upload.getByRole("button", { name: "上传并选中", exact: true }).click();
+  await expect(
+    upload.getByRole("button", { name: "核对原件，不重传" }),
+  ).toBeVisible();
+  await dialog
+    .locator(".dialog-actions")
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
+  await page.getByRole("button", { name: "发送附件", exact: true }).click();
+  await expect(upload.getByLabel("选择本机附件")).toBeDisabled();
+  await upload.getByRole("button", { name: "核对原件，不重传" }).click();
+  expect(puts).toBe(1);
+  expect(creates).toBe(1);
+  await upload.getByRole("button", { name: "已查看来源，允许新上传" }).click();
+  await expect(upload.getByLabel("选择本机附件")).toBeEnabled();
+  await expect(upload.getByText(/上传结果待核对/).first()).toBeVisible();
+  expect(puts).toBe(1);
+  await page.route("**/api/talk/attachment-uploads/*/content", (route) => {
+    puts++;
+    rows = [
+      { ...rows[0], state: "failed", error: "path_exists_not_overwritten" },
+    ];
+    return route.fulfill({ json: rows[0] });
+  });
+  await upload
+    .getByLabel("选择本机附件")
+    .setInputFiles({
+      name: "合成重选.bin",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from([1, 2, 3]),
+    });
+  await upload.getByRole("checkbox").check();
+  await upload.getByRole("button", { name: "上传并选中", exact: true }).click();
+  await expect(upload.getByRole("checkbox")).not.toBeChecked();
+  await expect(
+    upload.getByRole("button", { name: "上传并选中", exact: true }),
+  ).toBeDisabled();
+  expect(puts).toBe(2);
+  expect(creates).toBe(2);
 });

@@ -8,6 +8,7 @@ import type {
   WorkspaceView,
 } from "@hyper/contracts";
 import { api, mutation, ApiError } from "../api";
+import { LocalAttachmentUpload } from "./LocalAttachmentUpload";
 import { Dialog } from "./Dialog";
 import type { ModelSummary } from "./ModelSettings";
 type Activity = {
@@ -256,6 +257,7 @@ function AttachmentComposer({
     [confirmed, setConfirmed] = useState(false),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
+    [uploadBusy, setUploadBusy] = useState(false),
     [error, setError] = useState(""),
     [uncertain, setUncertain] = useState(false),
     [key, setKey] = useState(() => crypto.randomUUID());
@@ -327,12 +329,13 @@ function AttachmentComposer({
     setConfirmed(false);
     setKey(crypto.randomUUID());
   }
+  const locked = busy || uploadBusy;
   const canAi =
     !!project &&
     !!view.engines[engine]?.configured &&
     view.engines[engine]!.operations.includes("share_attachment");
   async function send() {
-    if (!selected || !confirmed || busy || uncertain) return;
+    if (!selected || !confirmed || locked || uncertain) return;
     setBusy(true);
     setError("");
     const plan: AttachmentSendPlan = {
@@ -389,9 +392,9 @@ function AttachmentComposer({
   return (
     <Dialog
       title="发送企业附件"
-      dismissible={!busy}
+      dismissible={!locked}
       onClose={() => {
-        if (!busy) onClose();
+        if (!locked) onClose();
       }}
       error={error}
     >
@@ -404,10 +407,24 @@ function AttachmentComposer({
           请求结果未确认。请关闭窗口并核对附件发送记录，不要重复投递。
         </p>
       ) : null}
+      <LocalAttachmentUpload
+        roomId={room.id}
+        disabled={busy || uncertain}
+        onBusy={setUploadBusy}
+        onDenied={onDenied}
+        onInputChange={() => {
+          setSelected(undefined);
+          reset();
+        }}
+        onSelected={(file) => {
+          setSelected(file);
+          reset();
+        }}
+      />
       <div className="attachment-file-browser">
         <div className="attachment-toolbar">
           <button
-            disabled={busy || uncertain || !path.length}
+            disabled={locked || uncertain || !path.length}
             onClick={() => {
               reset();
               setPath((p) => p.slice(0, -1));
@@ -416,7 +433,7 @@ function AttachmentComposer({
             上一级
           </button>
           <button
-            disabled={busy || uncertain || loading}
+            disabled={locked || uncertain || loading}
             onClick={() => {
               reset();
               setPath((p) => [...p]);
@@ -433,7 +450,7 @@ function AttachmentComposer({
               <button
                 className={selected?.id === f.id ? "selected" : ""}
                 disabled={
-                  busy ||
+                  locked ||
                   uncertain ||
                   (f.kind === "file" && f.size > 8 * 1024 * 1024)
                 }
@@ -471,7 +488,7 @@ function AttachmentComposer({
           <textarea
             maxLength={2000}
             value={caption}
-            disabled={busy || uncertain}
+            disabled={locked || uncertain}
             onChange={(e) => {
               setCaption(e.target.value);
               reset();
@@ -481,7 +498,7 @@ function AttachmentComposer({
         <label>
           附件执行方式
           <select
-            disabled={busy || uncertain}
+            disabled={locked || uncertain}
             value={mode}
             onChange={(e) => {
               setMode(e.target.value);
@@ -499,7 +516,7 @@ function AttachmentComposer({
             <label>
               附件执行器
               <select
-                disabled={busy || uncertain}
+                disabled={locked || uncertain}
                 value={engine}
                 onChange={(e) => {
                   setEngine(e.target.value);
@@ -513,7 +530,7 @@ function AttachmentComposer({
             <label>
               附件执行模型
               <select
-                disabled={busy || uncertain}
+                disabled={locked || uncertain}
                 value={model}
                 onChange={(e) => {
                   setModel(e.target.value);
@@ -549,20 +566,20 @@ function AttachmentComposer({
           <input
             type="checkbox"
             checked={confirmed}
-            disabled={busy || uncertain || !selected}
+            disabled={locked || uncertain || !selected}
             onChange={(e) => setConfirmed(e.target.checked)}
           />
           确认向此会话分享所选文件，当前成员可按来源权限访问
         </label>
       </div>
       <div className="dialog-actions">
-        <button onClick={onClose} disabled={busy}>
+        <button onClick={onClose} disabled={locked}>
           关闭
         </button>
         <button
           className="primary"
           disabled={
-            busy ||
+            locked ||
             loading ||
             uncertain ||
             !selected ||

@@ -124,3 +124,13 @@ Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0
 Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。完整 45 UI 首轮通过，包含新增两项发送/撤权迟到响应场景。URL/标题、有效内容、无框架 overlay、控制台/pageerror、确认前禁用、固定字段、未知核对不重发、排队停止与跨房间清理已检查。截图逐一查看：桌面文件与说明可见，手机 AI 选择/确认和提交可访问，无横向溢出；修正 checkbox 为左侧内联，提交时禁止 Escape 把原生对话框与组件状态分离。
 
 [桌面](../images/attachment-send-desktop.png) · [手机](../images/attachment-send-mobile.png)。均为合成资料；未测 Safari/Firefox、公司实际资料/规模或真实供应商的该新工作流质量。修正实现 `a6f1b84` 的 [CI 41120571893](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41120571893) 三个 job 成功，246 项全部通过，含 45 UI、10 真实来源和 4 容器；人工/重复分享、双引擎投递及下载/撤权由实际来源验证。首轮两个旧用例的默认项目标题假设已修正为工作区导航就绪检查，原消息和权限断言保留。
+
+## 本机附件上传 — 2026-10-31
+
+路径：企业消息 → 发送附件 → 明确选择本机文件/确认保存 → 上传并选中 → 再确认分享 → Hermes 排队。第二项场景覆盖超限拒绝、丢失响应、关闭/重开窗口后待核对、查询不重传与人工继续不改写未知。
+
+Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。完整 47 UI 全部通过（4.2 分钟），25 单元、155 数据库/HTTP、类型/构建与冻结包也通过。页面 URL/标题、有效内容、无框架 overlay、无相关 console/pageerror、真实 file input/raw request 字节、上传前后两次确认、清除旧选择与无模型正文均已检查。8 MiB 入口正边界、超限/未认证/他人意图/跨来源/类型/摘要拒绝另由实际 HTTP 测试验证。
+
+首轮局部 6 过/1 因关闭按钮定位歧义失败，明确限定底部操作区后 7 项通过；失败 trace 保留，未放松恢复断言。截图逐一查看：桌面文件输入名称与待上传信息一致、蓝色上传按钮明确；手机滚动后 AI/确认/提交可访问，长源文件名换行、无横向溢出；上半部通过对话框内滚动可达。没有用截掉标题的手机滚动状态证明初始页身份。 最终定向复测还覆盖明确拒绝上传后的确认清理，防止新意图沿用旧勾选。
+
+[桌面](../images/attachment-upload-desktop.png) · [手机](../images/attachment-upload-mobile.png)。合成资料，Safari/Firefox、公司真实数据/容量和该工作流真实供应商质量未测；实际来源上传→双引擎投递及容器 CI 待记录。

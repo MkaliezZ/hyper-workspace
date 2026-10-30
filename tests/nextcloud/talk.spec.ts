@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { modelFixture } from "../runtime/business-contract";
 import { Database } from "../../apps/api/src/db/database.js";
 import { source, password, origin, login } from "./helpers";
@@ -20,28 +20,72 @@ test("Real Talk attachments resolve recipient files, download opaque bytes and r
     newParticipant: "talk-bob",
     source: "users",
   });
-  const filename = "Hyper-synthetic-attachment-" + randomUUID() + ".html";
+  let filename = "Hyper-synthetic-attachment-" + randomUUID() + ".html";
   const content = "<script>synthetic-attachment-must-never-run-inline</script>";
   const auth =
     "Basic " + Buffer.from("talk-alice:" + password).toString("base64");
-  const fileUrl =
+  let fileUrl =
     source + "/remote.php/dav/files/talk-alice/" + encodeURIComponent(filename);
-  const uploaded = await fetch(fileUrl, {
-    method: "PUT",
-    redirect: "error",
-    headers: {
-      Authorization: auth,
-      "Content-Type": "text/html",
-      "If-None-Match": "*",
-    },
-    body: content,
-  });
-  expect(uploaded.status).toBe(201);
   const alice = await login(browser, "talk-alice"),
     bob = await login(browser, "talk-bob"),
     outsider = await login(browser, "talk-outsider");
   let modelServer: ReturnType<typeof modelFixture> | undefined;
   try {
+    const uploadInput = {
+      roomId: room.token,
+      name: filename,
+      size: Buffer.byteLength(content),
+      sha256: createHash("sha256").update(content).digest("hex"),
+      confirmed: true,
+      idempotencyKey: randomUUID(),
+    };
+    const prepare = await alice.context.request.post(
+      origin + "/api/talk/attachment-uploads",
+      { headers: { Origin: origin }, data: uploadInput },
+    );
+    expect(prepare.status()).toBe(201);
+    const uploadIntent = await prepare.json();
+    expect(uploadIntent.state).toBe("prepared");
+    const wrongType = await alice.context.request.put(
+      origin + "/api/talk/attachment-uploads/" + uploadIntent.id + "/content",
+      {
+        headers: { Origin: origin, "Content-Type": "text/plain" },
+        data: content,
+      },
+    );
+    expect(wrongType.status()).toBe(415);
+    const wrongActor = await bob.context.request.put(
+      origin + "/api/talk/attachment-uploads/" + uploadIntent.id + "/content",
+      {
+        headers: { Origin: origin, "Content-Type": "application/octet-stream" },
+        data: Buffer.from(content),
+      },
+    );
+    expect(wrongActor.status()).toBe(404);
+    const uploaded = await alice.context.request.put(
+      origin + "/api/talk/attachment-uploads/" + uploadIntent.id + "/content",
+      {
+        headers: { Origin: origin, "Content-Type": "application/octet-stream" },
+        data: Buffer.from(content),
+      },
+    );
+    expect(uploaded.status()).toBe(200);
+    const uploadReceipt = await uploaded.json();
+    expect(uploadReceipt.state).toBe("succeeded");
+    expect(uploadReceipt.file.size).toBe(Buffer.byteLength(content));
+    filename = uploadReceipt.file.name;
+    fileUrl =
+      source +
+      "/remote.php/dav/files/talk-alice/" +
+      encodeURIComponent(filename);
+    const replayUpload = await alice.context.request.put(
+      origin + "/api/talk/attachment-uploads/" + uploadIntent.id + "/content",
+      {
+        headers: { Origin: origin, "Content-Type": "application/octet-stream" },
+        data: Buffer.from(content),
+      },
+    );
+    expect((await replayUpload.json()).file.id).toBe(uploadReceipt.file.id);
     const listed = await alice.context.request.post(
       origin + "/api/files/list",
       { headers: { Origin: origin }, data: { path: [] } },

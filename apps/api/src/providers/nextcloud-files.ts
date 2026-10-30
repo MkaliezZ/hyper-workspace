@@ -78,6 +78,11 @@ function property(element: Element, uri: string, name: string) {
 }
 const same = (left: string[], right: string[]) =>
   JSON.stringify(left) === JSON.stringify(right);
+export class UploadPathConflict extends ConflictException {
+  constructor() {
+    super("目标文件已存在，未覆盖；请重新创建上传。");
+  }
+}
 export class FileSourceRejected extends HttpException {
   constructor(status: number) {
     super("文件来源拒绝访问或文件已变化。", status);
@@ -293,6 +298,31 @@ export class NextcloudFilesProvider implements StorageProvider {
         "文件目录格式、来源或范围不受支持。",
       );
     }
+  }
+  /** A single conditional PUT to an employee-owned, newly generated path. Never retries. */
+  async uploadNew(path: string[], bytes: Buffer) {
+    if (!path.length || bytes.length < 1 || bytes.length > MAX_ATTACHMENT_BYTES)
+      throw new BadRequestException("上传文件需在 1 字节至 8 MiB 内。");
+    const response = await fetch(this.url(path), {
+      method: "PUT",
+      body: new Uint8Array(bytes),
+      redirect: "error",
+      signal: AbortSignal.timeout(15000),
+      headers: {
+        Authorization:
+          "Basic " +
+          Buffer.from(
+            this.credentials.loginName + ":" + this.credentials.appPassword,
+          ).toString("base64"),
+        "User-Agent": "Hyper Workspace/0.1",
+        "If-None-Match": "*",
+        "Content-Type": "application/octet-stream",
+      },
+    });
+    await response.body?.cancel();
+    if (response.status === 412) throw new UploadPathConflict();
+    if (response.status !== 201)
+      throw new ServiceUnavailableException("上传结果需要核对。");
   }
   async list(path: string[]) {
     const values = await this.properties(path, 1);

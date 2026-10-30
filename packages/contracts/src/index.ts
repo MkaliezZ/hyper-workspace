@@ -721,6 +721,42 @@ export const FilePath = z
       ),
   )
   .max(20);
+export const AttachmentUploadInput = z
+  .object({
+    roomId: z.string().regex(/^[a-z0-9]{4,30}$/),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(160)
+      .refine(
+        (name) =>
+          FilePath.safeParse([name]).success &&
+          new TextEncoder().encode(name).length <= 180,
+        "Invalid upload name",
+      ),
+    size: z.number().int().min(1).max(MAX_ATTACHMENT_BYTES),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    confirmed: z.literal(true),
+    idempotencyKey: z.uuid(),
+  })
+  .strict();
+export type AttachmentUploadInput = z.infer<typeof AttachmentUploadInput>;
+export interface AttachmentUploadReceipt {
+  id: string;
+  name: string;
+  size: number;
+  state:
+    | "prepared"
+    | "uploading"
+    | "succeeded"
+    | "failed"
+    | "recovery_required";
+  acknowledgedAt: string | null;
+  error: string | null;
+  file: SourceFile | null;
+}
+
 export interface SourceFile {
   path: string[];
   id: string;
