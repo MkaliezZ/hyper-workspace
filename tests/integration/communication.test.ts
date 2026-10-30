@@ -1,6 +1,8 @@
 import { DirectoryService } from "../../apps/api/src/core/directory.js";
 import { TaskAssignmentService } from "../../apps/api/src/core/task-assignments.js";
 import { MAX_ATTACHMENT_BYTES } from "@hyper/contracts";
+import { AttachmentSendService } from "../../apps/api/src/core/attachment-sends.js";
+import { AttachmentSendPlan, RunInput } from "@hyper/contracts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -43,6 +45,14 @@ type Room = {
   readAlias?: string;
   directory?: any[];
   directoryFailure?: number;
+  shareMode?:
+    | "duplicate"
+    | "deny"
+    | "drop-before"
+    | "drop-after"
+    | "read-denied-after"
+    | "revoke-after";
+  beforeShare?: () => Promise<void>;
 };
 const rooms = new Map<string, Room>();
 function attachmentFixture() {
@@ -175,6 +185,73 @@ const server = createServer(async (req, res) => {
     return;
   }
   if (dav.handle(req, res, uid)) return;
+  if (parsed.pathname === "/ocs/v2.php/apps/files_sharing/api/v1/shares") {
+    const form = new URLSearchParams(raw),
+      r = rooms.get(form.get("shareWith") ?? ""),
+      file = dav.files.find(
+        (f) =>
+          "/" + f.path.join("/") === form.get("path") && f.readers.has(uid),
+      );
+    if (!r || !r.members.has(uid) || r.readOnly || !file) {
+      res.writeHead(404);
+      res.end("{}");
+      return;
+    }
+    assert.equal(form.get("shareType"), "10");
+    assert.equal(form.get("permissions"), "1");
+    assert.match(form.get("referenceId") ?? "", /^[a-f0-9]{64}$/);
+    r.posts++;
+    await r.beforeShare?.();
+    if (r.shareMode === "deny") {
+      res.writeHead(403);
+      res.end("{}");
+      return;
+    }
+    if (r.shareMode === "drop-before") {
+      res.destroy();
+      return;
+    }
+    for (const member of r.members) file.readers.add(member);
+    const caption = JSON.parse(form.get("talkMetaData") ?? "{}").caption;
+    r.messages.push({
+      id: nextId++,
+      token: r.id,
+      actorType: "users",
+      actorId: uid,
+      actorDisplayName: uid,
+      timestamp: Math.floor(Date.now() / 1000),
+      message: caption || "{file}",
+      messageType: "comment",
+      systemMessage: "",
+      referenceId: form.get("referenceId"),
+      messageParameters: {
+        file: {
+          type: "file",
+          id: file.id,
+          name: file.path.at(-1),
+          size: String(file.content.length),
+          path: file.path.join("/"),
+          etag: file.etag.slice(1, -1),
+          mimetype: file.mime,
+          permissions: "1",
+          "hide-download": "no",
+        },
+      },
+    });
+    if (r.shareMode === "read-denied-after") r.readDenied = true;
+    if (r.shareMode === "revoke-after") r.members.delete(uid);
+    if (r.shareMode === "drop-after") {
+      res.destroy();
+      return;
+    }
+    if (r.shareMode === "duplicate") {
+      res.writeHead(403);
+      res.end("{}");
+      return;
+    }
+    json({ id: "99", token: "do-not-return-source-share-token" }, 201);
+    return;
+  }
   const metadata = (r: Room) => ({
     token: r.id,
     displayName: "来源会话 " + r.id,
@@ -331,6 +408,324 @@ after(async () => {
   await db.close();
 });
 const s = (name = "alice") => people.get(name)!.subject;
+function outgoingAttachment() {
+  const r = room(),
+    file = dav.add(
+      "alice",
+      ["Outgoing", randomUUID() + ".md"],
+      "private-attachment-body-must-not-enter-model",
+    );
+  const plan: AttachmentSendPlan = {
+    roomId: r.id,
+    path: file.path,
+    expectedFileId: file.id,
+    expectedEtag: file.etag,
+    caption: "明确确认的附件说明",
+    confirmed: true,
+  };
+  return { r, file, plan, sends: new AttachmentSendService(db) };
+}
+async function preparedAttachment(execute?: any) {
+  const f = outgoingAttachment(),
+    engines = engineRegistry();
+  engines.set("dsh", {
+    id: "dsh",
+    describeCapabilities: () => ({
+      configured: true,
+      operations: ["share_attachment"],
+      evidence: "protocol-fixture",
+    }),
+    execute:
+      execute ??
+      (async (request: any) => {
+        assert.ok(
+          !request.context.includes(
+            "private-attachment-body-must-not-enter-model",
+          ),
+        );
+        assert.ok(request.context.includes("Host-bound attachment share."));
+        return {
+          text: "engine-claim-is-not-a-receipt",
+          evidence: "fixture",
+          actions: [{ tool: "attachment.share", args: {} }],
+        };
+      }),
+  });
+  const work = new WorkspaceService(db, engines),
+    project = await work.createTalkProject(
+      s(),
+      f.r.id,
+      "Attachment " + f.r.id,
+      "Synthetic explicit file share",
+    );
+  await chatProfile(work);
+  const input = RunInput.parse({
+    conversationId: project.conversationId,
+    workflow: "share_attachment",
+    engine: "dsh",
+    instruction: "Only the exact confirmed room and file",
+    attachmentPlan: f.plan,
+    idempotencyKey: randomUUID(),
+  });
+  const run = await work.startRun(s(), input);
+  return { ...f, work, project, input, run };
+}
+
+test("Attachment send intents deduplicate concurrent keys, read actual messages and replay after later file changes", async () => {
+  const { r, file, plan, sends } = outgoingAttachment(),
+    key = randomUUID();
+  const values = await Promise.all([
+    sends.send(s(), plan, key),
+    sends.send(s(), plan, key),
+  ]);
+  assert.equal(values[0].id, values[1].id);
+  assert.equal(r.posts, 1);
+  const actual = await sends.get(s(), values[0].id);
+  assert.equal(actual.state, "succeeded");
+  assert.ok(actual.sourceMessageId);
+  assert.equal(actual.requestedPermissions, 1);
+  assert.ok(
+    !JSON.stringify(actual).includes("do-not-return-source-share-token"),
+  );
+  assert.ok(!JSON.stringify(actual).includes("private-attachment-body"));
+  assert.equal((await sends.pending(s(), r.id)).length, 0);
+  file.etag = '"v2"';
+  assert.equal((await sends.send(s(), plan, key)).id, actual.id);
+  assert.equal(r.posts, 1);
+  await assert.rejects(
+    sends.send(s(), { ...plan, caption: "different" }, key),
+    /幂等键/,
+  );
+  await assert.rejects(sends.get(s("bob"), actual.id));
+  const one = outgoingAttachment(),
+    two = outgoingAttachment(),
+    sharedKey = randomUUID();
+  const collisions = await Promise.allSettled([
+    one.sends.send(s(), one.plan, sharedKey),
+    two.sends.send(s(), two.plan, sharedKey),
+  ]);
+  assert.equal(collisions.filter((v) => v.status === "fulfilled").length, 1);
+  assert.equal(collisions.filter((v) => v.status === "rejected").length, 1);
+  assert.equal(one.r.posts + two.r.posts, 1);
+});
+test("Duplicate-share 403 and lost POST acknowledgement can still succeed only through exact file/message readback", async () => {
+  for (const mode of ["duplicate", "drop-after"] as const) {
+    const { r, plan, sends } = outgoingAttachment();
+    r.shareMode = mode;
+    const result = await sends.send(s(), plan, randomUUID());
+    assert.equal(result.state, "succeeded");
+    assert.ok(result.sourceMessageId);
+    assert.equal(result.sourceShareId, null);
+    assert.equal(r.posts, 1);
+  }
+});
+test("Unknown attachment delivery persists across service restart and reconciliation never reposts or infers absence", async () => {
+  const { r, plan, sends } = outgoingAttachment();
+  r.shareMode = "read-denied-after";
+  const unknown = await sends.send(s(), plan, randomUUID());
+  assert.equal(unknown.state, "recovery_required");
+  assert.equal(unknown.sourceShareId, "99");
+  assert.equal(r.posts, 1);
+  const restarted = new AttachmentSendService(db);
+  await assert.rejects(restarted.reconcile(s(), unknown.id));
+  r.readDenied = false;
+  const raw = r.messages.at(-1);
+  raw.actorId = "bob";
+  assert.equal(
+    (await restarted.reconcile(s(), unknown.id)).state,
+    "recovery_required",
+  );
+  raw.actorId = "alice";
+  raw.messageParameters.file.id = "999999";
+  assert.equal(
+    (await restarted.reconcile(s(), unknown.id)).state,
+    "recovery_required",
+  );
+  raw.messageParameters.file.id = plan.expectedFileId;
+  assert.equal((await restarted.reconcile(s(), unknown.id)).state, "succeeded");
+  assert.equal(r.posts, 1);
+  const absent = outgoingAttachment();
+  absent.r.shareMode = "drop-before";
+  const lost = await absent.sends.send(s(), absent.plan, randomUUID());
+  assert.equal(
+    (await absent.sends.reconcile(s(), lost.id)).state,
+    "recovery_required",
+  );
+  const acknowledged = await absent.sends.acknowledge(s(), lost.id);
+  assert.equal(acknowledged.state, "recovery_required");
+  assert.ok(acknowledged.acknowledgedAt);
+  assert.equal(absent.r.posts, 1);
+});
+test("Attachment preflight blocks stale identity/version/permissions and an unresolved room blocks new write intents", async () => {
+  const { r, file, plan, sends } = outgoingAttachment();
+  await assert.rejects(sends.send(s("outsider"), plan, randomUUID()));
+  await assert.rejects(
+    sends.send(s(), { ...plan, expectedEtag: '"stale"' }, randomUUID()),
+  );
+  file.blockedDownloads.add("alice");
+  await assert.rejects(sends.send(s(), plan, randomUUID()));
+  file.blockedDownloads.clear();
+  r.readOnly = true;
+  await assert.rejects(sends.send(s(), plan, randomUUID()), /只读/);
+  r.readOnly = false;
+  assert.equal(r.posts, 0);
+  assert.throws(() =>
+    AttachmentSendPlan.parse({ ...plan, actorId: s("bob").id }),
+  );
+  assert.throws(() => AttachmentSendPlan.parse({ ...plan, confirmed: false }));
+  r.shareMode = "deny";
+  const unknown = await sends.send(s(), plan, randomUUID());
+  assert.equal(unknown.state, "recovery_required");
+  assert.equal(r.messages.length, 0);
+  await assert.rejects(sends.send(s(), plan, randomUUID()), /待核对/);
+  assert.equal(r.posts, 1);
+});
+test("Room removal after attachment dispatch preserves unknown side effects and hides private receipts until access returns", async () => {
+  const { r, plan, sends } = outgoingAttachment();
+  r.shareMode = "revoke-after";
+  const key = randomUUID();
+  await assert.rejects(sends.send(s(), plan, key));
+  const row = (
+    await db.pool.query(
+      "SELECT * FROM cw_attachment_sends WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+      [workspace, s().id, key],
+    )
+  ).rows[0];
+  assert.equal(row.state, "recovery_required");
+  assert.ok(row.attempted_at);
+  assert.equal(r.posts, 1);
+  await assert.rejects(sends.get(s(), row.id));
+  r.members.add("alice");
+  assert.equal(
+    (await new AttachmentSendService(db).reconcile(s(), row.id)).state,
+    "succeeded",
+  );
+  assert.equal(r.posts, 1);
+});
+test("AI attachment sends use the same host-bound service and cannot choose recipients or publish model claims", async () => {
+  const f = await preparedAttachment();
+  await new RunProcessor(f.work).process(f.run.id);
+  const result = await f.work.getRun(s(), f.run.id);
+  assert.equal(result.state, "succeeded", result.error);
+  assert.equal(result.result.receipts[0].tool, "attachment.share");
+  assert.equal(result.result.receipts[0].state, "succeeded");
+  assert.equal(f.r.posts, 1);
+  assert.ok(
+    !JSON.stringify(result.result).includes("engine-claim-is-not-a-receipt"),
+  );
+  assert.equal((await f.work.view(s(), f.project.id)).messages.length, 0);
+  assert.equal((await f.work.startRun(s(), f.input)).id, f.run.id);
+  assert.equal(f.r.posts, 1);
+  const bad = await preparedAttachment(async () => ({
+    text: "Pretend success",
+    evidence: "fixture",
+    actions: [{ tool: "attachment.share", args: { roomId: f.r.id } }],
+  }));
+  await new RunProcessor(bad.work).process(bad.run.id);
+  assert.equal((await bad.work.getRun(s(), bad.run.id)).state, "failed");
+  assert.equal(bad.r.posts, 0);
+  await assert.rejects(
+    f.work.startRun(s(), {
+      ...f.input,
+      idempotencyKey: randomUUID(),
+      attachmentPlan: bad.plan,
+    }),
+  );
+  const unknown = await preparedAttachment();
+  unknown.r.shareMode = "drop-before";
+  await new RunProcessor(unknown.work).process(unknown.run.id);
+  assert.equal(
+    (await unknown.work.getRun(s(), unknown.run.id)).state,
+    "recovery_required",
+  );
+  assert.equal(unknown.r.posts, 1);
+  const activity = await unknown.sends.activity(s(), unknown.r.id);
+  assert.equal(activity.runs[0].deliveryState, "recovery_required");
+  assert.equal(activity.sends.length, 1);
+  assert.equal(
+    (await unknown.sends.reconcile(s(), activity.sends[0].id)).state,
+    "recovery_required",
+  );
+  assert.equal(unknown.r.posts, 1);
+});
+test("AI cancellation before dispatch prevents a share; cancellation in flight retains actual effect facts", async () => {
+  let before: any;
+  const f = await preparedAttachment(async () => {
+    await before.work.cancel(s(), before.run.id);
+    return {
+      text: "ignored",
+      evidence: "fixture",
+      actions: [{ tool: "attachment.share", args: {} }],
+    };
+  });
+  before = f;
+  await new RunProcessor(f.work).process(f.run.id);
+  assert.equal((await f.work.getRun(s(), f.run.id)).state, "cancelled");
+  assert.equal(f.r.posts, 0);
+  const during = await preparedAttachment();
+  during.r.beforeShare = async () => {
+    await during.work.cancel(s(), during.run.id);
+  };
+  await new RunProcessor(during.work).process(during.run.id);
+  assert.equal(
+    (await during.work.getRun(s(), during.run.id)).state,
+    "cancelled",
+  );
+  assert.equal(during.r.posts, 1);
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT state FROM cw_attachment_sends WHERE source_run_id=$1",
+        [during.run.id],
+      )
+    ).rows[0].state,
+    "succeeded",
+  );
+  assert.equal(
+    (
+      await db.pool.query("SELECT result FROM cw_actions WHERE run_id=$1", [
+        during.run.id,
+      ])
+    ).rows[0].result.state,
+    "succeeded",
+  );
+});
+test("An attachment side effect remains recovery_required when action-receipt storage fails after source delivery", async () => {
+  const f = await preparedAttachment(),
+    suffix = randomUUID().replaceAll("-", "");
+  await db.pool.query(
+    `CREATE FUNCTION attachment_fail_${suffix}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.run_id='${f.run.id}'::uuid THEN RAISE EXCEPTION 'synthetic receipt storage failure'; END IF; RETURN NEW; END $$`,
+  );
+  await db.pool.query(
+    `CREATE TRIGGER attachment_fail_${suffix} BEFORE INSERT ON cw_actions FOR EACH ROW EXECUTE FUNCTION attachment_fail_${suffix}()`,
+  );
+  try {
+    await new RunProcessor(f.work).process(f.run.id);
+    const run = await f.work.getRun(s(), f.run.id);
+    assert.equal(run.state, "recovery_required");
+    assert.equal(f.r.posts, 1);
+    assert.equal(
+      (
+        await db.pool.query(
+          "SELECT state FROM cw_attachment_sends WHERE source_run_id=$1",
+          [f.run.id],
+        )
+      ).rows[0].state,
+      "succeeded",
+    );
+    assert.equal(
+      (
+        await db.pool.query("SELECT id FROM cw_actions WHERE run_id=$1", [
+          f.run.id,
+        ])
+      ).rowCount,
+      0,
+    );
+  } finally {
+    await db.pool.query(`DROP TRIGGER attachment_fail_${suffix} ON cw_actions`);
+    await db.pool.query(`DROP FUNCTION attachment_fail_${suffix}()`);
+  }
+});
 
 test("Talk source membership controls room listing, direct IDs and read-only sends", async () => {
   const r = room(["alice"]);

@@ -116,3 +116,11 @@ Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0
 停止源码写入后的完整 43 项 UI 重跑全部通过（3.7 分钟）；原失败场景也通过。保留首轮失败，不把重跑记成首轮通过；修正版本 CI 的 43 UI 首轮通过；来源卡片/双方下载/响应头与撤权删除也已通过。
 
 附件修正实现的 [CI 41083527775](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41083527775) 三个 job 成功，236 项首轮通过，包含 43 UI 与 10 真实来源；首轮序列化字段导致的来源失败保留，修复没有削减断言。
+
+## 已有文件分享与 AI 投递 — 2026-10-31
+
+路径：企业消息 → 发送附件 → 当前员工 Files 目录 → 确切文件/版本与说明 → 员工确认 → 人工发送 → 未知回执重载/核对/明确继续 → Hermes 排队 → 停止。人工和 AI 使用同一确认方案及后端服务，队列与实际投递分开呈现，收到的字节不自动进入模型。
+
+Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。完整 45 UI 首轮通过，包含新增两项发送/撤权迟到响应场景。URL/标题、有效内容、无框架 overlay、控制台/pageerror、确认前禁用、固定字段、未知核对不重发、排队停止与跨房间清理已检查。截图逐一查看：桌面文件与说明可见，手机 AI 选择/确认和提交可访问，无横向溢出；修正 checkbox 为左侧内联，提交时禁止 Escape 把原生对话框与组件状态分离。
+
+[桌面](../images/attachment-send-desktop.png) · [手机](../images/attachment-send-mobile.png)。均为合成资料；未测 Safari/Firefox、公司实际资料/规模或真实供应商的该新工作流质量。真实来源人工/重复分享/双引擎投递与容器证据待当前 CI，不能从界面 fixture 推导已通过。

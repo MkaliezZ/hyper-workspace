@@ -67,7 +67,9 @@
 
 修正实现 `0449f94a0ddd9ac0c8be146bf2bd6ff43ca074a4` 的 [CI 41083527775](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41083527775) 三个 job 全部成功，共 236 项首轮通过：25 单元/配置、3 下载器、8 解析、139 数据库、4 原生执行器、43 UI、10 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。真实 Nextcloud 合成账号验证附件接收、发送者/接收者二进制下载与安全响应头、浏览器下载、移除成员和原件删除后的拒绝读取；不等于真实公司资料验收。
 
-产品内上传、附件发送及相应 AI 执行/投递对账仍在开发，整体尚未交付。
+从当前员工的 Files 选择已有文件，可直接发送或交给 DSH/Hermes 执行；房间、文件版本和说明由员工确认，按实际源消息回读记录结果，未知投递仅核对、不自动重发。本地 147 数据库、25 单元、完整 45 UI、类型/构建通过，真实来源 CI 待记录。[发送与恢复契约](docs/ATTACHMENT-SENDING.md) · [桌面](docs/images/attachment-send-desktop.png) · [手机](docs/images/attachment-send-mobile.png)。
+
+本机上传仍待补齐，整体尚未交付。
 
 ## 任务说明与澄清
 

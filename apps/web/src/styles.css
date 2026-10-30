@@ -1524,6 +1524,78 @@ p {
   margin: 12px 0 0;
   max-width: 540px;
 }
+.attachment-controls {
+  padding: 8px 24px;
+  border-top: 1px solid var(--line);
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.attachment-toolbar,
+.attachment-run {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachment-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.attachment-toolbar small {
+  color: #59677b;
+}
+.attachment-file-browser {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 14px 0;
+}
+.attachment-file-browser > .attachment-toolbar > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.attachment-file-browser ul {
+  list-style: none;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 8px 0 0;
+}
+.attachment-file-browser li button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+}
+.attachment-file-browser li span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.attachment-file-browser li small,
+.attachment-file-browser li svg {
+  flex-shrink: 0;
+}
+.attachment-file-browser .selected {
+  background: #edf3ff;
+  color: #205be0;
+}
+.settings-form .attachment-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.6;
+}
+.settings-form .attachment-confirmation input {
+  flex-shrink: 0;
+  width: auto;
+  min-height: 0;
+  margin-top: 4px;
+}
 .message-attachments > li:not(.attachment-note) {
   display: flex;
   gap: 12px;

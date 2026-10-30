@@ -58,6 +58,8 @@ import { ModelUsageService } from "./core/model-usage.js";
 import { ModelSpendingService } from "./core/model-spending.js";
 import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
+import { AttachmentSendService } from "./core/attachment-sends.js";
+import { AttachmentSendInput } from "@hyper/contracts";
 import { ReplyDraftService } from "./core/reply-drafts.js";
 import { SourceFileService } from "./core/source-files.js";
 import {
@@ -564,6 +566,53 @@ class ApiController {
   }
   @Get("talk/rooms") async talkRooms(@Req() req: Request) {
     return communication.rooms(await subject(req));
+  }
+  @Post("talk/rooms/:token/attachments") async sendAttachment(
+    @Req() req: Request,
+    @Param("token") token: string,
+    @Body() body: unknown,
+  ) {
+    const input = AttachmentSendInput.parse(body);
+    if (input.plan.roomId !== TalkToken.parse(token))
+      throw new BadRequestException("附件目标会话不匹配。");
+    return new AttachmentSendService(db).send(
+      await subject(req),
+      input.plan,
+      input.idempotencyKey,
+    );
+  }
+  @Get("talk/rooms/:token/attachment-sends") async pendingAttachments(
+    @Req() req: Request,
+    @Param("token") token: string,
+  ) {
+    return new AttachmentSendService(db).activity(
+      await subject(req),
+      TalkToken.parse(token),
+    );
+  }
+  @Get("talk/attachment-sends/:id") async attachmentReceipt(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new AttachmentSendService(db).get(await subject(req), uuid(id));
+  }
+  @Post("talk/attachment-sends/:id/reconcile") async reconcileAttachment(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new AttachmentSendService(db).reconcile(
+      await subject(req),
+      uuid(id),
+    );
+  }
+  @Post("talk/attachment-sends/:id/acknowledge") async acknowledgeAttachment(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new AttachmentSendService(db).acknowledge(
+      await subject(req),
+      uuid(id),
+    );
   }
   @Get("talk/rooms/:token/drafts") async replyDrafts(
     @Req() req: Request,

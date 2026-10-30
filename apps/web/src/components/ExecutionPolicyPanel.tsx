@@ -40,6 +40,7 @@ const labels: Record<string, string> = {
   manage_brief: "任务说明与澄清",
   assign_task: "分配真实员工",
   directory_report: "读取项目成员",
+  share_attachment: "发送已确认附件",
   chat: "讨论回复",
   draft_reply: "企业回复草稿",
   read_file: "文件阅读",

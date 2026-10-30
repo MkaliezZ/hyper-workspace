@@ -9,6 +9,8 @@ import type {
 } from "@hyper/contracts";
 import { api, mutation, ApiError } from "../api";
 import { MessageAttachments } from "./MessageAttachments";
+import { AttachmentControls } from "./AttachmentComposer";
+import type { WorkspaceView } from "@hyper/contracts";
 interface Draft {
   text: string;
   key: string;
@@ -23,6 +25,7 @@ export function EnterpriseMessages({
   onDraft,
   initialReplyDraft,
   filesEnabled = false,
+  view,
 }: {
   demo: boolean;
   query: string;
@@ -32,6 +35,7 @@ export function EnterpriseMessages({
   onDraft?: (room: CommunicationRoom) => Promise<void>;
   initialReplyDraft?: ReplyDraft;
   filesEnabled?: boolean;
+  view?: WorkspaceView;
 }) {
   const [rooms, setRooms] = useState<CommunicationRoom[]>([]),
     [selected, setSelected] = useState("");
@@ -545,6 +549,7 @@ export function EnterpriseMessages({
                 </div>
               </div>
             ))}
+            {filesEnabled && view ? <AttachmentControls key={selected} room={room} view={view} disabled={busy||loading} onChange={()=>setRefresh(v=>v+1)}/> : null}
             {draft.draftId ? (
               <p className="reply-draft-notice">
                 AI 起草的回复，可修改后发送。发送结果以会话回执为准。

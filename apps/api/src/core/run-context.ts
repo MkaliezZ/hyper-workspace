@@ -1,4 +1,5 @@
 import { TaskAssignmentService } from "./task-assignments.js";
+import { AttachmentSendService } from "./attachment-sends.js";
 import { WorkBriefService } from "./work-briefs.js";
 import type { Subject } from "@hyper/contracts";
 import { isFileWorkflow } from "@hyper/contracts";
@@ -107,6 +108,33 @@ async function baseRunContext(
     };
   }
   const conversation = await service.conversation(subject, run.conversation_id);
+  if (run.workflow === "share_attachment") {
+    const prepared = await new AttachmentSendService(service.db).prepare(
+      subject,
+      run.attachment_plan,
+      conversation.project_id,
+    );
+    return {
+      context:
+        "Host-bound attachment share. Propose exactly one attachment.share with empty args. The employee explicitly selected this source room, file ID, version and caption. The host sends a live file reference with requested read-only permission and reconciles its actual message. Do not choose recipients, paths, captions, permissions or infer the unread body. Existing grants are not reduced. No discussion or file body included.\n" +
+        JSON.stringify({
+          roomId: prepared.plan.roomId,
+          room: prepared.room.name,
+          file: {
+            id: prepared.file.id,
+            name: prepared.file.name,
+            size: prepared.file.size,
+            etag: prepared.file.etag,
+          },
+          caption: prepared.plan.caption,
+        }),
+      sourceIds: [],
+      contextRefs: [
+        "attachment:" + prepared.file.id + "@" + prepared.file.etag,
+      ],
+      live: true,
+    };
+  }
   if (run.workflow === "directory_report")
     return {
       context:

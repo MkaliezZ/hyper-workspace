@@ -37,35 +37,40 @@ test("Real Talk attachments resolve recipient files, download opaque bytes and r
     body: content,
   });
   expect(uploaded.status).toBe(201);
-  const shared = await fetch(
-    source + "/ocs/v2.php/apps/files_sharing/api/v1/shares?format=json",
-    {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        Authorization: auth,
-        "OCS-APIRequest": "true",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        shareType: "10",
-        shareWith: room.token,
-        path: "/" + filename,
-        permissions: "1",
-        referenceId: randomBytes(32).toString("hex"),
-        talkMetaData: JSON.stringify({
-          messageType: "comment",
-          caption: "Synthetic incoming attachment",
-        }),
-      }),
-    },
-  );
-  expect(shared.ok).toBe(true);
-  await shared.body?.cancel();
   const alice = await login(browser, "talk-alice"),
     bob = await login(browser, "talk-bob"),
     outsider = await login(browser, "talk-outsider");
+  let modelServer: ReturnType<typeof modelFixture> | undefined;
   try {
+    const listed = await alice.context.request.post(
+      origin + "/api/files/list",
+      { headers: { Origin: origin }, data: { path: [] } },
+    );
+    expect(listed.status()).toBe(201);
+    const chosen = (await listed.json()).find((f: any) => f.name === filename);
+    expect(Boolean(chosen)).toBe(true);
+    const plan = {
+      roomId: room.token,
+      path: chosen.path,
+      expectedFileId: chosen.id,
+      expectedEtag: chosen.etag,
+      caption: "Synthetic incoming attachment",
+      confirmed: true,
+    };
+    const sendKey = randomUUID();
+    const first = await alice.context.request.post(
+      origin + "/api/talk/rooms/" + room.token + "/attachments",
+      { headers: { Origin: origin }, data: { plan, idempotencyKey: sendKey } },
+    );
+    expect(first.status()).toBe(201);
+    const firstReceipt = await first.json();
+    expect(firstReceipt.state).toBe("succeeded");
+    expect(firstReceipt.sourceMessageId).toBeTruthy();
+    const replay = await alice.context.request.post(
+      origin + "/api/talk/rooms/" + room.token + "/attachments",
+      { headers: { Origin: origin }, data: { plan, idempotencyKey: sendKey } },
+    );
+    expect((await replay.json()).id).toBe(firstReceipt.id);
     const native = await talk(
       "talk-bob",
       "v1/chat/" + room.token + "?lookIntoFuture=0&setReadMarker=0&limit=100",
@@ -142,6 +147,101 @@ test("Real Talk attachments resolve recipient files, download opaque bytes and r
       .getByRole("link", { name: "下载 " + filename, exact: true })
       .click();
     expect((await downloadEvent).suggestedFilename()).toBe(filename);
+    // A second explicit request hits Nextcloud's duplicate-share 403 after posting its new message.
+    const duplicate = await alice.context.request.post(
+      origin + "/api/talk/rooms/" + room.token + "/attachments",
+      {
+        headers: { Origin: origin },
+        data: { plan, idempotencyKey: randomUUID() },
+      },
+    );
+    expect(duplicate.status()).toBe(201);
+    expect((await duplicate.json()).state).toBe("succeeded");
+    const projectResponse = await alice.context.request.post(
+      origin + "/api/projects/from-talk",
+      {
+        headers: { Origin: origin },
+        data: {
+          roomId: room.token,
+          name: "Synthetic attachment execution",
+          goal: "Only selected source files",
+        },
+      },
+    );
+    expect(projectResponse.status()).toBe(201);
+    const project = await projectResponse.json();
+    const key = "synthetic-attachment-model-" + randomUUID(),
+      contexts: string[] = [];
+    modelServer = modelFixture([key], (body) => {
+      contexts.push(JSON.stringify(body));
+    });
+    await new Promise<void>((resolve) =>
+      modelServer!.server.listen(0, "127.0.0.1", resolve),
+    );
+    const profile = await alice.context.request.post(origin + "/api/models", {
+      headers: { Origin: origin },
+      data: {
+        name: "Attachment native fixture",
+        provider: "openai-compatible",
+        endpoint:
+          "http://127.0.0.1:" +
+          (modelServer.server.address() as { port: number }).port +
+          "/v1",
+        model: "native-test-model",
+        purpose: "chat",
+        scope: "personal",
+        apiKey: key,
+      },
+    });
+    expect(profile.status()).toBe(201);
+    const model = await profile.json();
+    for (const engine of ["dsh", "hermes"]) {
+      const created = await alice.context.request.post(origin + "/api/runs", {
+        headers: { Origin: origin },
+        data: {
+          conversationId: project.conversationId,
+          workflow: "share_attachment",
+          engine,
+          modelProfileId: model.id,
+          attachmentPlan: plan,
+          instruction: "Execute only the employee-confirmed attachment plan",
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(created.status()).toBe(201);
+      const started = await created.json();
+      let result: any;
+      await expect
+        .poll(
+          async () => {
+            const res = await alice.context.request.get(
+              origin + "/api/runs/" + started.id,
+            );
+            expect(res.status()).toBe(200);
+            result = await res.json();
+            return result.state;
+          },
+          { timeout: 45000 },
+        )
+        .toBe("succeeded");
+      expect(result.result.evidence).toBe("runtime");
+      expect(result.result.receipts[0].state).toBe("succeeded");
+      expect(result.result.receipts[0].sourceRunId).toBe(started.id);
+    }
+    expect(modelServer.violations).toEqual([]);
+    expect(contexts.length).toBe(2);
+    expect(
+      contexts.some((value) =>
+        value.includes("synthetic-attachment-must-never-run-inline"),
+      ),
+    ).toBe(false);
+    const all = await talk(
+      "talk-alice",
+      "v1/chat/" + room.token + "?lookIntoFuture=0&setReadMarker=0&limit=100",
+    );
+    expect(
+      all.filter((m: any) => m.messageParameters?.file?.id === chosen.id),
+    ).toHaveLength(4);
     const participant = (
       await talk("talk-alice", "v4/room/" + room.token + "/participants")
     ).find((p: any) => p.actorType === "users" && p.actorId === "talk-bob");
@@ -163,6 +263,12 @@ test("Real Talk attachments resolve recipient files, download opaque bytes and r
     const gone = await alice.context.request.get(path + "/download" + query);
     expect([403, 404, 409]).toContain(gone.status());
   } finally {
+    if (modelServer) {
+      modelServer.server.closeAllConnections();
+      await new Promise<void>((resolve) =>
+        modelServer!.server.close(() => resolve()),
+      );
+    }
     await alice.context.close();
     await bob.context.close();
     await outsider.context.close();

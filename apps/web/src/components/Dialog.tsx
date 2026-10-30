@@ -6,12 +6,14 @@ export function Dialog({
   children,
   wide = false,
   error = "",
+  dismissible = true,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
   error?: string;
+  dismissible?: boolean;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
@@ -25,14 +27,22 @@ export function Dialog({
       ref={ref}
       aria-labelledby={titleId}
       className={"dialog " + (wide ? "wide" : "")}
-      onCancel={onClose}
+      onCancel={(e) => {
+        e.preventDefault();
+        if (dismissible) onClose();
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissible && e.target === e.currentTarget) onClose();
       }}
     >
       <div className="dialog-header">
         <h2 id={titleId}>{title}</h2>
-        <button className="icon-button" aria-label="关闭" onClick={onClose}>
+        <button
+          className="icon-button"
+          aria-label="关闭"
+          onClick={onClose}
+          disabled={!dismissible}
+        >
           <X size={20} />
         </button>
       </div>

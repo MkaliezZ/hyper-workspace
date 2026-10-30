@@ -45,6 +45,7 @@ export const Workflow = z.enum([
   "manage_brief",
   "assign_task",
   "directory_report",
+  "share_attachment",
   "chat",
   "draft_reply",
   "read_file",
@@ -346,6 +347,7 @@ export const RunInput = z
     briefPlan: WorkBriefPlan.optional(),
     briefRef: BriefReference.optional(),
     taskAssignmentPlan: TaskAssignmentPlan.optional(),
+    attachmentPlan: z.lazy(() => AttachmentSendPlan).optional(),
     taskRules: ExecutionRules.omit({ dailyRuns: true }).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
@@ -480,6 +482,7 @@ export interface PlannedAction {
     | "brief.manage"
     | "task.assign"
     | "directory.read"
+    | "attachment.share"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -539,6 +542,8 @@ export function toolsForWorkflow(
       return ["task.assign"];
     case "directory_report":
       return ["directory.read"];
+    case "share_attachment":
+      return ["attachment.share"];
     case "chat":
       return [];
     case "draft_reply":
@@ -635,6 +640,29 @@ export const AttachmentEtag = z
   .max(256)
   .regex(/^[^\u0000-\u001f\u007f]+$/);
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const AttachmentSendPlan = z
+  .object({
+    roomId: z.string().regex(/^[a-z0-9]{4,30}$/),
+    path: z.lazy(() => FilePath).refine((path) => path.length > 0),
+    expectedFileId: TalkFileId,
+    expectedEtag: AttachmentEtag,
+    caption: z.string().trim().max(2000),
+    confirmed: z.literal(true),
+  })
+  .strict();
+export type AttachmentSendPlan = z.infer<typeof AttachmentSendPlan>;
+export const AttachmentSendInput = z
+  .object({ plan: AttachmentSendPlan, idempotencyKey: z.uuid() })
+  .strict();
+export interface AttachmentSendReceipt extends CommunicationReceipt {
+  kind: "attachment";
+  roomId: string;
+  fileId: string;
+  name: string;
+  sourceShareId: string | null;
+  sourceRunId: string | null;
+  requestedPermissions: 1;
+}
 export interface CommunicationAttachment {
   id: string;
   name: string;
