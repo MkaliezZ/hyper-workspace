@@ -378,7 +378,7 @@
     "evidenceScope": "236 first-attempt checks across three successful jobs: 25 unit/config, 3 downloader, 8 extraction, 139 database, 4 native runtime, 43 UI, 10 real source, 4 container; pinned Talk wire shape, both sender/recipient DAV mounts, opaque bytes/headers, actual browser download, removed-room-member and deleted-original denial; type/build, audits and frozen package; synthetic CI accounts/data only; upload/send/AI delivery not implemented"
   },
   "attachmentSending": {
-    "status": "local-verified-real-source-ci-pending",
+    "status": "full-ci-verified-existing-files-only",
     "contract": "docs/ATTACHMENT-SENDING.md",
     "migration": "db/migrations/023_attachment_sends.sql",
     "mapping": "P02/P04/P07/P08 C00/C02/C05/C07 A03/A04/A06/A10 E01/E02/E04/E07/E08/E09/E10 subsets",
@@ -386,6 +386,9 @@
     "localEvidence": "147 database including eight new external-send cases, 25 unit/config, full 45 Chromium desktop/mobile UI first attempt, type/build; screenshots inspected; final per-key namespace concurrency and AI unknown-delivery checks passed separately",
     "limits": "No local upload, exact-once external effects, atomic DAV/OCS versions/permissions, offline recall, real supplier quality for this workflow, Safari/Firefox or company acceptance",
     "initialFailureRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41118788352",
-    "initialFailure": "verify/deployment passed; source 8 pass/2 fail: new real attachment manual/idempotent/duplicate/native DSH+Hermes case passed; two old tests assumed the fixed default project heading Team discussion. New source project legitimately changes the alphabetic default; changed only readiness locator to authenticated workspace navigation, retaining all message/UID/permission/revocation assertions. Full fixed CI pending."
+    "initialFailure": "verify/deployment passed; source 8 pass/2 fail: new real attachment manual/idempotent/duplicate/native DSH+Hermes case passed; two old tests assumed the fixed default project heading Team discussion. New source project legitimately changes the alphabetic default; changed only readiness locator to authenticated workspace navigation, retaining all message/UID/permission/revocation assertions. Fixed complete run 41120571893 passed all 246 checks, with 45 UI and 10 source checks passing without retries.",
+    "evidenceCommit": "a6f1b8422eed649c164e59a6569441ca22e21a1c",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41120571893",
+    "evidenceScope": "246 passing checks across three successful jobs: 25 unit/config, 3 downloader, 8 extraction, 147 database, 4 native runtime, 45 UI, 10 real source, 4 container; type/build, audits and frozen package. Actual Nextcloud manual/idempotent/duplicate share, native DSH and Hermes source delivery, sender/recipient downloads, member removal and original deletion; synthetic accounts/data and protocol model only; no local upload or company acceptance."
   }
 }

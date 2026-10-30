@@ -123,4 +123,4 @@ Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0
 
 Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。完整 45 UI 首轮通过，包含新增两项发送/撤权迟到响应场景。URL/标题、有效内容、无框架 overlay、控制台/pageerror、确认前禁用、固定字段、未知核对不重发、排队停止与跨房间清理已检查。截图逐一查看：桌面文件与说明可见，手机 AI 选择/确认和提交可访问，无横向溢出；修正 checkbox 为左侧内联，提交时禁止 Escape 把原生对话框与组件状态分离。
 
-[桌面](../images/attachment-send-desktop.png) · [手机](../images/attachment-send-mobile.png)。均为合成资料；未测 Safari/Firefox、公司实际资料/规模或真实供应商的该新工作流质量。真实来源人工/重复分享/双引擎投递与容器证据待当前 CI，不能从界面 fixture 推导已通过。
+[桌面](../images/attachment-send-desktop.png) · [手机](../images/attachment-send-mobile.png)。均为合成资料；未测 Safari/Firefox、公司实际资料/规模或真实供应商的该新工作流质量。修正实现 `a6f1b84` 的 [CI 41120571893](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41120571893) 三个 job 成功，246 项全部通过，含 45 UI、10 真实来源和 4 容器；人工/重复分享、双引擎投递及下载/撤权由实际来源验证。首轮两个旧用例的默认项目标题假设已修正为工作区导航就绪检查，原消息和权限断言保留。
