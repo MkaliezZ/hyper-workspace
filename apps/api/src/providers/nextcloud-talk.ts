@@ -5,6 +5,13 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { z } from "zod";
+import {
+  AttachmentEtag,
+  FilePath,
+  MAX_ATTACHMENT_BYTES,
+  TalkFileId,
+  type CommunicationAttachment,
+} from "@hyper/contracts";
 import type { NextcloudConfig, SourceCredentials } from "./nextcloud.js";
 import type { CommunicationMessage, CommunicationRoom } from "@hyper/contracts";
 import type { CommunicationProvider } from "./communication.js";
@@ -47,6 +54,58 @@ const Message = z.object({
 function iso(seconds: number) {
   return new Date(seconds * 1000).toISOString();
 }
+const FileParameter = z.object({
+  type: z.literal("file"),
+  id: TalkFileId,
+  name: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^\u0000-\u001f\u007f]+$/),
+  size: z
+    .string()
+    .regex(/^(0|[1-9][0-9]*)$/)
+    .transform(Number)
+    .refine(Number.isSafeInteger),
+  mimetype: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^\u0000-\u0020\u007f]+$/),
+  etag: AttachmentEtag,
+  path: z.string().max(5120),
+  permissions: z.string().regex(/^(?:[0-9]|[12][0-9]|3[01])$/),
+  "hide-download": z.enum(["yes", "no"]),
+});
+function fileReference(
+  raw: z.infer<typeof Message>,
+): { attachment: CommunicationAttachment; path: string[] | null } | undefined {
+  // Only the pinned Talk file-share event is authoritative. Never follow rich-object URLs.
+  if (raw.systemMessage !== "file_shared" || raw.messageType !== "comment")
+    return;
+  const parsed = FileParameter.safeParse(
+    (raw.messageParameters as Record<string, unknown>).file,
+  );
+  if (!parsed.success) return;
+  const file = parsed.data,
+    path = FilePath.safeParse(file.path.split("/"));
+  return {
+    attachment: {
+      id: file.id,
+      name: file.name,
+      size: file.size,
+      mime: file.mimetype,
+      etag: file.etag,
+      downloadable:
+        path.success &&
+        path.data.length > 0 &&
+        file["hide-download"] === "no" &&
+        (Number(file.permissions) & 1) === 1 &&
+        file.size <= MAX_ATTACHMENT_BYTES,
+    },
+    path: path.success && path.data.length ? path.data : null,
+  };
+}
 function normalized(raw: z.infer<typeof Message>): CommunicationMessage {
   const parameters = raw.messageParameters;
   let content = raw.message.replace(/\{([^{}]+)\}/g, (placeholder, key) => {
@@ -58,10 +117,11 @@ function normalized(raw: z.infer<typeof Message>): CommunicationMessage {
       ? value.name
       : placeholder;
   });
+  const file = fileReference(raw);
   const kind =
     raw.messageType === "comment_deleted"
       ? "deleted"
-      : raw.systemMessage || raw.messageType === "system"
+      : (raw.systemMessage && !file) || raw.messageType === "system"
         ? "system"
         : raw.messageType === "comment"
           ? "comment"
@@ -77,6 +137,7 @@ function normalized(raw: z.infer<typeof Message>): CommunicationMessage {
     referenceId: raw.referenceId,
     version: String(raw.lastEditTimestamp || raw.timestamp),
     expiresAt: raw.expirationTimestamp ? iso(raw.expirationTimestamp) : null,
+    ...(file ? { attachments: [file.attachment] } : {}),
   };
 }
 export class NextcloudTalkProvider implements CommunicationProvider {
@@ -190,7 +251,7 @@ export class NextcloudTalkProvider implements CommunicationProvider {
     if(new Set(rows.map(p=>p.actorId)).size!==rows.length) throw new ServiceUnavailableException("企业成员目录存在重复身份，未作姓名推断。");
     return rows.map(p=>({uid:p.actorId,name:p.displayName||p.actorId}));
   }
-  private async read(
+  private async readRaw(
     id: string,
     before?: string,
     limit = 100,
@@ -220,10 +281,28 @@ export class NextcloudTalkProvider implements CommunicationProvider {
             !message.expirationTimestamp ||
             message.expirationTimestamp > Date.now() / 1000,
         )
-        .map(normalized)
-        .sort((a, b) => Number(BigInt(a.id) - BigInt(b.id))),
+        .sort((a, b) => a.id - b.id),
       before: cursor && TalkCursor.safeParse(cursor).success ? cursor : null,
     };
+  }
+  private async read(
+    id: string,
+    before?: string,
+    limit = 100,
+    include = false,
+  ) {
+    const page = await this.readRaw(id, before, limit, include);
+    return { ...page, messages: page.messages.map(normalized) };
+  }
+  async attachment(id: string, messageId: string, fileId: string) {
+    await this.room(id);
+    TalkFileId.parse(fileId);
+    const raw = (
+      await this.readRaw(id, TalkCursor.parse(messageId), 1, true)
+    ).messages.find((m) => String(m.id) === messageId);
+    const file = raw && fileReference(raw);
+    if (!file || file.attachment.id !== fileId) throw new SourceRejected(404);
+    return file;
   }
   async assertReadable(id: string) {
     await this.read(id, undefined, 1);

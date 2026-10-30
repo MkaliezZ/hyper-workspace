@@ -624,6 +624,24 @@ export interface CommunicationMessage {
   referenceId: string;
   version: string;
   expiresAt: string | null;
+  /** Live source references only; receiving a reference does not ingest its body. */
+  attachments?: CommunicationAttachment[];
+}
+
+export const TalkFileId = z.string().regex(/^[1-9][0-9]{0,19}$/);
+export const AttachmentEtag = z
+  .string()
+  .min(1)
+  .max(256)
+  .regex(/^[^\u0000-\u001f\u007f]+$/);
+export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export interface CommunicationAttachment {
+  id: string;
+  name: string;
+  size: number;
+  mime: string;
+  etag: string;
+  downloadable: boolean;
 }
 
 export const CommunicationSendInput = z

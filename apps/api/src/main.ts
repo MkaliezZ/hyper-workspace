@@ -39,6 +39,8 @@ import {
   ArtifactRevision,
   ModelInput,
   CommunicationSendInput,
+  TalkFileId,
+  AttachmentEtag,
   FollowUpConfiguration,
   ArtifactReviewInput,
   MethodActionInput,
@@ -588,6 +590,42 @@ class ApiController {
       TalkToken.parse(token),
       before ? TalkCursor.parse(before) : undefined,
     );
+  }
+  @Get("talk/rooms/:token/messages/:messageId/attachments/:fileId/:action")
+  async talkAttachment(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param("token") token: string,
+    @Param("messageId") messageId: string,
+    @Param("fileId") fileId: string,
+    @Param("action") action: string,
+    @Query("etag") etag: string,
+  ) {
+    const mode = z.enum(["open", "download"]).parse(action);
+    const result = await communication.attachment(
+      await subject(req),
+      TalkToken.parse(token),
+      TalkCursor.parse(messageId),
+      TalkFileId.parse(fileId),
+      AttachmentEtag.parse(etag),
+      mode === "download",
+    );
+    res.setHeader("Referrer-Policy", "no-referrer");
+    if (mode === "open") return res.redirect(302, result.url);
+    // Always download as an opaque attachment; never render active content on the product origin.
+    const filename = encodeURIComponent(
+      Buffer.from(result.attachment.name, "utf8").toString("utf8"),
+    ).replace(
+      /[!'()*]/g,
+      (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+    );
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=attachment; filename*=UTF-8''" + filename,
+    );
+    res.setHeader("Content-Length", result.bytes!.length);
+    return res.end(result.bytes);
   }
   @Post("talk/rooms/:token/messages") async sendTalk(
     @Req() req: Request,

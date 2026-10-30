@@ -7,6 +7,157 @@ const db = new Database(process.env.TEST_DATABASE_URL);
 test.afterAll(async () => {
   await db.close();
 });
+test("Real Talk attachments resolve recipient files, download opaque bytes and reject room removal and deleted originals", async ({
+  browser,
+}) => {
+  test.setTimeout(180000);
+  const roomName = "Hyper synthetic attachment " + randomUUID();
+  const room = await talk("talk-alice", "v4/room", "POST", {
+    roomType: "2",
+    roomName,
+  });
+  await talk("talk-alice", "v4/room/" + room.token + "/participants", "POST", {
+    newParticipant: "talk-bob",
+    source: "users",
+  });
+  const filename = "Hyper-synthetic-attachment-" + randomUUID() + ".html";
+  const content = "<script>synthetic-attachment-must-never-run-inline</script>";
+  const auth =
+    "Basic " + Buffer.from("talk-alice:" + password).toString("base64");
+  const fileUrl =
+    source + "/remote.php/dav/files/talk-alice/" + encodeURIComponent(filename);
+  const uploaded = await fetch(fileUrl, {
+    method: "PUT",
+    redirect: "error",
+    headers: {
+      Authorization: auth,
+      "Content-Type": "text/html",
+      "If-None-Match": "*",
+    },
+    body: content,
+  });
+  expect(uploaded.status).toBe(201);
+  const shared = await fetch(
+    source + "/ocs/v2.php/apps/files_sharing/api/v1/shares?format=json",
+    {
+      method: "POST",
+      redirect: "error",
+      headers: {
+        Authorization: auth,
+        "OCS-APIRequest": "true",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        shareType: "10",
+        shareWith: room.token,
+        path: "/" + filename,
+        permissions: "1",
+        referenceId: randomBytes(32).toString("hex"),
+        talkMetaData: JSON.stringify({
+          messageType: "comment",
+          caption: "Synthetic incoming attachment",
+        }),
+      }),
+    },
+  );
+  expect(shared.ok).toBe(true);
+  await shared.body?.cancel();
+  const alice = await login(browser, "talk-alice"),
+    bob = await login(browser, "talk-bob"),
+    outsider = await login(browser, "talk-outsider");
+  try {
+    let selected: any;
+    await expect
+      .poll(async () => {
+        const response = await bob.context.request.get(
+          origin + "/api/talk/rooms/" + room.token + "/messages",
+        );
+        expect(response.status()).toBe(200);
+        selected = (await response.json()).messages.find((m: any) =>
+          m.attachments?.some((f: any) => f.name === filename),
+        );
+        return !!selected;
+      })
+      .toBe(true);
+    const attachment = selected.attachments[0];
+    expect(attachment.downloadable).toBe(true);
+    expect(attachment).not.toHaveProperty("path");
+    expect(attachment).not.toHaveProperty("link");
+    const path =
+      origin +
+      "/api/talk/rooms/" +
+      room.token +
+      "/messages/" +
+      selected.id +
+      "/attachments/" +
+      attachment.id;
+    const query = "?etag=" + encodeURIComponent(attachment.etag);
+    const open = await bob.context.request.get(path + "/open" + query, {
+      maxRedirects: 0,
+    });
+    expect(open.status()).toBe(302);
+    expect(open.headers().location).toBe(
+      source + "/index.php/f/" + attachment.id,
+    );
+    expect(open.headers()["referrer-policy"]).toBe("no-referrer");
+    for (const user of [alice, bob]) {
+      const download = await user.context.request.get(
+        path + "/download" + query,
+      );
+      expect(download.status()).toBe(200);
+      expect(await download.text()).toBe(content);
+      expect(download.headers()["content-type"]).toBe(
+        "application/octet-stream",
+      );
+      expect(download.headers()["content-disposition"]).toContain(
+        "attachment;",
+      );
+      expect(download.headers()["x-content-type-options"]).toBe("nosniff");
+      expect(download.headers()["cache-control"]).toBe("no-store");
+    }
+    const denied = await outsider.context.request.get(
+      path + "/download" + query,
+    );
+    expect([403, 404]).toContain(denied.status());
+    await bob.page
+      .getByRole("navigation", { name: "工作区导航" })
+      .getByRole("button", { name: "企业消息", exact: true })
+      .click();
+    await bob.page.getByRole("button", { name: roomName, exact: true }).click();
+    await expect(
+      bob.page.getByRole("link", { name: "下载 " + filename, exact: true }),
+    ).toBeVisible();
+    const downloadEvent = bob.page.waitForEvent("download");
+    await bob.page
+      .getByRole("link", { name: "下载 " + filename, exact: true })
+      .click();
+    expect((await downloadEvent).suggestedFilename()).toBe(filename);
+    const participant = (
+      await talk("talk-alice", "v4/room/" + room.token + "/participants")
+    ).find((p: any) => p.actorType === "users" && p.actorId === "talk-bob");
+    await talk("talk-alice", "v4/room/" + room.token + "/attendees", "DELETE", {
+      attendeeId: String(participant.attendeeId),
+    });
+    expect(
+      (await bob.context.request.get(path + "/download" + query)).status(),
+    ).toBe(404);
+    await expect(
+      bob.page.getByRole("link", { name: "下载 " + filename, exact: true }),
+    ).toHaveCount(0);
+    const removed = await fetch(fileUrl, {
+      method: "DELETE",
+      redirect: "error",
+      headers: { Authorization: auth },
+    });
+    expect(removed.status).toBe(204);
+    const gone = await alice.context.request.get(path + "/download" + query);
+    expect([403, 404, 409]).toContain(gone.status());
+  } finally {
+    await alice.context.close();
+    await bob.context.close();
+    await outsider.context.close();
+  }
+});
 async function talk(
   uid: string,
   path: string,

@@ -8,6 +8,7 @@ import type {
   ReplyDraftSummary,
 } from "@hyper/contracts";
 import { api, mutation, ApiError } from "../api";
+import { MessageAttachments } from "./MessageAttachments";
 interface Draft {
   text: string;
   key: string;
@@ -21,6 +22,7 @@ export function EnterpriseMessages({
   onProject,
   onDraft,
   initialReplyDraft,
+  filesEnabled = false,
 }: {
   demo: boolean;
   query: string;
@@ -29,6 +31,7 @@ export function EnterpriseMessages({
   onProject?: (room: CommunicationRoom) => Promise<void>;
   onDraft?: (room: CommunicationRoom) => Promise<void>;
   initialReplyDraft?: ReplyDraft;
+  filesEnabled?: boolean;
 }) {
   const [rooms, setRooms] = useState<CommunicationRoom[]>([]),
     [selected, setSelected] = useState("");
@@ -417,6 +420,14 @@ export function EnterpriseMessages({
                       </time>
                     </div>
                     <p>{message.content}</p>
+                    {message.attachments?.length ? (
+                      <MessageAttachments
+                        roomId={selected}
+                        messageId={message.id}
+                        attachments={message.attachments}
+                        filesEnabled={filesEnabled}
+                      />
+                    ) : null}
                   </article>
                 ))}
               {!loading && !messages.length ? (

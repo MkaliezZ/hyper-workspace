@@ -102,3 +102,13 @@ Browser plugin not available，使用仓库 Playwright Chromium；http://127.0.0
 | 缓存与迟到响应 | 拒绝后同时清理同项目目录视图、搜索及模型选项，旧请求不能恢复名单  |
 
 [桌面截图](../images/task-assignment-desktop.png) · [手机截图](../images/task-assignment-mobile.png)。全为合成资料；Safari/Firefox、正式员工量规和公司环境未测。源码/原生/来源/容器证据见 [成员与分配契约](../PROJECT-DIRECTORY-ASSIGNMENTS.md)。
+
+## 接收消息附件 — 2026-10-30
+
+验证路径：企业消息 → 受限附件卡片 → 二进制下载 → 查看来源链接 → 手机布局 → 切换房间清除卡片。仅展示来源引用，明确 AI 未读取正文；大文件/来源限制不显示产品下载入口。
+
+Browser plugin not available，使用项目 Playwright Chromium；http://127.0.0.1:5173，桌面 1504×1045/手机 390×844。新增场景和原企业消息两个场景均通过；URL/标题、有效内容、无框架 overlay、无相关控制台错误、实际下载事件与房间切换结果已检查。两种截图逐一查看，无横向溢出；手机第二张卡片需在消息区滚动，编辑框固定可用。完整界面回归待记录；Safari/Firefox、真实公司资料未测。
+
+[桌面](../images/message-attachments-desktop.png) · [手机](../images/message-attachments-mobile.png)。均为合成界面资料。真实来源权限与二进制响应头另由来源 CI 核验，不能从 UI fixture 推断已通过。
+
+完整界面首轮 42 通过、1 失败：定时跟进迟到响应场景在创建项目时收到空 500，JSON 解码失败，原 trace 已保留在受限忽略目录。与开发模式代码重载窗口重合，尚不能仅凭此认定产品逻辑缺陷；停止源码写入后重跑完整界面，并以 CI 独立启动结果复核，不弱化断言。

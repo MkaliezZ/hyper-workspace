@@ -169,24 +169,39 @@ export class ProjectAccess {
     ).messages
       .filter((message) => message.kind === "comment")
       .slice(-60);
-    return messages.map((message) => ({
-      id:
-        "talk:" +
-        binding.provider_key +
-        ":" +
-        binding.conversation_ref +
-        ":" +
-        message.id +
-        "@" +
-        message.version +
-        ":" +
-        digest(message.content),
-      author: message.author,
-      actorId: message.authorId,
-      content: message.content,
-      sourceMessageId: message.id,
-      sourceVersion: message.version,
-      sourceRoomId: binding.conversation_ref,
-    }));
+    return messages.map((message) => {
+      const content =
+        message.content +
+        (message.attachments?.length
+          ? "\n[附件引用；未读取正文，不得据文件名推断内容] " +
+            JSON.stringify(
+              message.attachments.map(({ id, name, mime, etag }) => ({
+                id,
+                name,
+                mime,
+                etag,
+              })),
+            )
+          : "");
+      return {
+        id:
+          "talk:" +
+          binding.provider_key +
+          ":" +
+          binding.conversation_ref +
+          ":" +
+          message.id +
+          "@" +
+          message.version +
+          ":" +
+          digest(content),
+        author: message.author,
+        actorId: message.authorId,
+        content,
+        sourceMessageId: message.id,
+        sourceVersion: message.version,
+        sourceRoomId: binding.conversation_ref,
+      };
+    });
   }
 }

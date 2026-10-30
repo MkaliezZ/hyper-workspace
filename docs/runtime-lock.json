@@ -362,5 +362,14 @@
     "evidenceCommit": "7de26bb353dc2c267644784e38f673bd13322ac0",
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41075340989",
     "evidenceScope": "227 first-attempt checks across three successful jobs: 25 unit/config, 3 downloader, 8 extraction, 132 database, 4 native runtime, 42 UI, 9 real source, 4 container; exact source UID mapping, native Hermes assignment, source revocation denial; restricted container native DSH assignment and ID/history/Run survival across DB/API/Worker restart; type/build, both npm audits and frozen package; synthetic CI model/data only"
+  },
+  "incomingMessageAttachments": {
+    "status": "local-verified-real-source-ci-pending",
+    "contract": "docs/MESSAGE-ATTACHMENTS.md",
+    "mapping": "P02/P04/P07/P08 C00/C02/C05 A03/A04/A05/A10 E02/E04/E07/E08/E09 subsets",
+    "scope": "Typed Talk v23.0.12 file-share references, current employee/room/message/file/etag protected canonical source opens and bounded 8 MiB DAV downloads; opaque attachment headers; post-read revocation and version checks",
+    "ai": "Shared project context supplies explicitly unread references to both engines; no automatic body ingestion or multimedia understanding",
+    "localEvidence": "139 database, 25 unit, type/build/frozen package and three enterprise-message UI cases passed; desktop/mobile screenshots inspected; full UI and real Nextcloud CI pending",
+    "limits": "No upload/send or AI attachment delivery/reconciliation yet; no cross-system atomic authorization, offline byte recall or real company acceptance"
   }
 }

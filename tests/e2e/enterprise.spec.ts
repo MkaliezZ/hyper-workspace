@@ -185,3 +185,123 @@ test("Unknown sends survive reload through receipts and require reconciliation o
   );
   expect(posts).toBe(1);
 });
+
+test("Attachment cards use protected routes, download opaque bytes and clear when switching rooms", async ({
+  page,
+  request,
+}) => {
+  await workspace(page, request);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (value) => {
+    if (
+      ["error", "warning"].includes(value.type()) &&
+      !value.text().includes("401 (Unauthorized)")
+    )
+      errors.push(value.text());
+  });
+  await page.route("**/api/auth/status", (route) =>
+    route.fulfill({
+      json: {
+        demoEnabled: true,
+        filesEnabled: true,
+        nextcloudConfigured: true,
+      },
+    }),
+  );
+  await page.route("**/api/talk/rooms/*/sends", (route) =>
+    route.fulfill({ json: [] }),
+  );
+  const attachment = {
+    id: "1234",
+    name: "合成附件-设计评审与实施说明.html",
+    size: 2048,
+    mime: "text/html",
+    etag: "current-v1",
+    downloadable: true,
+  };
+  await page.route("**/api/talk/rooms/*/messages*", (route) =>
+    route.fulfill({
+      json: {
+        messages: route.request().url().includes("source0001")
+          ? [
+              {
+                ...initial,
+                content: "合成资料：请核对这份附件的当前版本。",
+                attachments: [attachment],
+              },
+              {
+                ...initial,
+                id: "103",
+                content: "较大附件",
+                attachments: [
+                  {
+                    ...attachment,
+                    id: "1235",
+                    name: "较大的演示录像.mp4",
+                    size: 20 * 1024 * 1024,
+                    mime: "video/mp4",
+                    downloadable: false,
+                  },
+                ],
+              },
+            ]
+          : [],
+        before: null,
+      },
+    }),
+  );
+  await page.route(
+    "**/api/talk/rooms/*/messages/*/attachments/*/download?*",
+    (route) =>
+      route.fulfill({
+        contentType: "application/octet-stream",
+        headers: {
+          "Content-Disposition":
+            "attachment; filename=synthetic-attachment.html",
+        },
+        body: "<script>synthetic-opaque-download</script>",
+      }),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("navigation", { name: "工作区导航" })
+    .getByRole("button", { name: "企业消息", exact: true })
+    .click();
+  await expect(page).toHaveTitle(/Hyper Workspace/);
+  expect(page.url()).toBe("http://127.0.0.1:5173/");
+  await expect(page.getByText(attachment.name, { exact: true })).toBeVisible();
+  const open = page.getByRole("link", {
+    name: "在来源中查看 " + attachment.name,
+    exact: true,
+  });
+  await expect(open).toHaveAttribute(
+    "href",
+    "/api/talk/rooms/source0001/messages/102/attachments/1234/open?etag=current-v1",
+  );
+  await expect(open).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(
+    page.getByRole("link", { name: "下载 较大的演示录像.mp4", exact: true }),
+  ).toHaveCount(0);
+  const downloading = page.waitForEvent("download");
+  await page
+    .getByRole("link", { name: "下载 " + attachment.name, exact: true })
+    .click();
+  expect((await downloading).suggestedFilename()).toBe(
+    "synthetic-attachment.html",
+  );
+  await expect(page.getByText(/AI 尚未读取附件正文/).first()).toBeVisible();
+  await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+  await page.screenshot({ path: "/tmp/hyper-attachments-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(open).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/hyper-attachments-mobile.png" });
+  await page.getByRole("button", { name: "项目联调", exact: true }).click();
+  await expect(page.getByRole("list", { name: "消息附件" })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

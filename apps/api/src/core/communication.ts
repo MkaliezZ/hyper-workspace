@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { Subject } from "@hyper/contracts";
+import { AttachmentEtag, type Subject } from "@hyper/contracts";
 import type { Database } from "../db/database.js";
 import { sourceConnection } from "./source-connection.js";
 import { ReplyDraftService } from "./reply-drafts.js";
@@ -15,6 +15,7 @@ import {
   SourceRejected,
 } from "../providers/nextcloud-talk.js";
 import type { CommunicationMessage } from "@hyper/contracts";
+import { NextcloudFilesProvider } from "../providers/nextcloud-files.js";
 function messageDigest(message: CommunicationMessage) {
   const { author: _displayName, ...stable } = message;
   return stableDigest(stable);
@@ -50,6 +51,92 @@ export class CommunicationService {
   }
   async messages(s: Subject, id: string, before?: string) {
     return (await this.connection(s)).provider.messages(id, before);
+  }
+  async attachment(
+    s: Subject,
+    roomId: string,
+    messageId: string,
+    fileId: string,
+    etag: string,
+    download = false,
+  ) {
+    AttachmentEtag.parse(etag);
+    const source = await this.connection(s);
+    const reference = await source.provider.attachment(
+      roomId,
+      messageId,
+      fileId,
+    );
+    if (reference.attachment.etag !== etag)
+      throw new ConflictException("附件已变化，请刷新消息后重试。");
+    let bytes: Buffer | undefined;
+    if (download) {
+      if (process.env.NEXTCLOUD_FILES_ENABLED !== "true")
+        throw new ServiceUnavailableException(
+          "附件下载需要启用企业文件服务；可在来源中查看。",
+        );
+      if (!reference.path || !reference.attachment.downloadable)
+        throw new ForbiddenException(
+          "此附件不允许在产品内下载，请在来源中查看。",
+        );
+      const files = new NextcloudFilesProvider(
+        source.config,
+        source.credentials,
+        source.remoteUid,
+      );
+      const file = await files.stat(reference.path);
+      // Talk exposes the raw node etag; DAV wraps it in quotes. File IDs must also agree.
+      const nodeEtag = (value: string) =>
+        value.startsWith('"') && value.endsWith('"')
+          ? value.slice(1, -1)
+          : value;
+      if (
+        file.kind !== "file" ||
+        file.id !== fileId ||
+        nodeEtag(file.etag) !== nodeEtag(etag) ||
+        file.size !== reference.attachment.size
+      )
+        throw new ConflictException(
+          "附件引用与当前文件不符，请刷新消息后重试。",
+        );
+      bytes = await files.download(file);
+      const after = await files.stat(reference.path);
+      if (
+        after.id !== file.id ||
+        after.etag !== file.etag ||
+        after.size !== file.size ||
+        after.kind !== "file"
+      )
+        throw new ConflictException("下载期间附件已变化，未返回旧内容。");
+      await files.assertReadable(after);
+    }
+    // Discard buffered bytes if the room/share/message, download policy or employee binding changed.
+    const current = await source.provider.attachment(roomId, messageId, fileId);
+    if (
+      current.attachment.etag !== etag ||
+      (download && !current.attachment.downloadable)
+    )
+      throw new ConflictException("附件或权限已变化，请刷新消息后重试。");
+    const fresh = await this.connection(s);
+    if (
+      stableDigest({
+        config: fresh.config,
+        credentials: fresh.credentials,
+        uid: fresh.remoteUid,
+      }) !==
+        stableDigest({
+          config: source.config,
+          credentials: source.credentials,
+          uid: source.remoteUid,
+        }) ||
+      (download && process.env.NEXTCLOUD_FILES_ENABLED !== "true")
+    )
+      throw new ConflictException("企业连接已变化，请重新打开附件。");
+    return {
+      attachment: current.attachment,
+      bytes,
+      url: source.config.publicUrl + "/index.php/f/" + fileId,
+    };
   }
   async send(
     s: Subject,

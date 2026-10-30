@@ -1,5 +1,6 @@
 import { DirectoryService } from "../../apps/api/src/core/directory.js";
 import { TaskAssignmentService } from "../../apps/api/src/core/task-assignments.js";
+import { MAX_ATTACHMENT_BYTES } from "@hyper/contracts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -44,6 +45,54 @@ type Room = {
   directoryFailure?: number;
 };
 const rooms = new Map<string, Room>();
+function attachmentFixture() {
+  const r = room(),
+    file = dav.add(
+      "alice",
+      ["Talk", "合成附件-" + randomUUID() + ".html"],
+      "<script>synthetic-no-inline-execution</script>",
+      "text/html",
+    );
+  file.readers.add("bob");
+  const raw = {
+    id: nextId++,
+    token: r.id,
+    actorType: "users",
+    actorId: "alice",
+    actorDisplayName: "Alice",
+    timestamp: Math.floor(Date.now() / 1000),
+    message: "{file}\n合成附件说明",
+    messageType: "comment",
+    systemMessage: "file_shared",
+    referenceId: "",
+    messageParameters: {
+      file: {
+        type: "file",
+        id: file.id,
+        name: file.path.at(-1),
+        size: String(file.content.length),
+        mimetype: file.mime,
+        etag: file.etag.slice(1, -1),
+        path: file.path.join("/"),
+        permissions: "1",
+        "hide-download": "no",
+        link: "https://untrusted.invalid/private-token",
+        "contact-photo": "must-not-return",
+      },
+    },
+  };
+  r.messages.push(raw);
+  const read = (download = true, actor = s()) =>
+    service.attachment(
+      actor,
+      r.id,
+      String(raw.id),
+      file.id,
+      raw.messageParameters.file.etag,
+      download,
+    );
+  return { r, file, raw, read };
+}
 let nextId = 100;
 let directRoomQueries = 0;
 function room(members = ["alice", "bob"]) {
@@ -337,6 +386,169 @@ test("Read-through messages preserve IDs, render rich names once and mask delete
     ).rowCount,
     0,
   );
+});
+test("Talk file shares expose only bounded metadata and construct trusted source opens without following rich URLs", async () => {
+  const { r, file, raw, read } = attachmentFixture();
+  const message = (await service.messages(s(), r.id)).messages[0]!;
+  assert.equal(message.kind, "comment");
+  assert.equal(message.attachments?.[0]?.id, file.id);
+  assert.equal(message.attachments?.[0]?.downloadable, true);
+  assert.ok(!JSON.stringify(message).includes("untrusted.invalid"));
+  assert.ok(!JSON.stringify(message).includes("must-not-return"));
+  assert.ok(!JSON.stringify(message).includes('"path"'));
+  const result = await read(false);
+  assert.equal(
+    result.url,
+    requireNextcloud().publicUrl + "/index.php/f/" + file.id,
+  );
+  assert.equal(result.bytes, undefined);
+  assert.equal(file.fullReads, 0);
+  await assert.rejects(
+    service.attachment(s(), r.id, String(raw.id), "99999999", "v1", false),
+  );
+});
+test("Ordinary rich objects, invalid file metadata, deleted shares and expired shares cannot become attachments", async () => {
+  const { r, raw, read } = attachmentFixture();
+  raw.systemMessage = "";
+  assert.equal(
+    (await service.messages(s(), r.id)).messages[0]!.attachments,
+    undefined,
+  );
+  await assert.rejects(read(false));
+  raw.systemMessage = "file_shared";
+  raw.messageParameters.file.id = "../fake";
+  assert.equal(
+    (await service.messages(s(), r.id)).messages[0]!.attachments,
+    undefined,
+  );
+  const deleted = attachmentFixture();
+  deleted.raw.messageType = "comment_deleted";
+  assert.equal(
+    (await service.messages(s(), deleted.r.id)).messages[0]!.attachments,
+    undefined,
+  );
+  await assert.rejects(deleted.read(false));
+  const expired = attachmentFixture();
+  (expired.raw as any).expirationTimestamp = 1;
+  assert.equal((await service.messages(s(), expired.r.id)).messages.length, 0);
+  await assert.rejects(expired.read(false));
+});
+test("Attachment downloads return exact binary bytes through the current recipient mount and never persist bodies", async () => {
+  const { r, file, read } = attachmentFixture();
+  const result = await read(true, s("bob"));
+  assert.deepEqual(result.bytes, file.content);
+  assert.equal(file.fullReads, 1);
+  assert.equal(file.probes, 1);
+  await assert.rejects(read(true, s("outsider")));
+  r.members.delete("bob");
+  await assert.rejects(read(true, s("bob")));
+  assert.equal(file.fullReads, 1);
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT id FROM cw_assets WHERE workspace_id=$1 AND source_ref LIKE $2",
+        [workspace, "%" + file.id + "%"],
+      )
+    ).rowCount,
+    0,
+  );
+});
+test("Attachments fail closed on hidden downloads, missing read permission, unsafe paths and oversized files", async () => {
+  for (const mutate of [
+    (f: any) => {
+      f["hide-download"] = "yes";
+    },
+    (f: any) => {
+      f.permissions = "0";
+    },
+    (f: any) => {
+      f.path = "../secret";
+    },
+    (f: any) => {
+      f.size = String(MAX_ATTACHMENT_BYTES + 1);
+    },
+  ]) {
+    const { r, raw, file, read } = attachmentFixture();
+    mutate(raw.messageParameters.file);
+    assert.equal(
+      (await service.messages(s(), r.id)).messages[0]!.attachments?.[0]
+        ?.downloadable,
+      false,
+    );
+    await assert.rejects(read());
+    assert.equal(file.fullReads, 0);
+  }
+  const disabled = attachmentFixture();
+  process.env.NEXTCLOUD_FILES_ENABLED = "false";
+  try {
+    await assert.rejects(disabled.read(), /文件服务/);
+    await disabled.read(false);
+  } finally {
+    process.env.NEXTCLOUD_FILES_ENABLED = "true";
+  }
+});
+test("Attachment version, file ID and current DAV read permission are checked before returning bytes", async () => {
+  const { r, raw, file, read } = attachmentFixture();
+  await assert.rejects(
+    service.attachment(s(), r.id, String(raw.id), file.id, "old", true),
+    /变化/,
+  );
+  raw.messageParameters.file.path = "Talk/" + randomUUID();
+  await assert.rejects(read());
+  raw.messageParameters.file.path = file.path.join("/");
+  file.etag = '"v2"';
+  await assert.rejects(read(), /不符/);
+  file.etag = '"v1"';
+  file.blockedDownloads.add("alice");
+  await assert.rejects(read());
+  assert.equal(file.fullReads, 0);
+});
+test("Revocation or message/download-policy mutation during an attachment fetch discards buffered bytes", async () => {
+  for (const scenario of [
+    "room",
+    "file",
+    "deleted",
+    "hidden",
+    "version",
+    "credential",
+  ] as const) {
+    const { r, raw, file, read } = attachmentFixture();
+    file.afterRead = () => {
+      if (scenario === "room") r.members.delete("alice");
+      if (scenario === "file") file.readers.delete("alice");
+      if (scenario === "deleted") raw.messageType = "comment_deleted";
+      if (scenario === "hidden")
+        raw.messageParameters.file["hide-download"] = "yes";
+      if (scenario === "version") file.etag = '"v2"';
+    };
+    if (scenario === "credential")
+      file.afterRead = () => {
+        people.get("alice")!.password = "rotated-synthetic-device";
+      };
+    const previous = people.get("alice")!.password;
+    try {
+      await assert.rejects(read());
+      assert.equal(file.fullReads, 1);
+    } finally {
+      people.get("alice")!.password = previous;
+    }
+  }
+});
+test("AI project context includes versioned attachment references and explicitly marks the body unread", async () => {
+  const { r, file } = attachmentFixture();
+  const work = new WorkspaceService(db, engineRegistry());
+  const project = await work.createTalkProject(
+    s(),
+    r.id,
+    "Synthetic attachment project",
+    "Do not infer a file body",
+  );
+  const context = await work.access.sourceMessages(s(), project.id);
+  assert.equal(context.length, 1);
+  assert.match(context[0]!.content, /未读取正文/);
+  assert.ok(context[0]!.content.includes(file.id));
+  assert.ok(!context[0]!.content.includes("synthetic-no-inline-execution"));
+  assert.equal(file.fullReads, 0);
 });
 test("Concurrent retry keys result in one source send, validated readback and scoped metadata-only receipt", async () => {
   const r = room();

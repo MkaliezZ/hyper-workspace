@@ -4,7 +4,11 @@ import {
   HttpException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { FilePath, type SourceFile } from "@hyper/contracts";
+import {
+  FilePath,
+  MAX_ATTACHMENT_BYTES,
+  type SourceFile,
+} from "@hyper/contracts";
 import { XMLParser } from "fast-xml-parser";
 import type { StorageProvider, ExtractedFile } from "./storage.js";
 import {
@@ -311,6 +315,24 @@ export class NextcloudFilesProvider implements StorageProvider {
   }
   async read(file: SourceFile) {
     return (await this.extract(file)).text;
+  }
+  /** Bounded binary download, independent of document parsing or model ingestion. */
+  async download(file: SourceFile) {
+    if (file.kind !== "file" || file.size > MAX_ATTACHMENT_BYTES)
+      throw new BadRequestException(
+        "当前支持 8 MiB 内的附件下载，请在来源中查看较大的文件。",
+      );
+    const response = await this.request(file.path, "GET", {
+      "If-Match": file.etag,
+    });
+    if (response.status !== 200 || response.headers.get("etag") !== file.etag) {
+      await response.body?.cancel();
+      throw new ConflictException("附件已变化，请刷新消息后重试。");
+    }
+    const bytes = await bounded(response, MAX_ATTACHMENT_BYTES);
+    if (bytes.length !== file.size)
+      throw new ServiceUnavailableException("附件长度与来源信息不符。");
+    return Buffer.from(bytes);
   }
   async extract(file: SourceFile): Promise<ExtractedFile> {
     if (!file.importable)

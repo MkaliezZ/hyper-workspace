@@ -601,6 +601,7 @@ export function App() {
         ) : null}
         {section === "enterprise" ? (
           <EnterpriseMessages
+            filesEnabled={!!status?.filesEnabled}
             demo={view.user.demo}
             query={query}
             initialRoomId={initialRoomId}
