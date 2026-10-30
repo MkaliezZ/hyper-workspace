@@ -24,7 +24,7 @@
 
 当前仅索引产品数据库已有的授权文本资产；关联 Talk 来源的项目还叠加实时来源读取权限，在 embedding 发送前及写回/召回时检查。原聊天不自动索引，派生成果随项目权限限制。[来源范围和失效限制](PROJECT-SOURCE-SCOPE.md)。该项目来源模块不自动导入原聊天；文件增量及其验证范围见下文。不能据此声称所有企业数据已导入或完整源删除传播已实现。
 
-Files 增量已增加用户显式选择的个人短文本副本，在关键词/向量读取与索引发送/写回前核验源 fileid、ETag 和实际下载权限。私有范围不能因 workspace 标记而扩大，旧正文/向量随源变更或确定拒绝失效；临时来源故障不使用缓存授权。[文件契约与当前验证状态](NEXTCLOUD-FILES.md)。PDF/Office、长文分块、完整源依赖删除和项目成果的跨来源权限传播仍未实现；不会自动把文件送入 DSH/Hermes 项目上下文。
+Files 增量已增加用户显式选择的个人短文本副本，在关键词/向量读取与索引发送/写回前核验源 fileid、ETag 和实际下载权限。私有范围不能因 workspace 标记而扩大，旧正文/向量随源变更或确定拒绝失效；临时来源故障不使用缓存授权。[文件契约与当前验证状态](NEXTCLOUD-FILES.md)。PDF/Office 已有受控解析（见文档接入契约）；长文分块、完整跨来源依赖与项目成果的权限传播仍待补齐；不会自动把文件送入 DSH/Hermes 项目上下文。
 
 ## API
 
@@ -48,3 +48,7 @@ Files 增量已增加用户显式选择的个人短文本副本，在关键词/�
 协议参考：[DeepSeek Chat](https://api-docs.deepseek.com/api/create-chat-completion/)、[Anthropic Messages](https://docs.anthropic.com/en/api/messages)。API 类型和具体模型能力仍须用实际服务验证。
 
 个人文件的 `read_file` 使用固定的 chat 连接与所选单文件原文，经 DSH/Hermes 生成本人可修订解读；它无需 embedding，也不执行跨文件 RAG。输出暂不加入通用索引，源版本/权限失效会清理其全部版本。见 [FILE-AI-READING.md](FILE-AI-READING.md)。
+
+## 实际请求用量
+
+两原生执行器现经每 Run 独立的产品网关调用供应商，真实 Key 留在后端；验证连接和 embedding 也记录实际 HTTP 用量。私人页面与 AI 回读使用同一主体范围，缺失统计不补零；价格、账单和金额预算仍未接入。见 [模型用量](MODEL-USAGE.md)。

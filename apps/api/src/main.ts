@@ -46,6 +46,7 @@ import { WorkspaceService } from "./core/workspace.js";
 import { RunProcessor } from "./core/processor.js";
 import { engineRegistry } from "./engines/adapters.js";
 import { ModelService } from "./core/models.js";
+import { ModelUsageService } from "./core/model-usage.js";
 import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
 import { ReplyDraftService } from "./core/reply-drafts.js";
@@ -586,6 +587,9 @@ class ApiController {
   }
   @Get("models") async models(@Req() req: Request) {
     return service.models(await subject(req));
+  }
+  @Get("model-usage") async modelUsage(@Req() req: Request) {
+    return new ModelUsageService(db).view(await subject(req));
   }
   @Post("models") async saveModel(@Req() req: Request, @Body() body: unknown) {
     return service.saveModel(await subject(req), ModelInput.parse(body));

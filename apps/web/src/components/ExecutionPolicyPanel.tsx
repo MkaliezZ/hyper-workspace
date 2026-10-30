@@ -35,6 +35,7 @@ const labels: Record<string, string> = {
   follow_up: "检查进展",
   configure_follow_up: "配置定时跟进",
   configure_policy: "配置执行规则",
+  usage_report: "查询本人用量",
   chat: "讨论回复",
   draft_reply: "企业回复草稿",
   read_file: "文件阅读",
@@ -205,8 +206,8 @@ export function ExecutionPolicyPanel({
           </p>
           <p className="muted">
             次数按 UTC
-            每日累计，已获准后失败或取消仍计数；排队中取消不计数。此处记录执行次数，供应商调用数、token
-            消耗与费用账单尚未接入。
+            每日累计，已获准后失败或取消仍计数；排队中取消不计数。此处只统计获准的执行次数；模型
+            HTTP 请求和已返回 token 请查看“模型用量”，费用账单尚未接入。
           </p>
           <form
             className="settings-form"

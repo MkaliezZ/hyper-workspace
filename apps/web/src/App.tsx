@@ -27,6 +27,7 @@ import { ArtifactReviewPanel } from "./components/ArtifactReviewPanel";
 import { artifactStatusLabel } from "@hyper/contracts";
 import { TaskEditor } from "./components/TaskEditor";
 import { ExecutionPolicyPanel } from "./components/ExecutionPolicyPanel";
+import { ModelUsagePanel } from "./components/ModelUsagePanel";
 import { usePageTransition } from "./hooks/usePageTransition";
 type Tab = "discussion" | "tasks" | "artifacts";
 export function App() {
@@ -76,7 +77,9 @@ export function App() {
   const [edit, setEdit] = useState(""),
     [feedback, setFeedback] = useState("");
   const pageSurface = usePageTransition<HTMLElement>(
-    view ? `${view.user.id}:${view.project.id}:${section}:${tab}` : undefined,
+    view
+      ? `${view.user.id}:${view.project.id}:${section}:${tab}:${section === "settings" ? settingsTab : ""}`
+      : undefined,
   );
   const load = useCallback(async (projectId?: string) => {
     const version = ++loadVersion.current;
@@ -609,9 +612,26 @@ export function App() {
               >
                 执行规则
               </button>
+              <button
+                role="tab"
+                aria-selected={settingsTab === "usage"}
+                className={settingsTab === "usage" ? "active" : ""}
+                onClick={() => setSettingsTab("usage")}
+              >
+                模型用量
+              </button>
             </div>
             {settingsTab === "models" ? (
               <ModelSettings view={view} busy={busy} act={act} />
+            ) : settingsTab === "usage" ? (
+              <ModelUsagePanel
+                key={view.user.id + view.project.id}
+                view={view}
+                run={run}
+                onRun={(r) => {
+                  if (loadedProject.current === view.project.id) setRun(r);
+                }}
+              />
             ) : (
               <ExecutionPolicyPanel
                 key={view.user.id + view.project.id}

@@ -12,6 +12,7 @@ import {
 import { ArtifactReviewService } from "./artifact-reviews.js";
 import { MethodsService } from "./methods.js";
 import { ExecutionPolicyService } from "./execution-policy.js";
+import { ModelUsageService } from "./model-usage.js";
 export async function assertRunScope(
   service: WorkspaceService,
   s: Subject,
@@ -96,6 +97,17 @@ export async function loadRunContext(
     };
   }
   const conversation = await service.conversation(subject, run.conversation_id);
+  if (run.workflow === "usage_report") {
+    const view = await new ModelUsageService(service.db).view(subject);
+    return {
+      context:
+        "Host-bound personal model usage query. Propose exactly one usage.report with empty args. The host reads the authenticated employee's current ledger. Missing usage is unknown, never zero. No costs or invoices are configured. Do not select actors, periods, profiles or recipients.\n" +
+        JSON.stringify({ summary: view.summary, note: view.note }),
+      sourceIds: [],
+      contextRefs: ["personal-model-usage:today-UTC"],
+      live: true,
+    };
+  }
   if (run.workflow === "configure_policy") {
     const prepared = await new ExecutionPolicyService(service.db).prepare(
       subject,

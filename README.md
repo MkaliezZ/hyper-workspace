@@ -39,7 +39,13 @@
 
 “设置 → 执行规则”支持工作区、项目和个人限制；发起任务时可以进一步收紧单次限制。允许执行器/工作类型取交集，支持上下文字节、输出 token、时间、业务动作和每日执行次数上限。人工保存与 AI 按已确认方案代保存共用服务，保留版本、回执和运行快照；模型不能自行改权限。
 
-每日次数是获准执行的 Run 数，尚不是供应商调用数、token 用量或费用账单。[规则契约、额度口径与迁移](docs/EXECUTION-POLICY.md) · [桌面界面](docs/images/execution-policy-desktop.png) · [手机界面](docs/images/execution-policy-mobile.png)。本地规则与双原生执行器、页面验证已通过，完整提交 CI 待核验。
+每日次数是获准执行的 Run 数，尚不是供应商调用数、token 用量或费用账单。[规则契约、额度口径与迁移](docs/EXECUTION-POLICY.md) · [桌面界面](docs/images/execution-policy-desktop.png) · [手机界面](docs/images/execution-policy-mobile.png)。执行规则实现 `8463fb1` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41029145378) 三个 job 全部成功、188 项首轮通过（含 104 数据库、38 UI、双引擎、真实来源和容器）。
+
+## 模型用量
+
+“设置 → 模型用量”记录本人实际发起的模型 HTTP 请求和供应商返回的输入/输出 token，包含两套执行器、连接验证及向量请求。完整、部分、未知和无效统计分别展示；AI 可回读同一份个人记录，模型不能选择其他员工或虚构费用。执行器只取得短期网关凭据，真实供应商 Key 留在产品后端。
+
+实际 DeepSeek Flash 的 DSH/Hermes 两次合成回读已成功，均记录到供应商用量；价格、账单对账和金额预算仍待实现。[用量口径、权限与迁移](docs/MODEL-USAGE.md) · [桌面界面](docs/images/model-usage-desktop.png) · [手机界面](docs/images/model-usage-mobile.png)。
 
 ## 本地开发
 

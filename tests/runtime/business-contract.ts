@@ -97,6 +97,9 @@ export function modelFixture(
     const configurePolicy = JSON.stringify(body.messages).includes(
       "Host-bound execution policy plan.",
     );
+    const usageReport = JSON.stringify(body.messages).includes(
+      "Host-bound personal model usage query.",
+    );
     if (configurePolicy && cap !== 128)
       violations.push(
         "Execution policy token bound was not passed to the native runtime",
@@ -130,68 +133,72 @@ export function modelFixture(
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        configurePolicy
-          ? { tool: "policy.configure", args: {} }
-          : methodDraft
-            ? {
-                tool: "method.write",
-                args: {
-                  title: "Protocol fixture method candidate",
-                  kind: "sop",
-                  content:
-                    "protocol-fixture-method-guidance: check evidence before output.",
-                },
-              }
-            : methodManagement
-              ? { tool: "method.manage", args: {} }
-              : taskRevision
-                ? {
-                    tool: "task.update",
-                    args: {
-                      title: "protocol-fixture-task-update",
-                      status: "done",
-                    },
-                  }
-                : artifactReview
-                  ? { tool: "artifact.review", args: {} }
-                  : configureFollowUp
-                    ? { tool: "follow_up.configure", args: {} }
-                    : followUp
-                      ? { tool: "follow_up.check", args: {} }
-                      : fileReading
-                        ? {
-                            tool: "file.reading.save",
-                            args: {
-                              content:
-                                (fileReadingRevision
-                                  ? "private-native-file-revision-"
-                                  : "private-native-file-reading-") + employee,
-                            },
-                          }
-                        : draftReply
+        usageReport
+          ? { tool: "usage.report", args: {} }
+          : configurePolicy
+            ? { tool: "policy.configure", args: {} }
+            : methodDraft
+              ? {
+                  tool: "method.write",
+                  args: {
+                    title: "Protocol fixture method candidate",
+                    kind: "sop",
+                    content:
+                      "protocol-fixture-method-guidance: check evidence before output.",
+                  },
+                }
+              : methodManagement
+                ? { tool: "method.manage", args: {} }
+                : taskRevision
+                  ? {
+                      tool: "task.update",
+                      args: {
+                        title: "protocol-fixture-task-update",
+                        status: "done",
+                      },
+                    }
+                  : artifactReview
+                    ? { tool: "artifact.review", args: {} }
+                    : configureFollowUp
+                      ? { tool: "follow_up.configure", args: {} }
+                      : followUp
+                        ? { tool: "follow_up.check", args: {} }
+                        : fileReading
                           ? {
-                              tool: "communication.draft",
+                              tool: "file.reading.save",
                               args: {
                                 content:
-                                  "private-native-reply-draft-" + employee,
+                                  (fileReadingRevision
+                                    ? "private-native-file-revision-"
+                                    : "private-native-file-reading-") +
+                                  employee,
                               },
                             }
-                          : revision
+                          : draftReply
                             ? {
-                                tool: "artifact.revise",
+                                tool: "communication.draft",
                                 args: {
                                   content:
-                                    "protocol-fixture-revision " + revision,
+                                    "private-native-reply-draft-" + employee,
                                 },
                               }
-                            : {
-                                tool: "artifact.create",
-                                args: {
-                                  title: "Native runtime test " + employee,
-                                  content:
-                                    "protocol-fixture-model-result " + employee,
+                            : revision
+                              ? {
+                                  tool: "artifact.revise",
+                                  args: {
+                                    content:
+                                      "protocol-fixture-revision " + revision,
+                                  },
+                                }
+                              : {
+                                  tool: "artifact.create",
+                                  args: {
+                                    title: "Native runtime test " + employee,
+                                    content:
+                                      "protocol-fixture-model-result " +
+                                      employee,
+                                  },
                                 },
-                              },
       ],
     });
     if (body.stream) {
@@ -212,6 +219,15 @@ export function modelFixture(
               created: 1,
               model: body.model,
               choices: [choice],
+              ...(choice.finish_reason
+                ? {
+                    usage: {
+                      prompt_tokens: 8,
+                      completion_tokens: 8,
+                      total_tokens: 16,
+                    },
+                  }
+                : {}),
             }) +
             "\n\n",
         );
@@ -825,6 +841,33 @@ export async function exerciseNativeBusiness(
     assert.equal(policyResult.result.receipts[0].scope, "personal");
     assert.equal(policyResult.result.receipts[0].rules.maxOutputTokens, 256);
     assert.equal(policyResult.executionPolicy.effective.maxOutputTokens, 128);
+    const usageRun = await service.startRun(employee.subject, {
+      conversationId: employee.conversation,
+      engine,
+      workflow: "usage_report",
+      instruction: "Read only my actual usage ledger.",
+      modelProfileId: employee.modelId,
+      idempotencyKey: randomUUID(),
+    });
+    allRuns.push(usageRun.id);
+    await processor.process(usageRun.id);
+    const usageResult = await service.getRun(employee.subject, usageRun.id);
+    assert.equal(usageResult.state, "succeeded", usageResult.error);
+    assert.ok(usageResult.result.receipts[0].summary.requests > 0);
+    assert.equal(usageResult.result.receipts[0].summary.incomplete, 0);
+    const requestRows = await db.pool.query(
+      "SELECT run_id,usage_status,input_tokens,output_tokens FROM cw_model_requests WHERE run_id=ANY($1::uuid[])",
+      [allRuns],
+    );
+    assert.ok(requestRows.rowCount! >= allRuns.length);
+    assert.ok(
+      requestRows.rows.every(
+        (row) =>
+          row.usage_status === "reported" &&
+          Number(row.input_tokens) === 8 &&
+          Number(row.output_tokens) === 8,
+      ),
+    );
     assert.deepEqual(fixture.violations, []);
     for (const id of allRuns) {
       const events = JSON.stringify(

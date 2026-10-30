@@ -21,6 +21,8 @@ import { ArtifactReviewService } from "./artifact-reviews.js";
 import { createProjectTask, patchProjectTask, lockTask } from "./tasks.js";
 import { MethodsService } from "./methods.js";
 import { ModelService } from "./models.js";
+import { RunModelGateway } from "./model-gateway.js";
+import { ModelUsageService } from "./model-usage.js";
 import {
   ExecutionPolicyService,
   ExecutionLimitError,
@@ -167,6 +169,7 @@ export class RunProcessor {
     let lastSourceCheck = Date.now();
     const executionPolicy = new ExecutionPolicyService(db);
     let contextBytes: number | undefined;
+    let modelGateway: RunModelGateway | undefined;
     const event = (kind: any, data: Record<string, unknown>) =>
       db.tx((c) => appendEvent(c, runId, kind, data));
     try {
@@ -264,6 +267,17 @@ export class RunProcessor {
       );
       await new MethodsService(db).recordPrepared(subject, run);
       await assertRunScope(this.service, subject, run);
+      const engineModel = modelConnection
+        ? await (modelGateway = new RunModelGateway(
+            modelConnection,
+            runId,
+            abort.signal,
+            async () => {
+              await assertRunScope(this.service, subject, run);
+              return executionPolicy.check(db.pool, subject, run, contextBytes);
+            },
+          )).start()
+        : undefined;
       const result = await adapter.execute({
         runId,
         subject,
@@ -279,7 +293,7 @@ export class RunProcessor {
           ". This changes presentation only; preserve required facts, uncertainty and action receipts.",
         limits,
         workdir,
-        model: modelConnection,
+        model: engineModel,
         signal: abort.signal,
         onProgress: (text) =>
           event("progress.updated", {
@@ -303,29 +317,31 @@ export class RunProcessor {
         run.workflow === "discussion_to_minutes" ||
         run.workflow === "project_report"
           ? ["artifact.create", "project.report"]
-          : run.workflow === "configure_policy"
-            ? ["policy.configure"]
-            : run.workflow === "manage_method"
-              ? [
-                  ["create", "revise"].includes(run.method_plan.operation)
-                    ? "method.write"
-                    : "method.manage",
-                ]
-              : run.workflow === "revise_artifact"
-                ? ["artifact.revise"]
-                : run.workflow === "revise_task"
-                  ? ["task.update"]
-                  : run.workflow === "review_artifact"
-                    ? ["artifact.review"]
-                    : run.workflow === "follow_up"
-                      ? ["follow_up.check"]
-                      : run.workflow === "configure_follow_up"
-                        ? ["follow_up.configure"]
-                        : run.workflow === "draft_reply"
-                          ? ["communication.draft"]
-                          : isFileWorkflow(run.workflow)
-                            ? ["file.reading.save"]
-                            : [];
+          : run.workflow === "usage_report"
+            ? ["usage.report"]
+            : run.workflow === "configure_policy"
+              ? ["policy.configure"]
+              : run.workflow === "manage_method"
+                ? [
+                    ["create", "revise"].includes(run.method_plan.operation)
+                      ? "method.write"
+                      : "method.manage",
+                  ]
+                : run.workflow === "revise_artifact"
+                  ? ["artifact.revise"]
+                  : run.workflow === "revise_task"
+                    ? ["task.update"]
+                    : run.workflow === "review_artifact"
+                      ? ["artifact.review"]
+                      : run.workflow === "follow_up"
+                        ? ["follow_up.check"]
+                        : run.workflow === "configure_follow_up"
+                          ? ["follow_up.configure"]
+                          : run.workflow === "draft_reply"
+                            ? ["communication.draft"]
+                            : isFileWorkflow(run.workflow)
+                              ? ["file.reading.save"]
+                              : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -337,6 +353,8 @@ export class RunProcessor {
         throw new Error("一次方法管理只接受一个明确操作。");
       if (run.workflow === "configure_policy" && result.actions.length !== 1)
         throw new Error("一次执行规则配置只接受一个明确操作。");
+      if (run.workflow === "usage_report" && result.actions.length !== 1)
+        throw new Error("一次用量查询只接受一个实际回读操作。");
       if (run.workflow === "revise_task" && result.actions.length !== 1)
         throw new Error("一次待办修改必须只对应一个明确版本。");
       if (run.workflow === "review_artifact" && result.actions.length !== 1)
@@ -404,6 +422,7 @@ export class RunProcessor {
           run.workflow !== "follow_up" &&
           run.workflow !== "configure_follow_up" &&
           run.workflow !== "configure_policy" &&
+          run.workflow !== "usage_report" &&
           run.workflow !== "review_artifact" &&
           run.workflow !== "revise_task" &&
           run.workflow !== "manage_method" &&
@@ -433,15 +452,17 @@ export class RunProcessor {
                       ? "定时跟进配置已保存。"
                       : run.workflow === "configure_policy"
                         ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
-                        : run.workflow === "review_artifact"
-                          ? "已记录员工对指定成果版本的验收决定。"
-                          : run.workflow === "manage_method"
-                            ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
-                            : run.workflow === "revise_task"
-                              ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                              : isFileWorkflow(run.workflow)
-                                ? "个人文件解读已保存。"
-                                : result.text,
+                        : run.workflow === "usage_report"
+                          ? "已回读本人的模型用量记录；不完整用量与费用仍明确标记为未知。"
+                          : run.workflow === "review_artifact"
+                            ? "已记录员工对指定成果版本的验收决定。"
+                            : run.workflow === "manage_method"
+                              ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                              : run.workflow === "revise_task"
+                                ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                                : isFileWorkflow(run.workflow)
+                                  ? "个人文件解读已保存。"
+                                  : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -486,6 +507,7 @@ export class RunProcessor {
         );
       });
     } finally {
+      await modelGateway?.close();
       clearTimeout(timer);
       clearInterval(heartbeat);
       if (scopeTimer) clearInterval(scopeTimer);
@@ -609,7 +631,16 @@ export class RunProcessor {
       if (!conv && !isFileWorkflow(run.workflow))
         throw new Error("Conversation unavailable.");
       let receipt: Record<string, unknown>;
-      if (action.tool === "policy.configure") {
+      if (action.tool === "usage.report") {
+        z.object({}).strict().parse(action.args);
+        const usage = await new ModelUsageService(this.service.db).view(s);
+        receipt = {
+          tool: "usage.report",
+          summary: usage.summary,
+          costStatus: usage.costStatus,
+          note: usage.note,
+        };
+      } else if (action.tool === "policy.configure") {
         z.object({}).strict().parse(action.args);
         receipt = await new ExecutionPolicyService(this.service.db).apply(
           c,

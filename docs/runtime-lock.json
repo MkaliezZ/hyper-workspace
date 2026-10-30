@@ -276,7 +276,7 @@
     "mapping": "P08 C00/C04 A08 E08 subset"
   },
   "executionPolicy": {
-    "status": "local-verified-ci-pending",
+    "status": "full-ci-verified",
     "mapping": "P03/P04/P07/P08 C05/C07 A01/A10 E03/E04/E09/E10 subset",
     "scopes": [
       "workspace",
@@ -287,7 +287,20 @@
     "controls": "intersected engines/workflows, context bytes, output token cap, duration, business action count and atomic UTC daily admitted-Run counts",
     "authority": "current member/admin roles, exact confirmed AI plan, CAS revision, idempotent audit and admission snapshot; no model-selected policy values",
     "runtimeEvidence": "3 native DSH/Hermes/switch cases include actual HTTP max_tokens=128 and confirmed personal rule application; protocol model only",
-    "localEvidence": "104 database cases (9 new execution-policy cases), 19 unit/configuration, type/build, 3 native runtime cases and all 38 Chromium UI cases passed; desktop/mobile screenshots inspected; CI final result pending",
-    "limits": "not provider request/token/currency accounting; non-Run calls excluded; defaults 100000 context bytes/4096 output tokens/180s/30 business actions; no full C07 or E01-E10 acceptance"
+    "localEvidence": "104 database, 19 unit/configuration, 3 native and 38 Chromium UI passed; desktop/mobile screenshots inspected",
+    "limits": "not provider request/token/currency accounting; non-Run calls excluded; defaults 100000 context bytes/4096 output tokens/180s/30 business actions; no full C07 or E01-E10 acceptance",
+    "evidenceCommit": "8463fb1bfcabcfeffd3e58aee7212e0f34ab4f2d",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41029145378",
+    "evidenceScope": "188 first-attempt checks across three successful jobs; includes real Nextcloud and restricted container deployment; no full C07 or formal E01-E10 acceptance"
+  },
+  "modelUsage": {
+    "status": "local-fully-verified-ci-pending",
+    "mapping": "P04/P07/P08 C02/C05/C07 A10 E07/E09/E10 subset",
+    "implementation": "Per-Run loopback model gateway, scoped ephemeral child credential, original provider credential kept in host; durable request attempts, provider JSON/SSE counters and atomic usage event settlement; direct verification/embedding covered",
+    "scope": "Actor-owned current-day UTC summary and last 30 days/latest 100 requests; manual UI and host-grounded private AI usage.report",
+    "unknowns": "Missing, truncated, invalid, rejected and unsettled requests never fabricate zero usage/cost; input/cache/reasoning counters do not double-count",
+    "realProviderEvidence": "Local configured deepseek-flash: one DSH and one Hermes usage_report Run succeeded, each one completed provider request with reported input/output and settled ledger; synthetic project/own metadata only, private reports not committed",
+    "localEvidence": "22 unit/configuration, all 110 database cases (6 usage cases), 3 native runtime cases and all 39 stable Chromium UI cases passed; desktop/mobile screenshots inspected; first full UI 38 pass/1 interruption during development-server restart preserved, stable rerun 39 pass",
+    "limits": "No price/currency/amount budget, invoice reconciliation, organization financial view, real embedding quality, Safari/Firefox or full E01-E10 claim"
   }
 }

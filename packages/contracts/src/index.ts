@@ -40,6 +40,7 @@ export const Workflow = z.enum([
   "follow_up",
   "configure_follow_up",
   "configure_policy",
+  "usage_report",
   "chat",
   "draft_reply",
   "read_file",
@@ -352,6 +353,7 @@ export interface PlannedAction {
     | "method.write"
     | "method.manage"
     | "policy.configure"
+    | "usage.report"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -401,6 +403,8 @@ export function toolsForWorkflow(
       return ["follow_up.configure"];
     case "configure_policy":
       return ["policy.configure"];
+    case "usage_report":
+      return ["usage.report"];
     case "chat":
       return [];
     case "draft_reply":

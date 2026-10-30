@@ -750,6 +750,13 @@ export class WorkspaceService {
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");
+    const usage = (
+      await this.db.pool.query(
+        `SELECT count(*)::int AS requests,count(*) FILTER(WHERE usage_status='reported')::int AS reported,count(*) FILTER(WHERE usage_status<>'reported')::int AS incomplete,sum(input_tokens)::float8 AS "reportedInputTokens",sum(output_tokens)::float8 AS "reportedOutputTokens" FROM cw_model_requests WHERE run_id=$1 AND workspace_id=$2 AND actor_id=$3`,
+        [id, s.workspaceId, s.id],
+      )
+    ).rows[0];
+    r.rows[0].modelUsage = { ...usage, costStatus: "not-configured" };
     return r.rows[0];
   }
   async events(s: Subject, id: string, after = 0) {
