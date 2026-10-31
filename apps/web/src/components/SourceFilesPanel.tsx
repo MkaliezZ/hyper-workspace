@@ -152,7 +152,7 @@ export function SourceFilesPanel({
       <h3>选择文件，加入个人资料</h3>
       <p className="muted">
         从你有权限的文件中显式选择。支持短文本/Markdown（64 KiB），以及
-        PDF、DOCX、XLSX、PPTX（8 MiB）。提取文本上限 18000 字符；扫描件不执行
+        PDF、DOCX、XLSX、PPTX（8 MiB）。提取文本上限 180000 字符；扫描件不执行
         OCR，不支持加密文件或宏。副本仅你可见，不自动加入项目 AI 上下文。
       </p>
       <form

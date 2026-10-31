@@ -1,3 +1,9 @@
+import { KnowledgeContextService } from "./core/knowledge-context.js";
+import { WorkPlanService } from "./core/work-plans.js";
+import { WorkPlanResponse, WorkProposal } from "@hyper/contracts";
+import { KnowledgePlan } from "@hyper/contracts";
+import { DecisionService } from "./core/decisions.js";
+import { DecisionMutation } from "@hyper/contracts";
 import { DirectoryService } from "./core/directory.js";
 import { TaskAssignmentService } from "./core/task-assignments.js";
 import { TaskAssignmentInput } from "@hyper/contracts";
@@ -550,6 +556,30 @@ class ApiController {
       input.modelProfileId,
     );
   }
+  @Post("knowledge/citation") async knowledgeCitation(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = z
+      .object({
+        assetId: z.uuid(),
+        sourceVersion: z.string().min(1).max(512),
+        start: z.number().int().nonnegative(),
+        end: z.number().int().positive(),
+      })
+      .strict()
+      .parse(body);
+    return new KnowledgeContextService(db).citation(await subject(req), input);
+  }
+  @Post("knowledge/context") async knowledgeContext(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    return new KnowledgeContextService(db).context(
+      await subject(req),
+      KnowledgePlan.parse(body),
+    );
+  }
   @Post("knowledge/semantic") async semanticKnowledge(
     @Req() req: Request,
     @Body() body: unknown,
@@ -565,6 +595,41 @@ class ApiController {
       await subject(req),
       input.query,
       input.modelProfileId,
+    );
+  }
+  @Get("projects/:id/decisions") async decisions(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new DecisionService(db).list(await subject(req), uuid(id));
+  }
+  @Get("projects/:id/decision-sources") async decisionSources(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new DecisionService(db).sources(await subject(req), uuid(id));
+  }
+  @Post("projects/:id/decisions") async mutateDecision(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    return new DecisionService(db).mutate(
+      await subject(req),
+      uuid(id),
+      DecisionMutation.parse(body),
+    );
+  }
+  @Get("decisions/:id") async decision(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Query("beforeVersion") before?: string,
+  ) {
+    return new DecisionService(db).get(
+      await subject(req),
+      uuid(id),
+      undefined,
+      before ? z.coerce.number().int().positive().parse(before) : undefined,
     );
   }
   @Get("talk/rooms") async talkRooms(@Req() req: Request) {
@@ -841,6 +906,46 @@ class ApiController {
   ) {
     return service.cancel(await subject(req), uuid(id));
   }
+  @Get("projects/:id/work-plans") async workPlans(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new WorkPlanService(db).list(await subject(req), uuid(id));
+  }
+  @Get("runs/:id/plan") async workPlan(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new WorkPlanService(db).view(await subject(req), uuid(id));
+  }
+  @Post("runs/:id/plan/responses") async workPlanResponse(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const result = await new WorkPlanService(db).respond(
+      await subject(req),
+      uuid(id),
+      WorkPlanResponse.parse(body),
+    );
+    if (result.state === "queued") await queue.enqueue(result.runId);
+    return result;
+  }
+  @Patch("runs/:id/plan") async editWorkPlan(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const input = z
+      .object({
+        expectedRevision: z.number().int().positive(),
+        proposal: WorkProposal,
+        idempotencyKey: z.uuid(),
+      })
+      .strict()
+      .parse(body);
+    return new WorkPlanService(db).edit(await subject(req), uuid(id), input);
+  }
   @Get("runs/:id/events") async events(
     @Req() req: Request,
     @Res() res: Response,
@@ -933,11 +1038,9 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
       else next();
     });
   } catch (e) {
-    res
-      .status(e instanceof HttpException ? e.getStatus() : 400)
-      .json({
-        message: e instanceof HttpException ? e.message : "上传请求无效。",
-      });
+    res.status(e instanceof HttpException ? e.getStatus() : 400).json({
+      message: e instanceof HttpException ? e.message : "上传请求无效。",
+    });
   }
 });
 if (config.serveWeb) {

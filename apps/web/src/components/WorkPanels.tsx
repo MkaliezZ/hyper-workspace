@@ -11,12 +11,14 @@ import { artifactStatusLabel } from "@hyper/contracts";
 export function ContextPanel({
   view,
   onTask,
+  onDecisions,
   onToggle,
   onArtifact,
   open,
 }: {
   view: WorkspaceView;
   onTask: (t?: string) => void;
+  onDecisions: () => void;
   onToggle: (t: Task) => void;
   onArtifact: (a: Artifact) => void;
   open: boolean;
@@ -30,6 +32,24 @@ export function ContextPanel({
           当前目标
         </h3>
         <p className="goal-box">{view.project.goal}</p>
+      </section>
+      <section>
+        <div className="context-section-title">
+          <h3>关键决定</h3>
+          <button onClick={onDecisions}>管理</button>
+        </div>
+        {view.decisions?.length ? (
+          view.decisions.slice(0, 4).map((row) => (
+            <button className="artifact-row" key={row.id} onClick={onDecisions}>
+              <span>
+                <strong>{row.title}</strong>
+                <small>员工已确认 · v{row.version}</small>
+              </span>
+            </button>
+          ))
+        ) : (
+          <p className="muted small">还没有已确认的决定</p>
+        )}
       </section>
       <section>
         <div className="context-section-title">

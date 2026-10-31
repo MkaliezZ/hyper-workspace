@@ -2279,3 +2279,138 @@ p {
 .local-attachment-upload > button {
   margin: 6px 6px 6px 0;
 }
+
+.decision-layout {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  gap: 20px;
+  margin-top: 18px;
+}
+.decision-panel details {
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}
+.decision-panel details .check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+}
+.decision-panel .check-row input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+.decision-panel .method-editor > button,
+.decision-panel .method-editor > label {
+  margin: 12px 0;
+}
+.decision-panel .method-editor > label {
+  display: block;
+}
+.decision-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+@media (max-width: 800px) {
+  .decision-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .decision-panel .method-list {
+    max-height: 220px;
+    overflow: auto;
+  }
+}
+
+.tabs {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.tabs button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.knowledge-question {
+  border: 1px solid var(--line);
+  background: #f7faff;
+  border-radius: 14px;
+  padding: 18px;
+  margin: 18px 0;
+}
+.knowledge-question .check-row,
+.knowledge-result .check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+}
+.knowledge-question .check-row input,
+.knowledge-result .check-row input {
+  flex: 0 0 auto;
+  width: auto;
+  margin-top: 4px;
+}
+.knowledge-question > button {
+  margin: 6px 8px 6px 0;
+}
+.knowledge-answer {
+  background: white;
+  padding: 14px;
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.knowledge-answer pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.knowledge-answer small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.work-plan-panel {
+  overflow-y: auto;
+  min-height: 0;
+}
+.work-plan-panel > label,
+.work-plan-question,
+.work-plan-editor label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.work-plan-panel select,
+.work-plan-panel input:not([type="checkbox"]),
+.work-plan-panel textarea {
+  max-width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d8e0ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+}
+.work-plan-step,
+.work-plan-editor fieldset {
+  padding: 16px;
+  margin: 14px 0;
+  border: 1px solid #dbe4f2;
+  border-radius: 10px;
+  min-width: 0;
+}
+.work-plan-step p,
+.work-plan-panel h4 {
+  overflow-wrap: anywhere;
+}
+.work-plan-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 350px;
+  overflow: auto;
+}
+.work-plan-panel button {
+  margin: 5px 8px 5px 0;
+}

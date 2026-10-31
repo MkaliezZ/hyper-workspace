@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 
 VERSION = "document-text-v1"
 MAX_BYTES = 8 * 1024 * 1024
-MAX_TEXT = 18000
+MAX_TEXT = 180000
 MAX_SECTIONS = 2000
 
 
@@ -72,9 +72,10 @@ def extract(data, kind):
             return
         if re.search(r"[\x00-\x08\x0e-\x1f]", text):
             raise ExtractionError("文档文本包含不支持的控制字符。")
-        total += len(locator) + len(text) + 5
+        # Match the product's UTF-16 positions and limit, including non-BMP characters.
+        total += len(locator.encode("utf-16-le")) // 2 + len(text.encode("utf-16-le")) // 2 + 5
         if total > MAX_TEXT or len(sections) >= MAX_SECTIONS:
-            raise ExtractionError("文档提取文本超过 18000 字符；尚不支持长文分块。")
+            raise ExtractionError("文档提取文本超过 180000 字符，请缩小资料范围。")
         sections.append({"locator": locator, "text": text})
 
     if kind == "pdf":

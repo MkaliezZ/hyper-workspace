@@ -167,7 +167,11 @@ export class ProjectAccess {
     const messages = (
       await connection.provider.messages(binding.conversation_ref)
     ).messages
-      .filter((message) => message.kind === "comment")
+      .filter(
+        (message) =>
+          message.kind === "comment" &&
+          (!message.expiresAt || Date.parse(message.expiresAt) > Date.now()),
+      )
       .slice(-60);
     return messages.map((message) => {
       const content =

@@ -18,6 +18,7 @@ import { assertMember } from "./security.js";
 import { ProjectAccess } from "./project-access.js";
 import { lockArtifact } from "./artifacts.js";
 import { stableDigest } from "./credentials.js";
+import { DirectoryService, type AssignmentProof } from "./directory.js";
 
 const select = `SELECT m.*,v.title,v.kind,v.content,u.name AS maintainer_name,p.name AS project_name,a.title AS source_title
  FROM cw_methods m JOIN cw_method_versions v ON v.method_id=m.id AND v.version=m.current_version
@@ -185,7 +186,20 @@ export class MethodsService {
       throw new ForbiddenException(
         "来源关联方法仅支持来源项目内发布，不能扩大来源权限。",
       );
-    return { plan, method: output(row, s, role) };
+    const transferProof =
+      plan.operation === "transfer"
+        ? await new DirectoryService(this.db).resolve(
+            s,
+            projectId,
+            plan.maintainerId,
+          )
+        : undefined;
+    if (
+      plan.operation === "transfer" &&
+      row.maintainer_id === plan.maintainerId
+    )
+      throw new ConflictException("此员工已经是当前维护人。");
+    return { plan, method: output(row, s, role), transferProof };
   }
   static checkTransition(
     row: any,
@@ -221,12 +235,14 @@ export class MethodsService {
       )
     ).rows[0];
     if (old) {
-      await this.row(s, old.method_id);
       if (old.input_hash !== hash)
         throw new ConflictException("相同幂等键不能用于不同方法操作。");
+      // The former maintainer may lose candidate visibility immediately on transfer.
+      // Their own immutable receipt remains readable under current project access.
+      if (input.plan.operation !== "transfer") await this.row(s, old.method_id);
       return old.receipt;
     }
-    await this.prepare(s, input.plan, projectId);
+    const prepared = await this.prepare(s, input.plan, projectId);
     return this.db.tx(async (c) => {
       await MethodsService.lockTarget(c, s, input.plan, projectId);
       return MethodsService.apply(
@@ -236,6 +252,8 @@ export class MethodsService {
         input.plan,
         input.draft,
         input.idempotencyKey,
+        undefined,
+        prepared.transferProof,
       );
     });
   }
@@ -264,6 +282,7 @@ export class MethodsService {
     rawDraft: unknown,
     key: string,
     sourceRunId?: string,
+    transferProof?: AssignmentProof,
   ) {
     const plan = MethodPlan.parse(raw);
     const draft = draftOperation(plan)
@@ -338,6 +357,25 @@ export class MethodsService {
         throw new ForbiddenException("当前主体没有方法管理权限。");
       checkVersion(target, plan);
       MethodsService.checkTransition(target, plan, member.role);
+      if (plan.operation === "transfer") {
+        if (target.maintainer_id === plan.maintainerId)
+          throw new ConflictException("此员工已经是当前维护人。");
+        await DirectoryService.validate(
+          c,
+          s,
+          projectId,
+          plan.maintainerId,
+          transferProof,
+        );
+        await c.query("UPDATE cw_methods SET maintainer_id=$2 WHERE id=$1", [
+          id,
+          plan.maintainerId,
+        ]);
+        await c.query("UPDATE cw_assets SET owner_id=$2 WHERE id=$1", [
+          id,
+          plan.maintainerId,
+        ]);
+      }
       if (
         plan.operation === "publish" &&
         plan.scope === "workspace" &&
@@ -414,6 +452,8 @@ export class MethodsService {
       verification: row.verification,
       scope: row.publication_scope,
       maintainerId: row.maintainer_id,
+      previousMaintainerId:
+        plan.operation === "transfer" ? target.maintainer_id : null,
       sourceArtifactId: row.source_artifact_id,
       sourceVersion: row.source_artifact_version,
       evidence: row.verification_evidence,
@@ -424,7 +464,7 @@ export class MethodsService {
       authority:
         plan.operation === "publish" && plan.scope === "workspace"
           ? "workspace_admin"
-          : row.maintainer_id === s.id
+          : (plan.operation === "create" ? row : target).maintainer_id === s.id
             ? "maintainer"
             : "workspace_admin",
       sourceRunId: sourceRunId ?? null,

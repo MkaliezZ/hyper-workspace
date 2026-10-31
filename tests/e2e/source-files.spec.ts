@@ -3,8 +3,8 @@ const id = "50000000-0000-4000-8000-000000000001",
   title = "项目说明.md",
   content = "测试资料：先确认来源与版本，再形成可修改成果。";
 async function start(page: any, request: any) {
-  await request.post("/api/auth/demo", { data: {} });
-  const view = await (await request.get("/api/workspace")).json();
+  await page.request.post("/api/auth/demo", { data: {} });
+  const view = await (await page.request.get("/api/workspace")).json();
   view.user.demo = false;
   view.tasks = [];
   view.artifacts = [];

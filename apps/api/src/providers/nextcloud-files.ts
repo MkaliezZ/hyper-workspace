@@ -22,7 +22,7 @@ import type { NextcloudConfig, SourceCredentials } from "./nextcloud.js";
 const DAV = "DAV:",
   OC = "http://owncloud.org/ns";
 export const MAX_FILE_BYTES = 65536,
-  MAX_FILE_TEXT = 18000;
+  MAX_FILE_TEXT = 180000;
 const DOCUMENT_MIMES: Record<string, string> = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -397,7 +397,7 @@ export class NextcloudFilesProvider implements StorageProvider {
       /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text)
     )
       throw new BadRequestException(
-        "文本为空、包含二进制控制内容或超过 18000 字符。",
+        "文本为空、包含二进制控制内容或超过当前解析限制。",
       );
     return {
       text,

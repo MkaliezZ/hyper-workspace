@@ -311,8 +311,21 @@ export class ExecutionPolicyService {
       run.execution_policy_snapshot.taskRules,
     ]);
     this.assertAllowed(run, effective);
+    const paused =
+      run.workflow === "plan_work"
+        ? Number(
+            (
+              await c.query(
+                "SELECT COALESCE(sum(extract(epoch FROM (COALESCE(ended_at,clock_timestamp())-started_at))*1000),0)::float8 AS ms FROM cw_run_wait_periods WHERE run_id=$1",
+                [run.id],
+              )
+            ).rows[0]?.ms ?? 0,
+          )
+        : 0;
     if (
-      Date.now() - Date.parse(run.execution_policy_snapshot.admittedAt) >
+      Date.now() -
+        Date.parse(run.execution_policy_snapshot.admittedAt) -
+        paused >
       effective.maxDurationSeconds * 1000
     )
       throw new ExecutionLimitError("执行已达到有效时限。");

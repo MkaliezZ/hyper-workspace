@@ -49,12 +49,16 @@ export function MethodsPanel({
       version: number;
     }>();
   const [mode, setMode] = useState("human"),
-    [operation, setOperation] = useState<"verify" | "publish" | "withdraw">(
-      "verify",
-    ),
+    [operation, setOperation] = useState<
+      "verify" | "publish" | "withdraw" | "transfer"
+    >("verify"),
     [evidence, setEvidence] = useState(""),
     [scope, setScope] = useState<"project" | "workspace">("project"),
     [confirmed, setConfirmed] = useState(false);
+  const [people, setPeople] = useState<
+      { id: string; name: string; sourceUid?: string | null }[]
+    >([]),
+    [maintainerId, setMaintainerId] = useState("");
   const [reuseInstruction, setReuseInstruction] = useState("");
   const [instruction, setInstruction] = useState(""),
     [engine, setEngine] = useState("dsh"),
@@ -93,6 +97,26 @@ export function MethodsPanel({
   const manages =
     !!detail?.current.canManage && detail.current.projectId === view.project.id;
   const model = models.find((x) => x.id === modelId);
+  useEffect(() => {
+    setPeople([]);
+    setMaintainerId("");
+    setConfirmed(false);
+    if (operation !== "transfer" || !selected) return;
+    let current = true;
+    void api<any>("/projects/" + view.project.id + "/directory")
+      .then((value) => {
+        if (!current) return;
+        setPeople(
+          value.rows.filter((row: any) => row.id && row.state === "available"),
+        );
+      })
+      .catch((e) => {
+        if (current) setError((e as Error).message);
+      });
+    return () => {
+      current = false;
+    };
+  }, [operation, selected, view.project.id, view.user.id]);
   const incompatible =
     engine !== "fixture" &&
     !!model &&
@@ -279,6 +303,9 @@ export function MethodsPanel({
     if (operation === "verify")
       return { operation, ...target, evidence: evidence.trim() };
     if (operation === "publish") return { operation, ...target, scope };
+    if (operation === "transfer" && maintainerId)
+      return { operation, ...target, maintainerId };
+    if (operation === "transfer") return;
     return { operation, ...target, reason: evidence.trim() };
   }
   async function submit(plan: MethodPlan, writing: boolean, ai: boolean) {
@@ -328,6 +355,13 @@ export function MethodsPanel({
       } else {
         await list();
         if (token !== generation.current || !alive.current) return;
+        if (plan.operation === "transfer" && view.user.role !== "admin") {
+          choose("");
+          setNotice(
+            `维护人已移交，回执 ${value.id} · v${value.version} / r${value.revision}。当前候选内容由新维护人管理。`,
+          );
+          return;
+        }
         if (!selected) {
           choose(value.id);
         } else {
@@ -716,7 +750,7 @@ export function MethodsPanel({
               ) : null}
               {selected ? (
                 <div className="method-management">
-                  <h4>验证、发布与撤回</h4>
+                  <h4>验证、发布、撤回与移交</h4>
                   <p className="muted small">
                     验证是员工基于实际依据的声明，不是模型独立验证。未保存内容或版本冲突时先保存或重新读取。
                   </p>
@@ -734,9 +768,36 @@ export function MethodsPanel({
                       <option value="verify">记录员工验证依据</option>
                       <option value="publish">发布当前方法版本</option>
                       <option value="withdraw">撤回当前方法</option>
+                      <option value="transfer">移交维护人</option>
                     </select>
                   </label>
-                  {operation === "publish" ? (
+                  {operation === "transfer" ? (
+                    <label>
+                      新维护人
+                      <select
+                        aria-label="方法新维护人"
+                        value={maintainerId}
+                        disabled={busy}
+                        onChange={(e) => {
+                          setMaintainerId(e.target.value);
+                          setConfirmed(false);
+                        }}
+                      >
+                        <option value="">选择当前项目可分配员工</option>
+                        {people
+                          .filter((p) => p.id !== detail?.current.maintainerId)
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} · {p.sourceUid ?? p.id}
+                            </option>
+                          ))}
+                      </select>
+                      <small>
+                        按员工 ID
+                        移交；提交时重新核对成员和来源权限。移交不授予项目权限，不改变已发布内容与验证依据。
+                      </small>
+                    </label>
+                  ) : operation === "publish" ? (
                     <label>
                       方法发布范围
                       <select
@@ -790,7 +851,9 @@ export function MethodsPanel({
                       stale ||
                       dirty ||
                       !confirmed ||
-                      (operation !== "publish" && !evidence.trim()) ||
+                      (["verify", "withdraw"].includes(operation) &&
+                        !evidence.trim()) ||
+                      (operation === "transfer" && !maintainerId) ||
                       (mode === "ai" && (pending || incompatible))
                     }
                     onClick={() => {

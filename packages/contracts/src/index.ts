@@ -23,6 +23,7 @@ export const EventKind = z.enum([
   "artifact.updated",
   "task.updated",
   "method.updated",
+  "decision.updated",
   "usage.updated",
   "run.completed",
   "run.failed",
@@ -31,6 +32,7 @@ export const EventKind = z.enum([
 ]);
 export type EventKind = z.infer<typeof EventKind>;
 export const Workflow = z.enum([
+  "plan_work",
   "discussion_to_minutes",
   "project_report",
   "revise_artifact",
@@ -46,12 +48,110 @@ export const Workflow = z.enum([
   "assign_task",
   "directory_report",
   "share_attachment",
+  "manage_decision",
+  "query_knowledge",
   "chat",
   "draft_reply",
   "read_file",
   "revise_file_reading",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
+export const WorkSelector = z
+  .object({
+    name: z.string().trim().min(1).max(300),
+    version: z.number().int().positive().optional(),
+  })
+  .strict();
+export const WorkOperation = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("create_task"),
+      title: z.string().trim().min(1).max(200),
+      assignee: WorkSelector.nullable(),
+      dueDate: z.iso.date().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("update_task"),
+      target: WorkSelector,
+      title: z.string().trim().min(1).max(200).optional(),
+      dueDate: z.iso.date().nullable().optional(),
+      status: z.enum(["open", "done"]).optional(),
+      assignee: WorkSelector.nullable().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("create_artifact"),
+      title: z.string().trim().min(1).max(300),
+      content: z.string().trim().min(1).max(20000),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("revise_artifact"),
+      target: WorkSelector,
+      content: z.string().trim().min(1).max(20000),
+    })
+    .strict(),
+]);
+export type WorkOperation = z.infer<typeof WorkOperation>;
+export const WorkProposal = z
+  .object({
+    summary: z.string().trim().min(1).max(1000),
+    operations: z.array(WorkOperation).min(1).max(6),
+    questions: z.array(z.string().trim().min(1).max(600)).max(6),
+  })
+  .strict()
+  .refine(
+    (value) => JSON.stringify(value).length <= 60000,
+    "工作计划超过 60000 字符。",
+  )
+  .refine(
+    (value) =>
+      value.operations.every(
+        (operation) =>
+          operation.operation !== "update_task" ||
+          ["title", "dueDate", "status", "assignee"].some(
+            (key) => (operation as any)[key] !== undefined,
+          ),
+      ),
+    "待办修改至少指定一个字段。",
+  );
+export type WorkProposal = z.infer<typeof WorkProposal>;
+export const WorkPlanResponse = z
+  .object({
+    expectedRevision: z.number().int().positive(),
+    answers: z
+      .array(
+        z
+          .object({
+            key: z.string().max(60),
+            text: z.string().trim().min(1).max(4000),
+          })
+          .strict(),
+      )
+      .max(6)
+      .default([]),
+    selections: z
+      .array(
+        z
+          .object({
+            key: z.string().max(60),
+            id: z.uuid().nullable(),
+            version: z.number().int().positive().optional(),
+          })
+          .strict(),
+      )
+      .max(12)
+      .default([]),
+    confirmed: z.boolean().default(false),
+    regenerate: z.boolean().default(false),
+    idempotencyKey: z.uuid(),
+  })
+  .strict();
+export type WorkPlanResponse = z.infer<typeof WorkPlanResponse>;
 export const TaskAssignmentPlan = z
   .object({
     taskId: z.uuid(),
@@ -248,6 +348,14 @@ const methodTarget = {
 export const MethodPlan = z.discriminatedUnion("operation", [
   z
     .object({
+      operation: z.literal("transfer"),
+      ...methodTarget,
+      maintainerId: z.uuid(),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
       operation: z.literal("create"),
       sourceArtifactId: z.uuid(),
       expectedSourceVersion: z.number().int().positive(),
@@ -348,6 +456,8 @@ export const RunInput = z
     briefRef: BriefReference.optional(),
     taskAssignmentPlan: TaskAssignmentPlan.optional(),
     attachmentPlan: z.lazy(() => AttachmentSendPlan).optional(),
+    decisionPlan: z.lazy(() => DecisionPlan).optional(),
+    knowledgePlan: z.lazy(() => KnowledgePlan).optional(),
     taskRules: ExecutionRules.omit({ dailyRuns: true }).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
@@ -468,6 +578,7 @@ export interface RunEvent {
 }
 export interface PlannedAction {
   tool:
+    | "work.plan"
     | "artifact.create"
     | "artifact.revise"
     | "artifact.review"
@@ -483,6 +594,9 @@ export interface PlannedAction {
     | "task.assign"
     | "directory.read"
     | "attachment.share"
+    | "decision.write"
+    | "decision.manage"
+    | "knowledge.answer"
     | "project.report"
     | "follow_up.check"
     | "follow_up.configure"
@@ -514,6 +628,8 @@ export function toolsForWorkflow(
   workflow: Workflow,
 ): readonly PlannedAction["tool"][] {
   switch (workflow) {
+    case "plan_work":
+      return ["work.plan"];
     case "discussion_to_minutes":
       return ["artifact.create", "task.create"];
     case "project_report":
@@ -542,6 +658,10 @@ export function toolsForWorkflow(
       return ["task.assign"];
     case "directory_report":
       return ["directory.read"];
+    case "query_knowledge":
+      return ["knowledge.answer"];
+    case "manage_decision":
+      return ["decision.write", "decision.manage"];
     case "share_attachment":
       return ["attachment.share"];
     case "chat":
@@ -611,6 +731,12 @@ export interface WorkspaceView {
   messages: Message[];
   tasks: Task[];
   artifacts: Artifact[];
+  decisions?: {
+    id: string;
+    title: string;
+    version: number;
+    confirmedBy: string;
+  }[];
   engines: Record<string, EngineCapabilities>;
 }
 
@@ -790,3 +916,97 @@ export const FileReadingRevision = z
     expectedVersion: z.number().int().positive(),
   })
   .strict();
+
+export const DecisionDraft = z
+  .object({
+    title: z.string().trim().min(1).max(300),
+    content: z.string().trim().min(1).max(8000),
+    rationale: z.string().trim().max(2000).default(""),
+    links: z
+      .array(
+        z
+          .object({
+            kind: z.enum(["task", "artifact"]),
+            id: z.uuid(),
+            version: z.number().int().positive(),
+          })
+          .strict(),
+      )
+      .max(20)
+      .default([]),
+  })
+  .strict();
+export type DecisionDraft = z.infer<typeof DecisionDraft>;
+const DecisionTarget = {
+  decisionId: z.uuid(),
+  expectedVersion: z.number().int().positive(),
+};
+export const DecisionPlan = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("create") }).strict(),
+  z.object({ operation: z.literal("revise"), ...DecisionTarget }).strict(),
+  z
+    .object({
+      operation: z.literal("confirm"),
+      ...DecisionTarget,
+      confirmed: z.literal(true),
+      supersedes: z
+        .object({ id: z.uuid(), version: z.number().int().positive() })
+        .strict()
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("withdraw"),
+      ...DecisionTarget,
+      confirmed: z.literal(true),
+    })
+    .strict(),
+]);
+export type DecisionPlan = z.infer<typeof DecisionPlan>;
+export const DecisionSourceRefs = z.array(z.string().min(1).max(1024)).max(120);
+export const DecisionMutation = z
+  .object({
+    plan: DecisionPlan,
+    draft: DecisionDraft.optional(),
+    sourceRefs: DecisionSourceRefs.default([]),
+    idempotencyKey: z.uuid(),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      ["create", "revise"].includes(input.plan.operation) === !!input.draft,
+    "决定内容与操作不匹配。",
+  );
+export type DecisionMutation = z.infer<typeof DecisionMutation>;
+export interface DecisionReceipt {
+  tool: "decision.write" | "decision.manage";
+  id: string;
+  version: number;
+  state: "proposed" | "confirmed" | "withdrawn" | "superseded";
+  sourceRunId: string | null;
+  superseded?: { id: string; version: number };
+}
+
+export const KnowledgePlan = z
+  .object({
+    query: z.string().trim().min(1).max(4000),
+    assetRefs: z
+      .array(
+        z
+          .object({ id: z.uuid(), sourceVersion: z.string().min(1).max(512) })
+          .strict(),
+      )
+      .min(1)
+      .max(10),
+    mode: z.enum(["keyword", "semantic"]).default("keyword"),
+    embeddingProfileId: z.uuid().optional(),
+  })
+  .strict()
+  .refine(
+    (plan) =>
+      new Set(plan.assetRefs.map((ref) => ref.id)).size ===
+      plan.assetRefs.length,
+    "重复的资料引用。",
+  );
+export type KnowledgePlan = z.infer<typeof KnowledgePlan>;

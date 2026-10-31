@@ -165,6 +165,127 @@ const result = (tool: string, args: any) => ({
   evidence: "fixture",
 });
 
+test("Maintainer transfer binds an exact member, preserves content and verification, removes old candidate access and replays the former owner's own receipt", async () => {
+  const f = await setup(),
+    created = await f.create(),
+    key = randomUUID();
+  const plan: MethodPlan = {
+    operation: "transfer",
+    ...f.target(created),
+    maintainerId: f.peer.id,
+    confirmed: true,
+  };
+  const [receipt, duplicate] = await Promise.all([
+    f.record(plan, f.owner, undefined, key),
+    f.record(plan, f.owner, undefined, key),
+  ]);
+  assert.deepEqual(receipt, duplicate);
+  assert.equal(receipt.previousMaintainerId, f.owner.id);
+  assert.equal(receipt.maintainerId, f.peer.id);
+  assert.equal(receipt.authority, "maintainer");
+  assert.equal(receipt.version, 1);
+  assert.equal(receipt.revision, 2);
+  const view = await f.methods.get(f.peer, created.id);
+  assert.equal(view.current.content, draft.content);
+  assert.equal(view.current.canManage, true);
+  assert.equal(view.versions.length, 1);
+  assert.equal(
+    (
+      await db.pool.query("SELECT owner_id FROM cw_assets WHERE id=$1", [
+        created.id,
+      ])
+    ).rows[0].owner_id,
+    f.peer.id,
+  );
+  await assert.rejects(() => f.methods.get(f.owner, created.id));
+  await assert.rejects(() =>
+    f.record({ operation: "revise", ...f.target(receipt) }, f.owner, draft),
+  );
+  assert.deepEqual(await f.record(plan, f.owner, undefined, key), receipt);
+  await assert.rejects(
+    () =>
+      f.record({ ...plan, maintainerId: f.admin.id }, f.owner, undefined, key),
+    /幂等/,
+  );
+  await assert.rejects(
+    () =>
+      f.record(
+        { ...plan, ...f.target(receipt), maintainerId: f.peer.id },
+        f.peer,
+      ),
+    /已经/,
+  );
+  const next = await f.record(
+    { operation: "revise", ...f.target(receipt) },
+    f.peer,
+    { ...draft, content: "New maintainer revision" },
+  );
+  assert.equal(next.version, 2);
+  await assert.rejects(() => f.record(plan, f.admin), /变化/);
+});
+
+test("AI maintainer transfer executes the employee plan through the same service and rejects forged arguments or revoked target membership", async () => {
+  const f = await setup(),
+    published = await f.publish(),
+    plan: MethodPlan = {
+      operation: "transfer",
+      ...f.target(published),
+      maintainerId: f.peer.id,
+      confirmed: true,
+    };
+  const r = await f.start(plan);
+  await f.processor.process(r.id);
+  const done = await f.service.getRun(f.owner, r.id);
+  assert.equal(done.state, "succeeded");
+  const receipt = done.result.receipts[0];
+  assert.equal(receipt.maintainerId, f.peer.id);
+  assert.equal(receipt.state, "published");
+  assert.equal(receipt.verification, "employee_verified");
+  assert.equal(receipt.scope, "project");
+  const reject = await setup(async () =>
+    result("method.manage", { maintainerId: randomUUID() }),
+  );
+  const candidate = await reject.create();
+  const bad = await reject.start({
+    operation: "transfer",
+    ...reject.target(candidate),
+    maintainerId: reject.peer.id,
+    confirmed: true,
+  });
+  await reject.processor.process(bad.id);
+  assert.equal(
+    (await reject.service.getRun(reject.owner, bad.id)).state,
+    "failed",
+  );
+  assert.equal(
+    (await reject.methods.get(reject.owner, candidate.id)).current.maintainerId,
+    reject.owner.id,
+  );
+  const revoked = await f.service.startRun(f.peer, {
+    conversationId: f.project.conversationId,
+    engine: "fixture",
+    workflow: "manage_method",
+    instruction: "Transfer only this exact version",
+    methodPlan: {
+      operation: "transfer",
+      ...f.target(receipt),
+      maintainerId: f.owner.id,
+      confirmed: true,
+    },
+    idempotencyKey: randomUUID(),
+  });
+  await db.pool.query(
+    "DELETE FROM cw_members WHERE workspace_id=$1 AND user_id=$2",
+    [f.peer.workspaceId, f.owner.id],
+  );
+  await f.processor.process(revoked.id);
+  assert.equal((await f.service.getRun(f.peer, revoked.id)).state, "failed");
+  assert.equal(
+    (await f.methods.get(f.peer, published.id)).current.maintainerId,
+    f.peer.id,
+  );
+});
+
 test("Concurrent human method creation replays one canonical receipt and preserves the original source snapshot after later source edits", async () => {
   const f = await setup(),
     key = randomUUID();

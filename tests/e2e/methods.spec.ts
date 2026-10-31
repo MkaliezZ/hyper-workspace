@@ -61,6 +61,71 @@ async function seed(page: Page) {
     .selectOption(artifact.id);
   return { project, next, artifact, panel };
 }
+test("Maintainer transfer displays identity choices and preserves a versioned manual receipt on desktop/mobile", async ({
+  page,
+}) => {
+  const { panel } = await seed(page);
+  await panel
+    .getByRole("textbox", { name: "方法标题", exact: true })
+    .fill("合成：维护人移交");
+  await panel
+    .getByRole("textbox", { name: "方法内容", exact: true })
+    .fill("这是界面验收资料，非企业制度。");
+  await panel
+    .getByRole("button", { name: "保存候选方法", exact: true })
+    .click();
+  await expect(
+    panel.getByRole("button", {
+      name: "打开方法：合成：维护人移交",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await panel
+    .getByRole("combobox", { name: "方法管理操作", exact: true })
+    .selectOption("transfer");
+  const person = panel.getByRole("combobox", {
+    name: "方法新维护人",
+    exact: true,
+  });
+  await expect(person.locator("option")).toHaveCount(2);
+  await expect(
+    panel.getByRole("button", { name: "执行已确认操作", exact: true }),
+  ).toBeDisabled();
+  await person.selectOption("00000000-0000-4000-8000-000000000012");
+  await panel
+    .getByRole("checkbox", {
+      name: "我已核对当前方法版本、依据和范围，确认上述管理操作",
+      exact: true,
+    })
+    .check();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(person).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().includes("/methods/actions") &&
+      response.request().method() === "POST",
+  );
+  await panel
+    .getByRole("button", { name: "执行已确认操作", exact: true })
+    .click();
+  const response = await saved;
+  expect(response.status()).toBe(201);
+  const receipt = await response.json();
+  expect(receipt.operation).toBe("transfer");
+  expect(receipt.maintainerId).toBe("00000000-0000-4000-8000-000000000012");
+  expect(receipt.version).toBe(1);
+  expect(receipt.revision).toBe(2);
+  const detail = await (
+    await page.request.get("/api/methods/" + receipt.id)
+  ).json();
+  expect(detail.current.maintainerName).toBe("陈远");
+  expect(detail.versions).toHaveLength(1);
+});
 test("Manual candidate verification, publication, actual worker reuse and withdrawal preserve versions and stay usable on desktop/mobile", async ({
   page,
 }) => {

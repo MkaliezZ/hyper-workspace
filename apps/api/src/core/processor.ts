@@ -1,3 +1,8 @@
+import { BadRequestException } from "@nestjs/common";
+import { KnowledgeContextService } from "./knowledge-context.js";
+import { WorkPlanService } from "./work-plans.js";
+import { DecisionService } from "./decisions.js";
+import { DecisionDraft } from "@hyper/contracts";
 import { TaskAssignmentService } from "./task-assignments.js";
 import { DirectoryService } from "./directory.js";
 import { AttachmentSendService } from "./attachment-sends.js";
@@ -21,7 +26,11 @@ import { Database } from "../db/database.js";
 import { WorkspaceService, appendEvent } from "./workspace.js";
 import { assertMember } from "./security.js";
 import { stableDigest } from "./credentials.js";
-import { reviseArtifactVersion, lockArtifact } from "./artifacts.js";
+import {
+  createProjectArtifact,
+  reviseArtifactVersion,
+  lockArtifact,
+} from "./artifacts.js";
 import { ArtifactReviewService } from "./artifact-reviews.js";
 import { createProjectTask, patchProjectTask, lockTask } from "./tasks.js";
 import { MethodsService } from "./methods.js";
@@ -51,7 +60,7 @@ async function purgeFileRuntime(db: Database, id: string) {
     force: true,
   });
   await db.pool.query(
-    "UPDATE cw_runs SET runtime_cleaned_at=clock_timestamp() WHERE id=$1 AND source_file_asset_id IS NOT NULL",
+    "UPDATE cw_runs SET runtime_cleaned_at=clock_timestamp() WHERE id=$1 AND (source_file_asset_id IS NOT NULL OR workflow IN ('query_knowledge','plan_work'))",
     [id],
   );
 }
@@ -116,7 +125,7 @@ export class RunProcessor {
       await this.enqueue(r.id);
     for (const r of (
       await db.pool.query(
-        "SELECT id FROM cw_runs WHERE source_file_asset_id IS NOT NULL AND runtime_cleaned_at IS NULL AND state NOT IN ('queued','running') ORDER BY updated_at LIMIT 100",
+        "SELECT id FROM cw_runs WHERE (source_file_asset_id IS NOT NULL OR workflow IN ('query_knowledge','plan_work')) AND runtime_cleaned_at IS NULL AND state NOT IN ('queued','running') ORDER BY updated_at LIMIT 100",
       )
     ).rows)
       await purgeFileRuntime(db, r.id);
@@ -146,7 +155,7 @@ export class RunProcessor {
       lease = randomUUID();
     const run = (
       await db.pool.query(
-        "UPDATE cw_runs SET state='running',lease_owner=$2,lease_expires_at=now()+interval '45 seconds',updated_at=now() WHERE id=$1 AND state='queued' RETURNING *",
+        "UPDATE cw_runs SET state='running',lease_owner=$2,lease_expires_at=now()+interval '45 seconds',runtime_cleaned_at=CASE WHEN workflow='plan_work' THEN NULL ELSE runtime_cleaned_at END,updated_at=now() WHERE id=$1 AND state='queued' RETURNING *",
         [runId, lease],
       )
     ).rows[0];
@@ -193,6 +202,11 @@ export class RunProcessor {
         identityCredentialId: run.identity_credential_id ?? undefined,
       };
       await assertMember(db, subject);
+      if (run.workflow === "plan_work")
+        await db.pool.query(
+          "UPDATE cw_run_wait_periods SET ended_at=clock_timestamp() WHERE run_id=$1 AND ended_at IS NULL",
+          [run.id],
+        );
       run.execution_policy_snapshot = await executionPolicy.admit(subject, run);
       await event("run.started", {
         engine: run.engine,
@@ -304,9 +318,14 @@ export class RunProcessor {
         signal: abort.signal,
         onProgress: (text) =>
           event("progress.updated", {
-            text: isFileWorkflow(run.workflow)
-              ? "正在阅读所选个人文件。"
-              : text,
+            text:
+              run.workflow === "plan_work"
+                ? "正在核对工作范围并整理待确认计划。"
+                : run.workflow === "query_knowledge"
+                  ? "正在核对已选资料并生成私人回答。"
+                  : isFileWorkflow(run.workflow)
+                    ? "正在阅读所选个人文件。"
+                    : text,
           }),
       });
       abort.signal.throwIfAborted();
@@ -320,51 +339,81 @@ export class RunProcessor {
       const allowed = toolsForWorkflow(run.workflow);
       if (result.actions.some((action) => !allowed.includes(action.tool)))
         throw new Error("本次工作类型未授权该业务动作。");
+      if (run.workflow === "plan_work") {
+        if (
+          result.actions.length !== 1 ||
+          result.actions[0]?.tool !== "work.plan"
+        )
+          throw new BadRequestException("一次工作理解只能保存一个待确认计划。");
+        await assertRunScope(this.service, subject, run);
+        abort.signal.throwIfAborted();
+        await new WorkPlanService(db).propose(
+          subject,
+          run,
+          result.actions[0].args,
+          sourceIds,
+          contextRefs,
+          contextBytes,
+          result.evidence,
+          lease,
+        );
+        return;
+      }
       const required =
-        run.workflow === "share_attachment"
-          ? ["attachment.share"]
-          : run.workflow === "discussion_to_minutes" ||
-              run.workflow === "project_report"
-            ? ["artifact.create", "project.report"]
-            : run.workflow === "assign_task"
-              ? ["task.assign"]
-              : run.workflow === "directory_report"
-                ? ["directory.read"]
-                : run.workflow === "manage_brief"
-                  ? [
-                      ["create", "revise"].includes(run.brief_plan.operation)
-                        ? "brief.write"
-                        : "brief.manage",
-                    ]
-                  : run.workflow === "manage_spending"
-                    ? ["spending.manage"]
-                    : run.workflow === "usage_report"
-                      ? ["usage.report"]
-                      : run.workflow === "configure_policy"
-                        ? ["policy.configure"]
-                        : run.workflow === "manage_method"
-                          ? [
-                              ["create", "revise"].includes(
-                                run.method_plan.operation,
-                              )
-                                ? "method.write"
-                                : "method.manage",
-                            ]
-                          : run.workflow === "revise_artifact"
-                            ? ["artifact.revise"]
-                            : run.workflow === "revise_task"
-                              ? ["task.update"]
-                              : run.workflow === "review_artifact"
-                                ? ["artifact.review"]
-                                : run.workflow === "follow_up"
-                                  ? ["follow_up.check"]
-                                  : run.workflow === "configure_follow_up"
-                                    ? ["follow_up.configure"]
-                                    : run.workflow === "draft_reply"
-                                      ? ["communication.draft"]
-                                      : isFileWorkflow(run.workflow)
-                                        ? ["file.reading.save"]
-                                        : [];
+        run.workflow === "query_knowledge"
+          ? ["knowledge.answer"]
+          : run.workflow === "manage_decision"
+            ? [
+                ["create", "revise"].includes(run.decision_plan.operation)
+                  ? "decision.write"
+                  : "decision.manage",
+              ]
+            : run.workflow === "share_attachment"
+              ? ["attachment.share"]
+              : run.workflow === "discussion_to_minutes" ||
+                  run.workflow === "project_report"
+                ? ["artifact.create", "project.report"]
+                : run.workflow === "assign_task"
+                  ? ["task.assign"]
+                  : run.workflow === "directory_report"
+                    ? ["directory.read"]
+                    : run.workflow === "manage_brief"
+                      ? [
+                          ["create", "revise"].includes(
+                            run.brief_plan.operation,
+                          )
+                            ? "brief.write"
+                            : "brief.manage",
+                        ]
+                      : run.workflow === "manage_spending"
+                        ? ["spending.manage"]
+                        : run.workflow === "usage_report"
+                          ? ["usage.report"]
+                          : run.workflow === "configure_policy"
+                            ? ["policy.configure"]
+                            : run.workflow === "manage_method"
+                              ? [
+                                  ["create", "revise"].includes(
+                                    run.method_plan.operation,
+                                  )
+                                    ? "method.write"
+                                    : "method.manage",
+                                ]
+                              : run.workflow === "revise_artifact"
+                                ? ["artifact.revise"]
+                                : run.workflow === "revise_task"
+                                  ? ["task.update"]
+                                  : run.workflow === "review_artifact"
+                                    ? ["artifact.review"]
+                                    : run.workflow === "follow_up"
+                                      ? ["follow_up.check"]
+                                      : run.workflow === "configure_follow_up"
+                                        ? ["follow_up.configure"]
+                                        : run.workflow === "draft_reply"
+                                          ? ["communication.draft"]
+                                          : isFileWorkflow(run.workflow)
+                                            ? ["file.reading.save"]
+                                            : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -385,6 +434,10 @@ export class RunProcessor {
         result.actions.length !== 1
       )
         throw new Error("一次成员操作只接受一个明确动作。");
+      if (run.workflow === "query_knowledge" && result.actions.length !== 1)
+        throw new Error("一次资料问答只接受一个带来源的回答。");
+      if (run.workflow === "manage_decision" && result.actions.length !== 1)
+        throw new Error("一次决定操作只接受一个动作。");
       if (run.workflow === "manage_brief" && result.actions.length !== 1)
         throw new Error("一次任务说明操作只接受一个明确动作。");
       if (run.workflow === "manage_spending" && result.actions.length !== 1)
@@ -474,6 +527,8 @@ export class RunProcessor {
           run.workflow !== "usage_report" &&
           run.workflow !== "manage_spending" &&
           run.workflow !== "manage_brief" &&
+          run.workflow !== "manage_decision" &&
+          run.workflow !== "query_knowledge" &&
           run.workflow !== "assign_task" &&
           run.workflow !== "directory_report" &&
           run.workflow !== "share_attachment" &&
@@ -498,35 +553,39 @@ export class RunProcessor {
             runId,
             {
               text:
-                run.workflow === "draft_reply"
-                  ? "回复草稿已保存，尚未发送。"
-                  : run.workflow === "follow_up"
-                    ? receipts[0]!.summary
-                    : run.workflow === "configure_follow_up"
-                      ? "定时跟进配置已保存。"
-                      : run.workflow === "configure_policy"
-                        ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
-                        : run.workflow === "share_attachment"
-                          ? "附件分享消息已在来源回读；分享的是活文件引用，不表示收件人已阅读。"
-                          : run.workflow === "assign_task"
-                            ? "已按明确员工身份保存分配记录；不表示已通知该员工或扩大权限。"
-                            : run.workflow === "directory_report"
-                              ? "已回读当前项目成员目录；未自动建号或授予权限。"
-                              : run.workflow === "manage_brief"
-                                ? "任务说明操作已保存；仍需完成必要澄清并确认当前版本后才能按说明执行。"
-                                : run.workflow === "usage_report"
-                                  ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
-                                  : run.workflow === "manage_spending"
-                                    ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
-                                    : run.workflow === "review_artifact"
-                                      ? "已记录员工对指定成果版本的验收决定。"
-                                      : run.workflow === "manage_method"
-                                        ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
-                                        : run.workflow === "revise_task"
-                                          ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                                          : isFileWorkflow(run.workflow)
-                                            ? "个人文件解读已保存。"
-                                            : result.text,
+                run.workflow === "query_knowledge"
+                  ? "私人资料回答已保存，请核对引用和片段覆盖范围。"
+                  : run.workflow === "manage_decision"
+                    ? "决定对象已按实际回执保存；待确认提议不表示团队已采纳。"
+                    : run.workflow === "draft_reply"
+                      ? "回复草稿已保存，尚未发送。"
+                      : run.workflow === "follow_up"
+                        ? receipts[0]!.summary
+                        : run.workflow === "configure_follow_up"
+                          ? "定时跟进配置已保存。"
+                          : run.workflow === "configure_policy"
+                            ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
+                            : run.workflow === "share_attachment"
+                              ? "附件分享消息已在来源回读；分享的是活文件引用，不表示收件人已阅读。"
+                              : run.workflow === "assign_task"
+                                ? "已按明确员工身份保存分配记录；不表示已通知该员工或扩大权限。"
+                                : run.workflow === "directory_report"
+                                  ? "已回读当前项目成员目录；未自动建号或授予权限。"
+                                  : run.workflow === "manage_brief"
+                                    ? "任务说明操作已保存；仍需完成必要澄清并确认当前版本后才能按说明执行。"
+                                    : run.workflow === "usage_report"
+                                      ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
+                                      : run.workflow === "manage_spending"
+                                        ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
+                                        : run.workflow === "review_artifact"
+                                          ? "已记录员工对指定成果版本的验收决定。"
+                                          : run.workflow === "manage_method"
+                                            ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                                            : run.workflow === "revise_task"
+                                              ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                                              : isFileWorkflow(run.workflow)
+                                                ? "个人文件解读已保存。"
+                                                : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -561,16 +620,24 @@ export class RunProcessor {
             ? "recovery_required"
             : "failed";
         const failure = modelGateway?.denial ?? error;
-        const message = isFileWorkflow(run.workflow)
-          ? failure instanceof ReadingVersionConflict ||
-            failure instanceof ReadingInputLimit ||
-            failure instanceof ExecutionLimitError ||
-            failure instanceof SpendLimitError
+        const message = ["query_knowledge", "plan_work"].includes(run.workflow)
+          ? failure instanceof ExecutionLimitError ||
+            failure instanceof SpendLimitError ||
+            failure instanceof BadRequestException
             ? failure.message
-            : "文件阅读未完成，请检查来源、模型或重新发起。"
-          : failure instanceof Error
-            ? failure.message
-            : "执行失败。";
+            : run.workflow === "plan_work"
+              ? "工作计划未完成，请核对来源、模型和当前权限。"
+              : "资料问答未完成，请核对来源、模型和实际引用。"
+          : isFileWorkflow(run.workflow)
+            ? failure instanceof ReadingVersionConflict ||
+              failure instanceof ReadingInputLimit ||
+              failure instanceof ExecutionLimitError ||
+              failure instanceof SpendLimitError
+              ? failure.message
+              : "文件阅读未完成，请检查来源、模型或重新发起。"
+            : failure instanceof Error
+              ? failure.message
+              : "执行失败。";
         await c.query(
           "UPDATE cw_runs SET state=$2,error=$3,updated_at=now(),lease_expires_at=NULL WHERE id=$1",
           [runId, state, message],
@@ -587,7 +654,10 @@ export class RunProcessor {
       clearTimeout(timer);
       clearInterval(heartbeat);
       if (scopeTimer) clearInterval(scopeTimer);
-      if (isFileWorkflow(run.workflow))
+      if (
+        isFileWorkflow(run.workflow) ||
+        ["query_knowledge", "plan_work"].includes(run.workflow)
+      )
         await purgeFileRuntime(db, runId).catch(() =>
           console.error(
             "Private runtime cleanup failed; inspect runtime storage.",
@@ -669,6 +739,37 @@ export class RunProcessor {
         ? await new DirectoryService(this.service.db).read(
             s,
             memberScope.project_id,
+          )
+        : undefined;
+    const decisionService = action.tool.startsWith("decision.")
+      ? new DecisionService(this.service.db)
+      : undefined;
+    const decisionScope = decisionService
+      ? await this.service.conversation(s, run.conversation_id)
+      : undefined;
+    const decisionProof = decisionService
+      ? await decisionService.prepare(
+          s,
+          decisionScope.project_id,
+          run.decision_plan,
+          sourceIds,
+        )
+      : undefined;
+    const knowledgeService =
+      action.tool === "knowledge.answer"
+        ? new KnowledgeContextService(this.service.db)
+        : undefined;
+    const knowledgeProof = knowledgeService
+      ? await knowledgeService.prepare(s, run.knowledge_plan)
+      : undefined;
+    const methodTransfer =
+      action.tool === "method.manage" &&
+      run.method_plan?.operation === "transfer"
+        ? await new MethodsService(this.service.db).prepare(
+            s,
+            run.method_plan,
+            (await this.service.conversation(s, run.conversation_id))
+              .project_id,
           )
         : undefined;
     return this.service.db.tx(async (c) => {
@@ -767,6 +868,13 @@ export class RunProcessor {
           run.source_file_asset_id,
           run.expected_file_version,
         );
+      if (knowledgeService)
+        await knowledgeService.lockSources(
+          c,
+          s,
+          run.knowledge_plan,
+          knowledgeProof!,
+        );
       const current = (
         await c.query(
           "SELECT state,lease_owner FROM cw_runs WHERE id=$1 FOR UPDATE",
@@ -802,7 +910,42 @@ export class RunProcessor {
       if (!conv && !isFileWorkflow(run.workflow))
         throw new Error("Conversation unavailable.");
       let receipt: Record<string, unknown>;
-      if (action.tool === "task.assign") {
+      if (action.tool === "knowledge.answer") {
+        const answer = z
+          .object({ content: z.string().trim().min(1).max(20000) })
+          .strict()
+          .parse(action.args);
+        receipt = await knowledgeService!.save(
+          c,
+          s,
+          run,
+          answer.content,
+          sourceIds,
+        );
+      } else if (
+        action.tool === "decision.write" ||
+        action.tool === "decision.manage"
+      ) {
+        const writing = ["create", "revise"].includes(
+          run.decision_plan.operation,
+        );
+        if ((action.tool === "decision.write") !== writing)
+          throw new Error("决定工具与员工选定操作不符。");
+        if (!writing) z.object({}).strict().parse(action.args);
+        receipt = {
+          ...(await decisionService!.apply(
+            c,
+            s,
+            conv.project_id,
+            run.decision_plan,
+            writing ? DecisionDraft.parse(action.args) : undefined,
+            decisionProof!,
+            "decision:" + run.id,
+            run.id,
+          )),
+        };
+        await appendEvent(c, run.id, "decision.updated", receipt);
+      } else if (action.tool === "task.assign") {
         z.object({}).strict().parse(action.args);
         receipt = await new TaskAssignmentService(this.service.db).apply(
           c,
@@ -901,6 +1044,7 @@ export class RunProcessor {
           writing ? action.args : undefined,
           run.id + ":" + index,
           run.id,
+          methodTransfer?.transferProof,
         );
         await appendEvent(c, run.id, "method.updated", receipt);
       } else if (action.tool === "task.update") {
@@ -935,28 +1079,16 @@ export class RunProcessor {
           content.length > 100000
         )
           throw new Error("成果内容无效。");
-        const id = randomUUID();
-        await c.query(
-          "INSERT INTO cw_artifacts(id,workspace_id,project_id,title,created_by) VALUES($1,$2,$3,$4,$5)",
-          [id, s.workspaceId, conv.project_id, title, s.id],
-        );
-        await c.query(
-          "INSERT INTO cw_artifact_versions(artifact_id,version,content,source_message_ids,created_by) VALUES($1,1,$2,$3,$4)",
-          [id, content, JSON.stringify(sourceIds), s.id],
-        );
-        await c.query(
-          "INSERT INTO cw_assets(id,workspace_id,project_id,owner_id,title,content,type,source_ref,source_version) VALUES($1,$2,$3,$4,$5,$6,'artifact',$7,'1')",
-          [
-            randomUUID(),
-            s.workspaceId,
+        receipt = {
+          tool: action.tool,
+          ...(await createProjectArtifact(
+            c,
+            s,
             conv.project_id,
-            s.id,
-            title,
-            content,
-            "artifact:" + id,
-          ],
-        );
-        receipt = { tool: action.tool, id, title, version: 1 };
+            { title, content },
+            sourceIds,
+          )),
+        };
         await appendEvent(c, run.id, "artifact.updated", receipt);
       } else if (action.tool === "artifact.review") {
         z.object({}).strict().parse(action.args);

@@ -4,8 +4,60 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { randomUUID } from "node:crypto";
 import { ArtifactRevision, type Subject } from "@hyper/contracts";
 import { refreshArtifactIndex } from "./knowledge.js";
+export async function createProjectArtifact(
+  c: PoolClient,
+  s: Subject,
+  projectId: string,
+  input: { title: string; content: string },
+  sourceIds: string[] = [],
+) {
+  const member = await c.query(
+    "SELECT 1 FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+    [s.workspaceId, s.id],
+  );
+  if (!member.rowCount) throw new ForbiddenException("工作区权限已撤销。");
+  if (
+    !(
+      await c.query(
+        "SELECT id FROM cw_projects WHERE workspace_id=$1 AND id=$2 FOR KEY SHARE",
+        [s.workspaceId, projectId],
+      )
+    ).rowCount
+  )
+    throw new NotFoundException("项目不可访问。");
+  if (
+    !input.title.trim() ||
+    input.title.length > 300 ||
+    !input.content.trim() ||
+    input.content.length > 100000
+  )
+    throw new ConflictException("成果标题或正文超出允许范围。");
+  const id = randomUUID();
+  await c.query(
+    "INSERT INTO cw_artifacts(id,workspace_id,project_id,title,created_by)VALUES($1,$2,$3,$4,$5)",
+    [id, s.workspaceId, projectId, input.title, s.id],
+  );
+  await c.query(
+    "INSERT INTO cw_artifact_versions(artifact_id,version,content,source_message_ids,created_by)VALUES($1,1,$2,$3,$4)",
+    [id, input.content, JSON.stringify(sourceIds), s.id],
+  );
+  await c.query(
+    "INSERT INTO cw_assets(id,workspace_id,project_id,owner_id,title,content,type,source_ref,source_version)VALUES($1,$2,$3,$4,$5,$6,'artifact',$7,'1')",
+    [
+      randomUUID(),
+      s.workspaceId,
+      projectId,
+      s.id,
+      input.title,
+      input.content,
+      "artifact:" + id,
+    ],
+  );
+  return { id, title: input.title, version: 1 };
+}
 export async function lockArtifact(
   c: PoolClient,
   subject: Subject,

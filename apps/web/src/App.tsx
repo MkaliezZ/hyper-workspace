@@ -1,3 +1,5 @@
+import { DecisionPanel } from "./components/DecisionPanel";
+import { WorkPlanPanel } from "./components/WorkPlanPanel";
 import { ProjectMembers } from "./components/MemberPanels";
 import { WorkBriefPanel } from "./components/WorkBriefPanel";
 import type { BriefReference } from "@hyper/contracts";
@@ -33,7 +35,13 @@ import { ExecutionPolicyPanel } from "./components/ExecutionPolicyPanel";
 import { ModelUsagePanel } from "./components/ModelUsagePanel";
 import { ModelSpendingPanel } from "./components/ModelSpendingPanel";
 import { usePageTransition } from "./hooks/usePageTransition";
-type Tab = "discussion" | "tasks" | "artifacts" | "briefs";
+type Tab =
+  | "discussion"
+  | "tasks"
+  | "artifacts"
+  | "briefs"
+  | "decisions"
+  | "workplans";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
     [login, setLogin] = useState(false),
@@ -44,6 +52,7 @@ export function App() {
     }>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [runError, setRunError] = useState("");
   const [section, setSection] = useState<Section>("messages"),
     [tab, setTab] = useState<Tab>("discussion"),
     [query, setQuery] = useState(""),
@@ -197,6 +206,7 @@ export function App() {
     };
   }, [dialog, view?.user.id]);
   useEffect(() => {
+    setRunError("");
     if (
       !run ||
       ["succeeded", "failed", "cancelled", "recovery_required"].includes(
@@ -204,11 +214,15 @@ export function App() {
       )
     )
       return;
-    let alive = true;
+    let alive = true,
+      polling = false;
     const timer = setInterval(() => {
+      if (polling) return;
+      polling = true;
       void api("/runs/" + run.id)
         .then((r) => {
           if (alive) {
+            setRunError("");
             setRun(r);
             if (
               [
@@ -222,7 +236,10 @@ export function App() {
           }
         })
         .catch((e) => {
-          if (alive) setError(e.message);
+          if (alive) setRunError(e.message);
+        })
+        .finally(() => {
+          polling = false;
         });
     }, 700);
     return () => {
@@ -378,13 +395,16 @@ export function App() {
           onMenu={() => setNavOpen((v) => !v)}
           onContext={() => setContextOpen((v) => !v)}
         />
-        {error && !dialog ? (
+        {(error || runError) && !dialog ? (
           <div role="alert" className="error-banner">
-            <span>{error}</span>
+            <span>{error || runError}</span>
             <button
               className="icon-button"
               aria-label="关闭错误提示"
-              onClick={() => setError("")}
+              onClick={() => {
+                setError("");
+                setRunError("");
+              }}
             >
               <X size={17} />
             </button>
@@ -421,6 +441,8 @@ export function App() {
                 {
                   queued: "等待处理",
                   running: "正在推进",
+                  waiting_input: "需要澄清",
+                  waiting_confirmation: "等待确认",
                   succeeded: "已完成",
                   failed: "执行未完成",
                   cancelled: "已停止",
@@ -491,6 +513,8 @@ export function App() {
                 [
                   ["discussion", view.project.source ? "工作记录" : "讨论"],
                   ["briefs", "任务说明"],
+                  ["workplans", "工作计划"],
+                  ["decisions", "决定"],
                   ["tasks", "任务"],
                   ["artifacts", "成果"],
                 ] as const
@@ -527,6 +551,40 @@ export function App() {
                     await refresh();
                   })
                 }
+              />
+            ) : tab === "workplans" ? (
+              <WorkPlanPanel
+                key={view.user.id + ":" + view.project.id}
+                view={view}
+                run={run}
+                onRun={(value) => {
+                  if (loadedProject.current === view.project.id) setRun(value);
+                }}
+                onStart={() => {
+                  setWorkflow("plan_work");
+                  setInstruction(
+                    "请理解当前工作要求，整理可检查的步骤，必要时澄清负责人、目标和版本。",
+                  );
+                  setBriefRef(undefined);
+                  setDialog("run");
+                  setEngine("dsh");
+                  setError("");
+                }}
+                onChanged={() => {
+                  void refresh().catch((e) => setError(e.message));
+                }}
+              />
+            ) : tab === "decisions" ? (
+              <DecisionPanel
+                key={view.user.id + ":" + view.project.id}
+                view={view}
+                run={run}
+                onRun={(value) => {
+                  if (loadedProject.current === view.project.id) setRun(value);
+                }}
+                onChanged={() => {
+                  void refresh().catch((e) => setError(e.message));
+                }}
               />
             ) : tab === "briefs" ? (
               <WorkBriefPanel
@@ -708,6 +766,10 @@ export function App() {
         <ContextPanel
           view={view}
           open={contextOpen}
+          onDecisions={() => {
+            setSection("messages");
+            setTab("decisions");
+          }}
           onTask={openTask}
           onArtifact={openArtifact}
           onToggle={(t) =>
@@ -902,6 +964,7 @@ export function App() {
                 }}
               >
                 <option value="discussion_to_minutes">讨论 → 纪要</option>
+                <option value="plan_work">理解工作 → 澄清 → 确认执行</option>
                 <option value="project_report">项目周报</option>
                 <option value="follow_up">检查待办进展</option>
                 {view.project.source ? (

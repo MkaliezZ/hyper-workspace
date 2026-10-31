@@ -7,6 +7,310 @@ const db = new Database(process.env.TEST_DATABASE_URL);
 test.afterAll(async () => {
   await db.close();
 });
+test("Real source membership gates native work plans, decisions, private knowledge and method ownership across revocation", async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const room = await talk("talk-alice", "v4/room", "POST", {
+    roomType: "2",
+    roomName: "Hyper work batch " + randomUUID(),
+  });
+  await talk("talk-alice", "v4/room/" + room.token + "/participants", "POST", {
+    newParticipant: "talk-bob",
+    source: "users",
+  });
+  await talk("talk-alice", "v1/chat/" + room.token, "POST", {
+    message:
+      "Synthetic source discussion: clarify the audience and create editable work records.",
+  });
+  const alice = await login(browser, "talk-alice"),
+    key = "source-work-batch-" + randomUUID(),
+    model = modelFixture([key]);
+  let bob = await login(browser, "talk-bob");
+  await new Promise<void>((resolve) =>
+    model.server.listen(0, "127.0.0.1", resolve),
+  );
+  const headers = { Origin: origin };
+  try {
+    for (const context of [alice.context, bob.context])
+      await expect
+        .poll(async () =>
+          (await context.request.get(origin + "/api/workspace")).status(),
+        )
+        .toBe(200);
+    const created = await alice.context.request.post(
+      origin + "/api/projects/from-talk",
+      {
+        headers,
+        data: {
+          roomId: room.token,
+          name: "Synthetic work batch",
+          goal: "Verify source intersections, not company quality.",
+        },
+      },
+    );
+    expect(created.status()).toBe(201);
+    const project = await created.json();
+    const saved = await bob.context.request.post(origin + "/api/models", {
+      headers,
+      data: {
+        name: "Source work batch fixture",
+        provider: "openai-compatible",
+        endpoint:
+          "http://127.0.0.1:" + (model.server.address() as any).port + "/v1",
+        model: "native-test-model",
+        purpose: "chat",
+        scope: "personal",
+        apiKey: key,
+      },
+    });
+    expect(saved.status()).toBe(201);
+    const profile = await saved.json();
+    const get = async (id: string) =>
+      await (await bob.context.request.get(origin + "/api/runs/" + id)).json();
+    const perform = async (input: any, expected = "succeeded") => {
+      const response = await bob.context.request.post(origin + "/api/runs", {
+        headers,
+        data: {
+          conversationId: project.conversationId,
+          engine: "dsh",
+          workflow: "plan_work",
+          modelProfileId: profile.id,
+          instruction:
+            "Use only the selected real source scope and the exact employee plan.",
+          idempotencyKey: randomUUID(),
+          ...input,
+        },
+      });
+      expect(response.status()).toBe(201);
+      const started = await response.json();
+      await expect
+        .poll(async () => (await get(started.id)).state, { timeout: 120000 })
+        .toBe(expected);
+      return await get(started.id);
+    };
+    const plan = await perform({ workflow: "plan_work" }, "waiting_input");
+    await expect
+      .poll(
+        async () =>
+          (
+            await db.pool.query(
+              "SELECT runtime_cleaned_at FROM cw_runs WHERE id=$1",
+              [plan.id],
+            )
+          ).rows[0]?.runtime_cleaned_at !== null,
+      )
+      .toBe(true);
+    const firstCredential = (
+      await db.pool.query(
+        "SELECT identity_credential_id FROM cw_runs WHERE id=$1",
+        [plan.id],
+      )
+    ).rows[0].identity_credential_id;
+    const replacement = await login(browser, "talk-bob");
+    await expect
+      .poll(async () =>
+        (
+          await replacement.context.request.get(origin + "/api/workspace")
+        ).status(),
+      )
+      .toBe(200);
+    expect(
+      (
+        await bob.context.request.post(origin + "/api/auth/logout", {
+          headers,
+          data: {},
+        })
+      ).status(),
+    ).toBe(201);
+    await bob.context.close();
+    bob = replacement;
+    const answered = await bob.context.request.post(
+      origin + "/api/runs/" + plan.id + "/plan/responses",
+      {
+        headers,
+        data: {
+          expectedRevision: 1,
+          answers: [{ key: "question:0", text: "native-work-audience-answer" }],
+          regenerate: true,
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(answered.status()).toBe(201);
+    await expect
+      .poll(async () => (await get(plan.id)).state, { timeout: 120000 })
+      .toBe("waiting_confirmation");
+    const before = await (
+      await bob.context.request.get(origin + "/api/runs/" + plan.id + "/plan")
+    ).json();
+    const confirmation = await bob.context.request.post(
+      origin + "/api/runs/" + plan.id + "/plan/responses",
+      {
+        headers,
+        data: {
+          expectedRevision: before.revision,
+          confirmed: true,
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(confirmation.status()).toBe(201);
+    const completed = await confirmation.json();
+    expect(completed.state).toBe("succeeded");
+    const credentials = (
+      await db.pool.query(
+        "SELECT identity_credential_id FROM cw_work_plan_versions WHERE run_id=$1 ORDER BY revision",
+        [plan.id],
+      )
+    ).rows;
+    expect(credentials[0].identity_credential_id).toBe(firstCredential);
+    expect(credentials.every((row: any) => !!row.identity_credential_id)).toBe(
+      true,
+    );
+    expect(
+      new Set(credentials.map((row: any) => row.identity_credential_id)).size,
+    ).toBe(2);
+    const artifact = completed.receipts.find(
+      (r: any) => r.tool === "artifact.create",
+    );
+    const user = (
+      await (
+        await bob.context.request.get(
+          origin + "/api/workspace?projectId=" + project.id,
+        )
+      ).json()
+    ).user;
+    expect(
+      completed.receipts.find((r: any) => r.tool === "task.assign").assigneeId,
+    ).toBe(user.id);
+    const proposed = await perform({
+      workflow: "manage_decision",
+      engine: "dsh",
+      decisionPlan: { operation: "create" },
+    });
+    const decision = proposed.result.receipts[0];
+    await perform({
+      workflow: "manage_decision",
+      engine: "hermes",
+      decisionPlan: {
+        operation: "confirm",
+        decisionId: decision.id,
+        expectedVersion: decision.version,
+        confirmed: true,
+      },
+    });
+    const asset = (
+      await db.pool.query(
+        "SELECT id,source_version FROM cw_assets WHERE workspace_id=$1 AND source_ref=$2",
+        [user.workspaceId, "artifact:" + artifact.id],
+      )
+    ).rows[0];
+    const answer = await perform({
+      workflow: "query_knowledge",
+      engine: "hermes",
+      knowledgePlan: {
+        query: "What synthetic evidence supports this workflow?",
+        mode: "keyword",
+        assetRefs: [{ id: asset.id, sourceVersion: asset.source_version }],
+      },
+    });
+    expect(answer.knowledgeAnswer.citations[0].assetId).toBe(asset.id);
+    expect(
+      (
+        await alice.context.request.get(origin + "/api/runs/" + answer.id)
+      ).status(),
+    ).toBe(404);
+    const candidate = await bob.context.request.post(
+      origin + "/api/projects/" + project.id + "/methods/actions",
+      {
+        headers,
+        data: {
+          plan: {
+            operation: "create",
+            sourceArtifactId: artifact.id,
+            expectedSourceVersion: 1,
+          },
+          draft: {
+            title: "Synthetic source method",
+            kind: "sop",
+            content: "Reusable candidate, not organization policy.",
+          },
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(candidate.status()).toBe(201);
+    const method = await candidate.json();
+    const aliceUser = (
+      await (
+        await alice.context.request.get(
+          origin + "/api/workspace?projectId=" + project.id,
+        )
+      ).json()
+    ).user;
+    await perform({
+      workflow: "manage_method",
+      engine: "hermes",
+      methodPlan: {
+        operation: "transfer",
+        methodId: method.id,
+        expectedVersion: method.version,
+        expectedRevision: method.revision,
+        maintainerId: aliceUser.id,
+        confirmed: true,
+      },
+    });
+    const pending = await perform(
+      { workflow: "plan_work", engine: "hermes" },
+      "waiting_input",
+    );
+    const participant = (
+      await talk("talk-alice", "v4/room/" + room.token + "/participants")
+    ).find((p: any) => p.actorType === "users" && p.actorId === "talk-bob");
+    await talk("talk-alice", "v4/room/" + room.token + "/attendees", "DELETE", {
+      attendeeId: String(participant.attendeeId),
+    });
+    for (const path of [
+      "/api/runs/" + pending.id + "/plan",
+      "/api/runs/" + answer.id,
+      "/api/decisions/" + decision.id,
+    ])
+      expect([403, 404]).toContain(
+        (await bob.context.request.get(origin + path)).status(),
+      );
+    const denied = await bob.context.request.post(
+      origin + "/api/runs/" + pending.id + "/plan/responses",
+      {
+        headers,
+        data: {
+          expectedRevision: 1,
+          confirmed: true,
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect([403, 404]).toContain(denied.status());
+    expect(
+      (
+        await alice.context.request.get(origin + "/api/methods/" + method.id)
+      ).status(),
+    ).toBe(200);
+    const remaining = await (
+      await alice.context.request.get(
+        origin + "/api/workspace?projectId=" + project.id,
+      )
+    ).json();
+    expect(remaining.tasks).toHaveLength(1);
+    expect(remaining.artifacts).toHaveLength(1);
+    expect(model.violations).toEqual([]);
+  } finally {
+    model.server.closeAllConnections();
+    await new Promise<void>((resolve) => model.server.close(() => resolve()));
+    await alice.context.close();
+    await bob.context.close();
+  }
+});
 test("Real Talk attachments resolve recipient files, download opaque bytes and reject room removal and deleted originals", async ({
   browser,
 }) => {

@@ -1,3 +1,6 @@
+import { selectTextChunks, MAX_INDEX_TEXT } from "./text-chunks.js";
+import { KnowledgeContextService } from "./knowledge-context.js";
+import { DecisionService } from "./decisions.js";
 import { TaskAssignmentService } from "./task-assignments.js";
 import { AttachmentSendService } from "./attachment-sends.js";
 import { WorkBriefService } from "./work-briefs.js";
@@ -63,7 +66,7 @@ export class WorkspaceService {
       ? projects.find((p) => p.id === projectId)
       : (projects.find((p) => p.name === "产品共创") ?? projects[0]);
     if (!project) throw new NotFoundException("工作区尚无可访问项目。");
-    const [messages, tasks, artifacts] = await Promise.all([
+    const [messages, tasks, artifacts, decisions] = await Promise.all([
       this.db.pool.query(
         'SELECT id,author,role,content,metadata,created_at AS "createdAt" FROM cw_messages WHERE conversation_id=$1 AND workspace_id=$2 ORDER BY position',
         [project.conversationId, s.workspaceId],
@@ -75,6 +78,10 @@ export class WorkspaceService {
       this.db.pool.query(
         'SELECT a.id,a.title,a.current_version AS version,a.status,a.review_revision AS "reviewRevision",a.accepted_version AS "acceptedVersion",v.content,v.created_at AS "createdAt" FROM cw_artifacts a JOIN cw_artifact_versions v ON v.artifact_id=a.id AND v.version=a.current_version WHERE a.project_id=$1 AND a.workspace_id=$2 ORDER BY a.created_at DESC',
         [project.id, s.workspaceId],
+      ),
+      this.db.pool.query(
+        "SELECT d.id,v.snapshot->>'title' AS title,d.current_version AS version,d.confirmed_by AS \"confirmedBy\" FROM cw_decisions d JOIN cw_decision_versions v ON v.decision_id=d.id AND v.version=d.current_version WHERE d.workspace_id=$1 AND d.project_id=$2 AND d.state='confirmed' ORDER BY d.updated_at DESC LIMIT 20",
+        [s.workspaceId, project.id],
       ),
     ]);
     await this.access.assert(s, project.id);
@@ -91,6 +98,7 @@ export class WorkspaceService {
       messages: messages.rows,
       tasks: tasks.rows,
       artifacts: artifacts.rows,
+      decisions: decisions.rows,
       engines: Object.fromEntries(
         [...this.engines].map(([k, e]) => [k, e.describeCapabilities()]),
       ),
@@ -260,7 +268,7 @@ export class WorkspaceService {
     const files = new SourceFileService(this.db),
       fileAccess = await files.verify(s);
     const r = await this.db.pool.query(
-      'SELECT id,title,content,type,project_id,EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) AS "fileSource",source_ref AS "sourceRef",source_version AS "sourceVersion" FROM cw_assets WHERE workspace_id=$1 AND deleted_at IS NULL AND validity=\'active\' AND (visibility=\'workspace\' OR owner_id=$2) AND (project_id IS NULL OR project_id=ANY($4::uuid[])) AND (NOT EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) OR id=ANY($5::uuid[])) AND (title ILIKE $3 OR content ILIKE $3) ORDER BY created_at DESC LIMIT 30',
+      'SELECT id,title,content,type,project_id,updated_at::text AS "assetUpdatedAt",EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) AS "fileSource",source_ref AS "sourceRef",source_version AS "sourceVersion" FROM cw_assets WHERE workspace_id=$1 AND deleted_at IS NULL AND validity=\'active\' AND (visibility=\'workspace\' OR owner_id=$2) AND (project_id IS NULL OR project_id=ANY($4::uuid[])) AND (NOT EXISTS(SELECT 1 FROM cw_source_files f WHERE f.asset_id=cw_assets.id) OR id=ANY($5::uuid[])) AND (title ILIKE $3 OR content ILIKE $3) ORDER BY created_at DESC LIMIT 30',
       [
         s.workspaceId,
         s.id,
@@ -274,6 +282,12 @@ export class WorkspaceService {
       s,
       r.rows.filter((row) => row.fileSource).map((row) => row.id),
     );
+    const latest = (
+      await this.db.pool.query(
+        "SELECT id,source_version,updated_at::text AS updated_at FROM cw_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND validity='active' AND deleted_at IS NULL",
+        [s.workspaceId, r.rows.map((row) => row.id)],
+      )
+    ).rows;
     return (await MethodsService.filterAssets(this.db, r.rows))
       .filter((row) => !row.project_id || current.has(row.project_id))
       .filter(
@@ -281,7 +295,41 @@ export class WorkspaceService {
           !row.fileSource ||
           finalFiles.allowed.get(row.id) === row.sourceVersion,
       )
-      .map(({ project_id, fileSource, ...row }) => row);
+      .filter((row) =>
+        latest.some(
+          (value) =>
+            value.id === row.id &&
+            value.source_version === row.sourceVersion &&
+            value.updated_at === row.assetUpdatedAt,
+        ),
+      )
+      .map(({ project_id, fileSource, assetUpdatedAt, ...row }) => {
+        if (row.content.length > MAX_INDEX_TEXT)
+          return {
+            ...row,
+            content: "资料超过当前片段处理限制，请在来源中查看。",
+            chunks: [],
+          };
+        const selected = selectTextChunks(row.content, query, 3);
+        const chunks = selected.chunks.map((chunk) => ({
+          ...chunk,
+          sourceVersion: row.sourceVersion,
+          reference:
+            "asset:" +
+            row.id +
+            "@" +
+            encodeURIComponent(row.sourceVersion) +
+            "#chars=" +
+            chunk.start +
+            "-" +
+            chunk.end,
+        }));
+        return {
+          ...row,
+          content: chunks.map((chunk) => chunk.content).join("\n\n"),
+          chunks,
+        };
+      });
   }
   async models(s: Subject) {
     await assertMember(this.db, s);
@@ -479,6 +527,87 @@ export class WorkspaceService {
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
+    let knowledgeScope:
+      | Awaited<ReturnType<KnowledgeContextService["prepare"]>>
+      | undefined;
+    if (input.knowledgePlan || input.workflow === "query_knowledge") {
+      if (
+        input.workflow !== "query_knowledge" ||
+        !input.knowledgePlan ||
+        input.artifactId ||
+        input.taskId ||
+        input.decisionPlan ||
+        input.methodPlan ||
+        input.methodRefs?.length ||
+        input.briefPlan ||
+        input.briefRef ||
+        input.taskAssignmentPlan ||
+        input.attachmentPlan ||
+        input.followUpPlan ||
+        input.policyPlan ||
+        input.spendingPlan ||
+        input.artifactReviewPlan
+      )
+        throw new BadRequestException(
+          "知识问答只接受明确选中的资料版本与问题。",
+        );
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("query_knowledge")
+      )
+        throw new BadRequestException("执行器未声明知识问答能力。");
+      knowledgeScope = await new KnowledgeContextService(this.db).prepare(
+        s,
+        input.knowledgePlan,
+      );
+    }
+    if (input.decisionPlan || input.workflow === "manage_decision") {
+      if (
+        input.workflow !== "manage_decision" ||
+        !input.decisionPlan ||
+        input.artifactId ||
+        input.taskId ||
+        input.methodPlan ||
+        input.methodRefs?.length ||
+        input.briefPlan ||
+        input.briefRef ||
+        input.taskAssignmentPlan ||
+        input.attachmentPlan ||
+        input.followUpPlan ||
+        input.policyPlan ||
+        input.spendingPlan ||
+        input.artifactReviewPlan
+      )
+        throw new BadRequestException("决定执行只接受单一明确的项目操作。");
+      const previous = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (previous) {
+        if (
+          previous.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能更换任务。");
+        return { id: previous.id, state: previous.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("manage_decision")
+      )
+        throw new BadRequestException("执行器未声明决定操作能力。");
+      await new DecisionService(this.db).prepare(
+        s,
+        conversation.project_id,
+        input.decisionPlan,
+      );
+    }
     if (input.attachmentPlan || input.workflow === "share_attachment") {
       if (
         input.workflow !== "share_attachment" ||
@@ -866,40 +995,73 @@ export class WorkspaceService {
       expectedVersion = artifact.current_version;
     }
     const model = await this.runModel(s, input.engine, input.modelProfileId);
+    if (input.workflow === "plan_work" && input.artifactId)
+      throw new BadRequestException(
+        "工作计划目标在计划内明确解析，请勿混入另一个成果目标。",
+      );
+    if (
+      input.workflow === "plan_work" &&
+      !this.engines
+        .get(input.engine)
+        ?.describeCapabilities()
+        .operations.includes("plan_work")
+    )
+      throw new BadRequestException("执行器未声明工作计划能力。");
     const inputHash = stableDigest({ ...input, idempotencyKey: undefined });
     const id = randomUUID();
-    const r = await this.db.pool.query(
-      "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref,task_assignment_plan,attachment_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
-      [
-        id,
-        s.workspaceId,
-        s.id,
-        input.conversationId,
-        input.engine,
-        input.workflow,
-        input.instruction,
-        input.artifactId ?? null,
-        input.idempotencyKey,
-        inputHash,
-        s.demo,
-        model?.id ?? null,
-        expectedVersion,
-        s.identityCredentialId ?? null,
-        input.followUpPlan ?? null,
-        input.artifactReviewPlan ?? null,
-        input.taskId ?? null,
-        input.expectedTaskVersion ?? null,
-        input.methodPlan ?? null,
-        JSON.stringify(input.methodRefs ?? []),
-        input.policyPlan ?? null,
-        input.taskRules ?? {},
-        input.spendingPlan ?? null,
-        input.briefPlan ?? null,
-        input.briefRef ?? null,
-        input.taskAssignmentPlan ?? null,
-        input.attachmentPlan ?? null,
-      ],
-    );
+    const insertRun = (c: PoolClient | Database["pool"]) =>
+      c.query(
+        "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref,task_assignment_plan,attachment_plan,decision_plan,knowledge_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+        [
+          id,
+          s.workspaceId,
+          s.id,
+          input.conversationId,
+          input.engine,
+          input.workflow,
+          input.instruction,
+          input.artifactId ?? null,
+          input.idempotencyKey,
+          inputHash,
+          s.demo,
+          model?.id ?? null,
+          expectedVersion,
+          s.identityCredentialId ?? null,
+          input.followUpPlan ?? null,
+          input.artifactReviewPlan ?? null,
+          input.taskId ?? null,
+          input.expectedTaskVersion ?? null,
+          input.methodPlan ?? null,
+          JSON.stringify(input.methodRefs ?? []),
+          input.policyPlan ?? null,
+          input.taskRules ?? {},
+          input.spendingPlan ?? null,
+          input.briefPlan ?? null,
+          input.briefRef ?? null,
+          input.taskAssignmentPlan ?? null,
+          input.attachmentPlan ?? null,
+          input.decisionPlan ?? null,
+          input.knowledgePlan ?? null,
+        ],
+      );
+    const r = knowledgeScope
+      ? await this.db.tx(async (c) => {
+          await new KnowledgeContextService(this.db).lockSources(
+            c,
+            s,
+            input.knowledgePlan!,
+            knowledgeScope!,
+          );
+          const result = await insertRun(c);
+          if (result.rowCount)
+            for (const ref of input.knowledgePlan!.assetRefs)
+              await c.query(
+                "INSERT INTO cw_run_knowledge_sources(run_id,asset_id,source_version)VALUES($1,$2,$3)",
+                [id, ref.id, ref.sourceVersion],
+              );
+          return result;
+        })
+      : await insertRun(this.db.pool);
     if (r.rowCount) return { ...r.rows[0], created: true };
     const old = (
       await this.db.pool.query(
@@ -915,7 +1077,7 @@ export class WorkspaceService {
     await assertMember(this.db, s);
     const target = (
       await this.db.pool.query(
-        "SELECT conversation_id,source_file_asset_id,expected_file_version,(instruction='') AS source_redacted FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
+        "SELECT conversation_id,source_file_asset_id,expected_file_version,knowledge_plan,(instruction='') AS source_redacted FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
         [id, s.workspaceId, s.id],
       )
     ).rows[0];
@@ -929,8 +1091,16 @@ export class WorkspaceService {
         target.expected_file_version,
       );
     else await this.conversation(s, target.conversation_id);
+    if (target.knowledge_plan) {
+      if (target.source_redacted)
+        throw new NotFoundException("检索来源已失效，私人回答不可读取。");
+      await new KnowledgeContextService(this.db).checkRun(s, {
+        id,
+        knowledge_plan: target.knowledge_plan,
+      });
+    }
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",execution_policy_snapshot AS "executionPolicy",brief_ref AS "briefRef",task_assignment_plan AS "taskAssignmentPlan",attachment_plan AS "attachmentPlan",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",execution_policy_snapshot AS "executionPolicy",brief_ref AS "briefRef",task_assignment_plan AS "taskAssignmentPlan",attachment_plan AS "attachmentPlan",decision_plan AS "decisionPlan",knowledge_plan AS "knowledgePlan",knowledge_answer AS "knowledgeAnswer",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");
@@ -956,6 +1126,13 @@ export class WorkspaceService {
         ? "estimates-and-declarations"
         : "not-configured",
     };
+    if (target.knowledge_plan) {
+      await this.conversation(s, target.conversation_id);
+      await new KnowledgeContextService(this.db).checkRun(s, {
+        id,
+        knowledge_plan: target.knowledge_plan,
+      });
+    }
     return r.rows[0];
   }
   async events(s: Subject, id: string, after = 0) {

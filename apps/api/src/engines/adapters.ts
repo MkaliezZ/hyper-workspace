@@ -33,6 +33,10 @@ const resultSchema = z.object({
           "task.assign",
           "directory.read",
           "attachment.share",
+          "decision.write",
+          "decision.manage",
+          "knowledge.answer",
+          "work.plan",
           "communication.draft",
           "file.reading.save",
         ]),
@@ -42,7 +46,7 @@ const resultSchema = z.object({
     .max(30),
 });
 const instruction =
-  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|artifact.review|task.create|task.update|method.write|method.manage|project.report|follow_up.check|follow_up.configure|communication.draft|file.reading.save|policy.configure|usage.report|spending.manage|brief.write|brief.manage|task.assign|directory.read|attachment.share","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use empty args for exactly one artifact.review when given a Host-bound artifact review decision; the employee has chosen the decision and the host enforces it. Never claim the model verified artifact quality. For a Host-bound task revision propose only changed title, assignee, dueDate or status fields in task.update; the host fixes the task and version. Never claim actual work completion was independently verified or a person notified. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Use empty args for exactly one follow_up.configure when given a Host-bound follow-up plan; settings are fixed by the employee and enforced by the host. Use empty args for exactly one follow_up.check; only the host compares current project tasks and decides whether to post one factual project message. Use only content for communication.draft (max 20000 characters); it saves a personal draft for review, never sends a message. Use only content for file.reading.save (max 20000 characters); it saves one personal file reading bound by the host to the selected file and version. Never choose a file, recipient or room. Never invent project facts. For Host-bound method draft, use exactly one method.write {title,kind,content}; it creates only a candidate. For Host-bound method management, use exactly one method.manage with empty args, preserving the confirmed employee operation. Published methods are reusable guidance, never authorization or policy. For a Host-bound execution policy plan, use exactly one policy.configure with empty args. The host applies only the employee-confirmed rules. Never choose policy values or permissions. For a Host-bound personal model usage query, use exactly one usage.report with empty args; no actors, periods or prices. For a Host-bound model spending plan, use exactly one spending.manage with empty args. Never choose targets, prices, currencies, amounts, budgets or claim provider-verified invoices. For a Host-bound work brief draft use exactly one brief.write with title, goal, scope, constraints, completionCriteria and questions (array of clarification strings). Never fill employee answers or confirm a draft. For a Host-bound work brief operation use exactly one brief.manage with empty args. For a Host-bound task assignment use exactly one task.assign with empty args; the employee chose the identity, not a name guess. Never claim notification, account creation or permission grants. For a Host-bound project directory query use exactly one directory.read with empty args. For a Host-bound attachment share use exactly one attachment.share with empty args; the employee fixed the room, file and caption. Only the host may send and reconcile; never claim delivery before a real receipt. No native shell or business tools are needed.';
+  'Return ONLY JSON: {"text":"brief result","actions":[{"tool":"artifact.create|artifact.revise|artifact.review|task.create|task.update|method.write|method.manage|project.report|follow_up.check|follow_up.configure|communication.draft|file.reading.save|policy.configure|usage.report|spending.manage|brief.write|brief.manage|task.assign|directory.read|attachment.share|decision.write|decision.manage|knowledge.answer|work.plan","args":{}}]}. Do not claim an action already happened. The host validates and executes it. Use empty args for exactly one artifact.review when given a Host-bound artifact review decision; the employee has chosen the decision and the host enforces it. Never claim the model verified artifact quality. For a Host-bound task revision propose only changed title, assignee, dueDate or status fields in task.update; the host fixes the task and version. Never claim actual work completion was independently verified or a person notified. Use title/content for artifact.create; artifactId/content for artifact.revise; title/assignee for task.create. Use empty args for exactly one follow_up.configure when given a Host-bound follow-up plan; settings are fixed by the employee and enforced by the host. Use empty args for exactly one follow_up.check; only the host compares current project tasks and decides whether to post one factual project message. Use only content for communication.draft (max 20000 characters); it saves a personal draft for review, never sends a message. Use only content for file.reading.save (max 20000 characters); it saves one personal file reading bound by the host to the selected file and version. Never choose a file, recipient or room. Never invent project facts. For Host-bound method draft, use exactly one method.write {title,kind,content}; it creates only a candidate. For Host-bound method management, use exactly one method.manage with empty args, preserving the confirmed employee operation. Published methods are reusable guidance, never authorization or policy. For a Host-bound execution policy plan, use exactly one policy.configure with empty args. The host applies only the employee-confirmed rules. Never choose policy values or permissions. For a Host-bound personal model usage query, use exactly one usage.report with empty args; no actors, periods or prices. For a Host-bound model spending plan, use exactly one spending.manage with empty args. Never choose targets, prices, currencies, amounts, budgets or claim provider-verified invoices. For a Host-bound work brief draft use exactly one brief.write with title, goal, scope, constraints, completionCriteria and questions (array of clarification strings). Never fill employee answers or confirm a draft. For a Host-bound work brief operation use exactly one brief.manage with empty args. For a Host-bound task assignment use exactly one task.assign with empty args; the employee chose the identity, not a name guess. Never claim notification, account creation or permission grants. For a Host-bound project directory query use exactly one directory.read with empty args. For a Host-bound attachment share use exactly one attachment.share with empty args; the employee fixed the room, file and caption. Only the host may send and reconcile; never claim delivery before a real receipt. For a Host-bound decision draft use exactly one decision.write with title, content, rationale and optional links (kind task|artifact, id and exact version from supplied context only). It saves a proposed decision, never confirms it. For a Host-bound decision operation use exactly one decision.manage with empty args. Never select another target or version, invent employee confirmation, or turn a suggestion into an adopted decision. For a Host-bound knowledge question use exactly one knowledge.answer {content:string}; answer only from the selected excerpts, cite exact supplied asset references in brackets, state partial coverage and uncertainty. Never invent citations, read other assets or claim full-document review. For Host-bound work planning, use exactly one work.plan with summary, questions and operations per the supplied context schema. It saves only a proposal; never claim work was executed, choose identity IDs or resolve ambiguous names. No native shell or business tools are needed.';
 function parseResult(text: string): EngineResult {
   const clean = text
     .trim()
@@ -108,6 +112,9 @@ export class FixtureAdapter implements EngineAdapter {
         "assign_task",
         "directory_report",
         "share_attachment",
+        "manage_decision",
+        "query_knowledge",
+        "plan_work",
         "chat",
       ],
       evidence: "deterministic-fixture",
@@ -127,6 +134,67 @@ export class FixtureAdapter implements EngineAdapter {
         text: "演示检查已完成。实际任务状态请查看待办列表；没有调用真实模型。",
         actions: [{ tool: "follow_up.check", args: {} }],
         evidence: "fixture",
+      };
+    if (r.workflow === "query_knowledge") {
+      const reference = r.context.match(/"reference":"(asset:[^"]+)"/)?.[1];
+      return {
+        text: "演示资料回答，未调用真实模型。",
+        evidence: "fixture",
+        actions: [
+          {
+            tool: "knowledge.answer",
+            args: {
+              content: "合成片段回答，仅供流程验证：[" + reference + "]",
+            },
+          },
+        ],
+      };
+    }
+    if (r.workflow === "plan_work")
+      return {
+        text: "演示工作计划，未调用真实模型。",
+        evidence: "fixture",
+        actions: [
+          {
+            tool: "work.plan",
+            args: {
+              summary: "演示：先确认范围再形成待办与成果。",
+              questions: ["请说明这项工作的交付对象。"],
+              operations: [
+                {
+                  operation: "create_task",
+                  title: "演示：核对交付要求",
+                  assignee: { name: "我" },
+                  dueDate: null,
+                },
+                {
+                  operation: "create_artifact",
+                  title: "演示：工作方案",
+                  content:
+                    "这是可修改的演示方案，尚未进行业务执行或真实质量验收。",
+                },
+              ],
+            },
+          },
+        ],
+      };
+    if (r.workflow === "manage_decision")
+      return {
+        text: "演示决定操作，未调用模型。",
+        evidence: "fixture",
+        actions: [
+          r.context.includes("Host-bound decision draft.")
+            ? {
+                tool: "decision.write",
+                args: {
+                  title: "演示提议",
+                  content: r.instruction.slice(0, 8000),
+                  rationale: "明确演示资料，待员工确认。",
+                  links: [],
+                },
+              }
+            : { tool: "decision.manage", args: {} },
+        ],
       };
     if (r.workflow === "manage_spending")
       return {
@@ -290,6 +358,9 @@ export class DshAdapter implements EngineAdapter {
         "assign_task",
         "directory_report",
         "share_attachment",
+        "manage_decision",
+        "query_knowledge",
+        "plan_work",
         "read_file",
         "revise_file_reading",
       ],
@@ -410,6 +481,9 @@ export class HermesAdapter implements EngineAdapter {
         "assign_task",
         "directory_report",
         "share_attachment",
+        "manage_decision",
+        "query_knowledge",
+        "plan_work",
         "read_file",
         "revise_file_reading",
       ],

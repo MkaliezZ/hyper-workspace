@@ -14,13 +14,13 @@ const Result = z
   .object({
     parserVersion: z.literal(DOCUMENT_PARSER_VERSION),
     format: DocumentFormat,
-    text: z.string().min(1).max(18000),
+    text: z.string().min(1).max(180000),
     sections: z
       .array(
         z
           .object({
             locator: z.string().min(1).max(1000),
-            text: z.string().min(1).max(18000),
+            text: z.string().min(1).max(180000),
           })
           .strict(),
       )
@@ -45,7 +45,7 @@ const defaults: HostConfig = {
     new URL("../../../../runtime/documents/extract.py", import.meta.url),
   ),
   timeoutMs: 20000,
-  stdoutLimit: 512 * 1024,
+  stdoutLimit: 2 * 1024 * 1024,
   stderrLimit: 16 * 1024,
 };
 let active = 0;

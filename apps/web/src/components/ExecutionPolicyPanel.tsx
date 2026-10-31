@@ -26,6 +26,7 @@ const numbers = [
   ["dailyRuns", "每日执行次数（UTC）", 0, 10000],
 ] as const;
 const labels: Record<string, string> = {
+  plan_work: "理解、澄清与确认工作计划",
   discussion_to_minutes: "讨论转纪要",
   project_report: "项目周报",
   revise_artifact: "修改成果",
@@ -41,6 +42,8 @@ const labels: Record<string, string> = {
   assign_task: "分配真实员工",
   directory_report: "读取项目成员",
   share_attachment: "发送已确认附件",
+  manage_decision: "记录与管理项目决定",
+  query_knowledge: "查询选定企业资料",
   chat: "讨论回复",
   draft_reply: "企业回复草稿",
   read_file: "文件阅读",

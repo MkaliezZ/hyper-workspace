@@ -453,6 +453,88 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       scheduleId: schedule.id,
       expectedVersion: initial.version,
     });
+    const nativeBatch = async (data: any) => {
+      const response = await context.request.post(origin + "/api/runs", {
+        headers: { Origin: origin },
+        data: {
+          conversationId: workspace.project.conversationId,
+          engine: "dsh",
+          modelProfileId: modelId,
+          instruction: "Execute only this scoped synthetic operation.",
+          idempotencyKey: randomUUID(),
+          ...data,
+        },
+      });
+      expect(response.status()).toBe(201);
+      return (await response.json()).id;
+    };
+    const pendingPlan = await nativeBatch({
+      workflow: "plan_work",
+      engine: "dsh",
+    });
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await context.request.get(origin + "/api/runs/" + pendingPlan)
+            ).json()
+          ).state,
+        { timeout: 60000 },
+      )
+      .toBe("waiting_confirmation");
+    const batchDecision = await completed(
+      context.request,
+      await nativeBatch({
+        workflow: "manage_decision",
+        decisionPlan: { operation: "create" },
+      }),
+    );
+    const decisionRecord = batchDecision.result.receipts[0];
+    await completed(
+      context.request,
+      await nativeBatch({
+        workflow: "manage_decision",
+        engine: "hermes",
+        decisionPlan: {
+          operation: "confirm",
+          decisionId: decisionRecord.id,
+          expectedVersion: decisionRecord.version,
+          confirmed: true,
+        },
+      }),
+    );
+    const citationSource = JSON.parse(
+      compose(
+        "exec",
+        "-T",
+        "api",
+        "node",
+        "--input-type=module",
+        "-e",
+        "import{Database}from'./dist/db/database.js';const d=new Database();try{const r=await d.pool.query('SELECT id,source_version FROM cw_assets WHERE source_ref=$1',['artifact:" +
+          artifactId +
+          "']);process.stdout.write(JSON.stringify(r.rows[0]));}finally{await d.close();}",
+      ),
+    );
+    const knowledgeRun = await nativeBatch({
+      workflow: "query_knowledge",
+      engine: "hermes",
+      knowledgePlan: {
+        query: "What does the synthetic source say?",
+        mode: "keyword",
+        assetRefs: [
+          {
+            id: citationSource.id,
+            sourceVersion: citationSource.source_version,
+          },
+        ],
+      },
+    });
+    expect(
+      (await completed(context.request, knowledgeRun)).knowledgeAnswer
+        .citations[0].assetId,
+    ).toBe(citationSource.id);
     compose("stop", "api", "worker", "db");
     compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120");
     await expect
@@ -476,6 +558,73 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       content: { goal: "Persist product context across restarts" },
     });
     expect(restoredBrief.history).toHaveLength(2);
+    const persistedPlan = await (
+      await context.request.get(origin + "/api/runs/" + pendingPlan + "/plan")
+    ).json();
+    expect(persistedPlan.state).toBe("waiting_confirmation");
+    const planConfirmation = await context.request.post(
+      origin + "/api/runs/" + pendingPlan + "/plan/responses",
+      {
+        headers: { Origin: origin },
+        data: {
+          expectedRevision: persistedPlan.revision,
+          confirmed: true,
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(planConfirmation.status()).toBe(201);
+    expect((await planConfirmation.json()).state).toBe("succeeded");
+    const restoredDecision = await (
+      await context.request.get(origin + "/api/decisions/" + decisionRecord.id)
+    ).json();
+    expect(restoredDecision.current.state).toBe("confirmed");
+    expect(
+      (
+        await (
+          await context.request.get(origin + "/api/runs/" + knowledgeRun)
+        ).json()
+      ).knowledgeAnswer.content,
+    ).toContain("asset:");
+    const transferCandidate = await context.request.post(
+      origin + "/api/projects/" + workspace.project.id + "/methods/actions",
+      {
+        headers: { Origin: origin },
+        data: {
+          plan: {
+            operation: "create",
+            sourceArtifactId: artifactId,
+            expectedSourceVersion: 2,
+          },
+          draft: {
+            title: "Container transfer candidate",
+            kind: "sop",
+            content: "Synthetic candidate for ownership migration.",
+          },
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(transferCandidate.status()).toBe(201);
+    const transferMethod = await transferCandidate.json();
+    const transferRun = await completed(
+      context.request,
+      await nativeBatch({
+        workflow: "manage_method",
+        engine: "hermes",
+        methodPlan: {
+          operation: "transfer",
+          methodId: transferMethod.id,
+          expectedVersion: transferMethod.version,
+          expectedRevision: transferMethod.revision,
+          maintainerId: "00000000-0000-4000-8000-000000000012",
+          confirmed: true,
+        },
+      }),
+    );
+    expect(transferRun.result.receipts[0].maintainerId).toBe(
+      "00000000-0000-4000-8000-000000000012",
+    );
 
     await page.reload();
     await page.getByRole("tab", { name: "成果", exact: true }).click();
@@ -646,8 +795,8 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         `process.stdout.write(await(await fetch('http://model-fixture:8100/stats')).text())`,
       ),
     );
-    // The explicit employee assignment adds one native request to the prior eight workflows.
-    expect(stats.calls).toBe(9);
+    // Five new native requests; confirming the persisted work plan runs host services only.
+    expect(stats.calls).toBe(14);
     expect(stats.violations).toBe(0);
   } finally {
     await context.close();

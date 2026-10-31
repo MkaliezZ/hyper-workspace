@@ -107,6 +107,32 @@ export function modelFixture(
     const directoryRead = JSON.stringify(body.messages).includes(
       "Host-bound project directory query.",
     );
+    const knowledgeQuestion = JSON.stringify(body.messages).includes(
+      "Host-bound knowledge question.",
+    );
+    const workPlanning = JSON.stringify(body.messages).includes(
+      "Host-bound work planning.",
+    );
+    const workAnswered = JSON.stringify(body.messages).includes(
+      "native-work-audience-answer",
+    );
+    const textParts = (value: any): string[] =>
+      typeof value === "string"
+        ? [value]
+        : Array.isArray(value)
+          ? value.flatMap(textParts)
+          : value && typeof value === "object"
+            ? Object.values(value).flatMap(textParts)
+            : [];
+    const knowledgeReference = textParts(body.messages)
+      .join("\n")
+      .match(/"reference":"(asset:[^"]+)"/)?.[1];
+    const decisionDraft = JSON.stringify(body.messages).includes(
+      "Host-bound decision draft.",
+    );
+    const decisionManage = JSON.stringify(body.messages).includes(
+      "Host-bound decision operation.",
+    );
     const attachmentShare = JSON.stringify(body.messages).includes(
       "Host-bound attachment share.",
     );
@@ -157,98 +183,152 @@ export function modelFixture(
     const text = JSON.stringify({
       text: "已准备测试成果。",
       actions: [
-        attachmentShare
-          ? { tool: "attachment.share", args: {} }
-          : taskAssignment
-            ? { tool: "task.assign", args: {} }
-            : directoryRead
-              ? { tool: "directory.read", args: {} }
-              : briefDraft
-                ? {
-                    tool: "brief.write",
-                    args: {
-                      title: "Native work brief",
-                      goal: "protocol-fixture-work-goal",
-                      scope: "Only the selected project",
-                      constraints: "No external sends",
-                      completionCriteria: "Editable artifact and saved receipt",
-                      questions: ["Which audience?"],
-                    },
-                  }
-                : briefManagement
-                  ? { tool: "brief.manage", args: {} }
-                  : spending
-                    ? { tool: "spending.manage", args: {} }
-                    : usageReport
-                      ? { tool: "usage.report", args: {} }
-                      : configurePolicy
-                        ? { tool: "policy.configure", args: {} }
-                        : methodDraft
-                          ? {
-                              tool: "method.write",
-                              args: {
-                                title: "Protocol fixture method candidate",
-                                kind: "sop",
-                                content:
-                                  "protocol-fixture-method-guidance: check evidence before output.",
-                              },
-                            }
-                          : methodManagement
-                            ? { tool: "method.manage", args: {} }
-                            : taskRevision
-                              ? {
-                                  tool: "task.update",
-                                  args: {
-                                    title: "protocol-fixture-task-update",
-                                    status: "done",
-                                  },
-                                }
-                              : artifactReview
-                                ? { tool: "artifact.review", args: {} }
-                                : configureFollowUp
-                                  ? { tool: "follow_up.configure", args: {} }
-                                  : followUp
-                                    ? { tool: "follow_up.check", args: {} }
-                                    : fileReading
+        workPlanning
+          ? {
+              tool: "work.plan",
+              args: {
+                summary: "Native fixture work plan",
+                questions: workAnswered ? [] : ["Who is the audience?"],
+                operations: [
+                  {
+                    operation: "create_task",
+                    title: "Native fixture work task",
+                    assignee: { name: "我" },
+                    dueDate: null,
+                  },
+                  {
+                    operation: "create_artifact",
+                    title: "Native fixture work artifact",
+                    content:
+                      "protocol-fixture-work-deliverable; synthetic data, employee confirmation required.",
+                  },
+                ],
+              },
+            }
+          : knowledgeQuestion
+            ? {
+                tool: "knowledge.answer",
+                args: {
+                  content:
+                    "Synthetic excerpt answer [" +
+                    knowledgeReference +
+                    "]; partial coverage only.",
+                },
+              }
+            : decisionDraft
+              ? {
+                  tool: "decision.write",
+                  args: {
+                    title: "Native decision proposal",
+                    content: "protocol-fixture-decision-content",
+                    rationale:
+                      "Synthetic discussion, employee confirmation required",
+                    links: [],
+                  },
+                }
+              : decisionManage
+                ? { tool: "decision.manage", args: {} }
+                : attachmentShare
+                  ? { tool: "attachment.share", args: {} }
+                  : taskAssignment
+                    ? { tool: "task.assign", args: {} }
+                    : directoryRead
+                      ? { tool: "directory.read", args: {} }
+                      : briefDraft
+                        ? {
+                            tool: "brief.write",
+                            args: {
+                              title: "Native work brief",
+                              goal: "protocol-fixture-work-goal",
+                              scope: "Only the selected project",
+                              constraints: "No external sends",
+                              completionCriteria:
+                                "Editable artifact and saved receipt",
+                              questions: ["Which audience?"],
+                            },
+                          }
+                        : briefManagement
+                          ? { tool: "brief.manage", args: {} }
+                          : spending
+                            ? { tool: "spending.manage", args: {} }
+                            : usageReport
+                              ? { tool: "usage.report", args: {} }
+                              : configurePolicy
+                                ? { tool: "policy.configure", args: {} }
+                                : methodDraft
+                                  ? {
+                                      tool: "method.write",
+                                      args: {
+                                        title:
+                                          "Protocol fixture method candidate",
+                                        kind: "sop",
+                                        content:
+                                          "protocol-fixture-method-guidance: check evidence before output.",
+                                      },
+                                    }
+                                  : methodManagement
+                                    ? { tool: "method.manage", args: {} }
+                                    : taskRevision
                                       ? {
-                                          tool: "file.reading.save",
+                                          tool: "task.update",
                                           args: {
-                                            content:
-                                              (fileReadingRevision
-                                                ? "private-native-file-revision-"
-                                                : "private-native-file-reading-") +
-                                              employee,
+                                            title:
+                                              "protocol-fixture-task-update",
+                                            status: "done",
                                           },
                                         }
-                                      : draftReply
-                                        ? {
-                                            tool: "communication.draft",
-                                            args: {
-                                              content:
-                                                "private-native-reply-draft-" +
-                                                employee,
-                                            },
-                                          }
-                                        : revision
+                                      : artifactReview
+                                        ? { tool: "artifact.review", args: {} }
+                                        : configureFollowUp
                                           ? {
-                                              tool: "artifact.revise",
-                                              args: {
-                                                content:
-                                                  "protocol-fixture-revision " +
-                                                  revision,
-                                              },
+                                              tool: "follow_up.configure",
+                                              args: {},
                                             }
-                                          : {
-                                              tool: "artifact.create",
-                                              args: {
-                                                title:
-                                                  "Native runtime test " +
-                                                  employee,
-                                                content:
-                                                  "protocol-fixture-model-result " +
-                                                  employee,
-                                              },
-                                            },
+                                          : followUp
+                                            ? {
+                                                tool: "follow_up.check",
+                                                args: {},
+                                              }
+                                            : fileReading
+                                              ? {
+                                                  tool: "file.reading.save",
+                                                  args: {
+                                                    content:
+                                                      (fileReadingRevision
+                                                        ? "private-native-file-revision-"
+                                                        : "private-native-file-reading-") +
+                                                      employee,
+                                                  },
+                                                }
+                                              : draftReply
+                                                ? {
+                                                    tool: "communication.draft",
+                                                    args: {
+                                                      content:
+                                                        "private-native-reply-draft-" +
+                                                        employee,
+                                                    },
+                                                  }
+                                                : revision
+                                                  ? {
+                                                      tool: "artifact.revise",
+                                                      args: {
+                                                        content:
+                                                          "protocol-fixture-revision " +
+                                                          revision,
+                                                      },
+                                                    }
+                                                  : {
+                                                      tool: "artifact.create",
+                                                      args: {
+                                                        title:
+                                                          "Native runtime test " +
+                                                          employee,
+                                                        content:
+                                                          "protocol-fixture-model-result " +
+                                                          employee,
+                                                      },
+                                                    },
       ],
     });
     if (body.stream) {

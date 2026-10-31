@@ -47,6 +47,17 @@ createServer(async (req, res) => {
   if (review && /synthetic-container-version/.test(input)) violations++;
   const methodDraft = input.includes("Host-bound method draft.");
   const methodManagement = input.includes("Host-bound method management.");
+  const textParts = (value) =>
+    typeof value === "string"
+      ? [value]
+      : Array.isArray(value)
+        ? value.flatMap(textParts)
+        : value && typeof value === "object"
+          ? Object.values(value).flatMap(textParts)
+          : [];
+  const citation = textParts(body.messages)
+    .join("\n")
+    .match(/"reference":"(asset:[^"]+)"/)?.[1];
   if (
     methodManagement &&
     /synthetic-container-method-guidance|synthetic-container-version/.test(
@@ -57,46 +68,83 @@ createServer(async (req, res) => {
   const text = JSON.stringify({
     text: "Synthetic container model result.",
     actions: [
-      input.includes("Host-bound task assignment.")
-        ? { tool: "task.assign", args: {} }
-        : input.includes("Host-bound project directory query.")
-          ? { tool: "directory.read", args: {} }
-          : methodDraft
-            ? {
-                tool: "method.write",
-                args: {
-                  title: "Synthetic container method",
-                  kind: "sop",
-                  content:
-                    "synthetic-container-method-guidance: check evidence before saving.",
+      input.includes("Host-bound work planning.")
+        ? {
+            tool: "work.plan",
+            args: {
+              summary: "Synthetic container work plan",
+              questions: [],
+              operations: [
+                {
+                  operation: "create_task",
+                  title: "Container confirmed plan task",
+                  assignee: { name: "我" },
+                  dueDate: null,
                 },
-              }
-            : methodManagement
-              ? { tool: "method.manage", args: {} }
-              : taskRevision
-                ? {
-                    tool: "task.update",
-                    args: {
-                      title: "synthetic-container-task-update",
-                      status: "done",
-                    },
-                  }
-                : review
-                  ? { tool: "artifact.review", args: {} }
-                  : followUp
-                    ? { tool: "follow_up.check", args: {} }
-                    : revision
-                      ? {
-                          tool: "artifact.revise",
-                          args: { content: "synthetic-container-version-two" },
-                        }
-                      : {
-                          tool: "artifact.create",
-                          args: {
-                            title: "Container native artifact",
-                            content: "synthetic-container-version-one",
-                          },
+              ],
+            },
+          }
+        : input.includes("Host-bound decision draft.")
+          ? {
+              tool: "decision.write",
+              args: {
+                title: "Synthetic container decision",
+                content: "Candidate direction, employee confirmation required.",
+                rationale: "Synthetic source only",
+                links: [],
+              },
+            }
+          : input.includes("Host-bound decision operation.")
+            ? { tool: "decision.manage", args: {} }
+            : input.includes("Host-bound knowledge question.")
+              ? {
+                  tool: "knowledge.answer",
+                  args: {
+                    content: "Partial synthetic evidence [" + citation + "]",
+                  },
+                }
+              : input.includes("Host-bound task assignment.")
+                ? { tool: "task.assign", args: {} }
+                : input.includes("Host-bound project directory query.")
+                  ? { tool: "directory.read", args: {} }
+                  : methodDraft
+                    ? {
+                        tool: "method.write",
+                        args: {
+                          title: "Synthetic container method",
+                          kind: "sop",
+                          content:
+                            "synthetic-container-method-guidance: check evidence before saving.",
                         },
+                      }
+                    : methodManagement
+                      ? { tool: "method.manage", args: {} }
+                      : taskRevision
+                        ? {
+                            tool: "task.update",
+                            args: {
+                              title: "synthetic-container-task-update",
+                              status: "done",
+                            },
+                          }
+                        : review
+                          ? { tool: "artifact.review", args: {} }
+                          : followUp
+                            ? { tool: "follow_up.check", args: {} }
+                            : revision
+                              ? {
+                                  tool: "artifact.revise",
+                                  args: {
+                                    content: "synthetic-container-version-two",
+                                  },
+                                }
+                              : {
+                                  tool: "artifact.create",
+                                  args: {
+                                    title: "Container native artifact",
+                                    content: "synthetic-container-version-one",
+                                  },
+                                },
     ],
   });
   if (body.stream) {

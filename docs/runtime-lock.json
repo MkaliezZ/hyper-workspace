@@ -392,13 +392,39 @@
     "evidenceScope": "246 passing checks across three successful jobs: 25 unit/config, 3 downloader, 8 extraction, 147 database, 4 native runtime, 45 UI, 10 real source, 4 container; type/build, audits and frozen package. Actual Nextcloud manual/idempotent/duplicate share, native DSH and Hermes source delivery, sender/recipient downloads, member removal and original deletion; synthetic accounts/data and protocol model only; no local upload or company acceptance."
   },
   "attachmentUploads": {
-    "status": "local-verified-real-source-ci-pending",
+    "status": "ci-verified-synthetic-source-and-model",
     "contract": "docs/ATTACHMENT-UPLOADS.md",
     "migration": "db/migrations/024_attachment_uploads.sql",
     "mapping": "P02/P04/P07/P08 C00/C02/C05/C07 A03/A04/A06/A10 E01/E02/E04/E07/E08/E09/E10 subsets",
     "scope": "Explicit single local file input, 1 byte to 8 MiB; private employee Files root, unique server path, durable prepared/uploading intent before one conditional PUT, current bytes SHA-256/version readback, unknown reconcile without reupload, separate manual/native DSH/Hermes share confirmation",
     "dataBoundary": "Bounded authenticated raw request memory only; no binary database, temporary disk, engine directory, model context or vector persistence. JSON size limits unchanged.",
     "limits": "No multipart/chunked-source/resumable upload, arbitrary destination folder, overwrite, automatic cleanup, atomic DAV/OCS effects, real supplier quality or company acceptance.",
-    "verification": "155 database/HTTP, 25 unit/config, full 47 Chromium UI without retries, type/build and frozen package passed. Additional exact 8 MiB raw HTTP upload passed. Initial focused UI 6 pass/1 ambiguous close-button locator failure retained; corrected locator, focused 7 pass then full 47 pass. Actual Nextcloud and container CI pending."
+    "verification": "256 first-attempt passing checks across 3 successful jobs: 25 unit/config, 3 downloader, 8 extraction, 155 database/HTTP, 4 native runtime, 47 UI, 10 actual Nextcloud, 4 restricted container; type/build, audits and frozen package passed. Synthetic employees/data and protocol model, no company or supplier quality acceptance.",
+    "evidenceCommit": "73fced090dc36a00996f701fcca0be76715b1ff9",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41124972265"
+  },
+  "deliveryBatch": {
+    "status": "local-verified-ci-pending",
+    "date": "2026-10-31",
+    "migrations": [
+      "025_decisions.sql",
+      "026_decision_runs.sql",
+      "027_knowledge_chunks.sql",
+      "028_knowledge_queries.sql",
+      "029_knowledge_source_deletion.sql",
+      "030_method_maintainer_transfer.sql",
+      "031_work_plans.sql",
+      "032_work_plan_phases.sql",
+      "033_work_plan_audit_indexes.sql"
+    ],
+    "contracts": [
+      "docs/DECISIONS.md",
+      "docs/KNOWLEDGE-CONTEXT.md",
+      "docs/METHODS.md",
+      "docs/API-RECOVERY.md",
+      "docs/WORK-PLANS.md"
+    ],
+    "pending": "New actual-source/container cases included for CI; real supplier quality, full organization/admin/notifications, aggregate budgets/preferences and further method sources remain open. No full-delivery claim.",
+    "localVerified": "29 unit/config, 182 database/HTTP, 5 native SDK cases, 56 Chromium UI, type/build, 8 extraction (UTF-16-aware), 3 downloader and frozen package passed. UI first 55 pass / 1 fixture-cookie failure retained, corrected case then all 56 passed without retry. Audit update followed by 8 planning database cases plus native joint case passing. Actual-source/container CI and supplier/company acceptance remain separate."
   }
 }

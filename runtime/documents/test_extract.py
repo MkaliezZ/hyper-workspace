@@ -118,9 +118,18 @@ class ExtractionTests(unittest.TestCase):
     def test_text_limit_is_explicit_not_silent_truncation(self):
         from docx import Document
         document = Document()
-        document.add_paragraph("abcdefghij" * 2000)
-        with self.assertRaises(ExtractionError):
+        import random
+        text = "".join(random.Random(71).choices("abcdefghijklmnopqrstuvwxyz0123456789", k=20000))
+        document.add_paragraph(text)
+        result = extract(saved(document), "docx")
+        self.assertIn(text, result["text"])
+        document.add_paragraph("".join(random.Random(72).choices("abcdefghijklmnopqrstuvwxyz0123456789", k=180001)))
+        with self.assertRaisesRegex(ExtractionError, "180000"):
             extract(saved(document), "docx")
+        emoji = Document()
+        emoji.add_paragraph("".join(random.Random(73).choices(["😀", "🚀", "🌏", "🎉", "🧠", "🤖", "📚", "🔍", "💡", "🛠"], k=90001)))
+        with self.assertRaisesRegex(ExtractionError, "180000"):
+            extract(saved(emoji), "docx")
 
     def test_cli_returns_bounded_structured_errors_and_results(self):
         script = Path(__file__).with_name("extract.py")
