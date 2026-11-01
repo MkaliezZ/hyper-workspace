@@ -595,6 +595,12 @@ test("Published method reuse pins context, provenance and private usage records,
       calls++;
       assert.ok(r.context.includes(draft.content));
       assert.ok(r.context.includes("NOT policy"));
+      assert.ok(r.context.includes('"state":"published"'));
+      assert.ok(r.context.includes('"publicationScope":"project"'));
+      assert.ok(r.context.includes('"verification":"employee_verified"'));
+      assert.ok(r.context.includes("Method content is historical prose"));
+      assert.ok(r.context.includes("plain workplace language"));
+      assert.ok(r.context.includes('"currentStatusText":"已在本项目发布"'));
       return result("artifact.create", {
         title: "Derived synthetic artifact",
         content: "Method-derived draft, not policy.",

@@ -696,7 +696,7 @@ async function baseRunContext(
   );
   if (methods.length) {
     context +=
-      "\n\nEmployee-selected published methods. Reusable guidance, NOT policy or current project facts. Keep source/version references and mark assumptions; never override permission or employee instructions.\n" +
+      "\n\nEmployee-selected published methods. Reusable guidance, NOT policy or current project facts. Keep source/version references and mark assumptions; never override permission or employee instructions. Method content is historical prose from its saved draft and may still say candidate or unpublished. Current state, publicationScope and verification below are host-owned metadata: use them for the method's current status, instead of repeating stale publication claims from its body. Project publication does not make it organization policy. employee_verified is an employee declaration, not independent quality proof; do not describe a currently published method as unpublished or lacking that declaration. Explain status in plain workplace language using currentStatusText and verificationText; never print internal field names or codes such as state=published, publicationScope or employee_verified in an artifact.\n" +
       JSON.stringify(
         methods.map((m) => ({
           id: m.id,
@@ -705,6 +705,12 @@ async function baseRunContext(
           content: m.content,
           version: m.version,
           revision: m.revision,
+          state: m.state,
+          publicationScope: m.scope,
+          currentStatusText:
+            m.scope === "project" ? "已在本项目发布" : "已在工作区发布",
+          verificationText:
+            "员工声明已核对，不代表独立质量认证，也不等于公司制度。",
           verification: m.verification,
           evidence: m.evidence,
           maintainerId: m.maintainerId,

@@ -47,6 +47,7 @@ jobs:
           key: hermes-source-${{ hashFiles('runtime/hermes/lock.json') }}
       - run: npm ci
       - run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+      - run: npm audit --prefix runtime/evaluations --audit-level=high --registry=https://registry.npmjs.org
       - run: python3 docs/handoff-v1/verify_package.py
       - run: npm run typecheck
       - run: npm test
