@@ -750,3 +750,69 @@ test("Current room removal hides source IDs in historical AI results and event r
     await f.close();
   }
 });
+
+test("A guard abort remains binding across a temporary policy restriction and cannot resume later invitations after rules are restored", async () => {
+  const f = await setup();
+  let release: () => void = () => {},
+    pending: Promise<void> | undefined;
+  try {
+    let signal: AbortSignal | undefined, entered!: () => void;
+    const a = await ai(f, async (request: any) => {
+      signal = request.signal;
+      return {
+        text: "not a receipt",
+        evidence: "fixture",
+        actions: [{ tool: "communication.manage", args: {} }],
+      };
+    });
+    const started = new Promise<void>((resolve) => (entered = resolve)),
+      gate = new Promise<void>((resolve) => (release = resolve));
+    f.source.beforeWrite = async (path) => {
+      if (path.endsWith("/room")) {
+        entered();
+        await gate;
+      }
+    };
+    const run = await a.start(await f.create(["peer", "other"]));
+    pending = a.processor.process(run.id);
+    await started;
+    assert.ok(signal);
+    await db.pool.query(
+      "INSERT INTO cw_execution_policies(workspace_id,scope,scope_id,revision,rules,updated_by)VALUES($1,'personal',$2,1,$3,$2)",
+      [f.actor.workspaceId, f.actor.id, { workflows: [] }],
+    );
+    await new Promise<void>((resolve, reject) => {
+      if (signal!.aborted) return resolve();
+      const timer = setTimeout(
+        () => reject(Error("Policy guard did not abort the active Run")),
+        5000,
+      );
+      signal!.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+    await db.pool.query(
+      "UPDATE cw_execution_policies SET revision=2,rules='{}' WHERE workspace_id=$1 AND scope='personal' AND scope_id=$2",
+      [f.actor.workspaceId, f.actor.id],
+    );
+    release();
+    await pending;
+    assert.equal(f.source.writes.length, 1);
+    assert.equal(
+      (await a.work.getRun(f.actor, run.id)).state,
+      "recovery_required",
+    );
+    const command = (await f.service.activity(f.actor))[0]!;
+    assert.equal(command.completedSteps, 1);
+    assert.equal(command.totalSteps, 3);
+  } finally {
+    release();
+    await pending?.catch(() => {});
+    await f.close();
+  }
+});

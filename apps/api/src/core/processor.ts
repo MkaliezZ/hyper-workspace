@@ -485,6 +485,7 @@ export class RunProcessor {
             "configuration" in scope ? scope.configuration : undefined,
             contextBytes,
             result.actions.length,
+            abort.signal,
           ),
         );
       }
@@ -713,6 +714,7 @@ export class RunProcessor {
     configuration?: PreparedFollowUp,
     contextBytes?: number,
     actionCount?: number,
+    signal?: AbortSignal,
   ) {
     if (!toolsForWorkflow(run.workflow).includes(action.tool))
       throw new Error("本次工作类型未授权该业务动作。");
@@ -732,6 +734,7 @@ export class RunProcessor {
                 lease,
                 contextBytes: contextBytes ?? 0,
                 actionCount: actionCount ?? 1,
+                signal,
               },
             )
           : await new AttachmentSendService(this.service.db).send(

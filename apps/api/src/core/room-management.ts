@@ -25,6 +25,7 @@ type RunExecution = {
   lease: string;
   contextBytes: number;
   actionCount: number;
+  signal?: AbortSignal;
 };
 type RoomPlan = RoomManagementPlan;
 type RoomOperation = RoomPlan["operation"];
@@ -399,6 +400,7 @@ export class RoomManagementService {
     actions: number,
   ) {
     if (!execution) return;
+    execution.signal?.throwIfAborted();
     const current = (
       await c.query(
         "SELECT state,lease_owner FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3 FOR UPDATE",
@@ -719,6 +721,7 @@ export class RoomManagementService {
       for (const [sequence, step] of steps.entries()) {
         let dispatched = false;
         try {
+          execution?.signal?.throwIfAborted();
           if (Date.now() > deadline)
             throw new BadRequestException(
               "通信操作已达到时间上限，未派发下一项来源操作。",
@@ -773,6 +776,7 @@ export class RoomManagementService {
               throw new ConflictException(
                 "原派发状态已变化，不能再次发起来源写入。",
               );
+            execution?.signal?.throwIfAborted();
             const result = await c.query(
               "UPDATE cw_room_command_steps SET state='dispatching',dispatched_at=clock_timestamp() WHERE command_id=$1 AND sequence=$2 AND state='ready' RETURNING sequence",
               [id, sequence],
@@ -786,6 +790,7 @@ export class RoomManagementService {
               [id],
             );
           });
+          execution?.signal?.throwIfAborted();
           dispatched = true;
           let status: number;
           if (
@@ -855,7 +860,11 @@ export class RoomManagementService {
             if (fact?.state === "dispatching")
               await c.query(
                 "UPDATE cw_room_command_steps SET state=$3,settled_at=clock_timestamp() WHERE command_id=$1 AND sequence=$2",
-                [id, sequence, rejected ? "rejected" : "unknown"],
+                [
+                  id,
+                  sequence,
+                  !dispatched || rejected ? "rejected" : "unknown",
+                ],
               );
             const anyEffect = (
               await c.query(

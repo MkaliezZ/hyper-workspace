@@ -487,7 +487,7 @@
     }
   },
   "communicationManagement": {
-    "status": "local-verified-ci-pending",
+    "status": "ci-failure-fixed-locally-retest-pending",
     "date": "2026-11-01",
     "migrations": [
       "036_room_management.sql",
@@ -514,6 +514,14 @@
     "images": [
       "docs/images/room-management-desktop.png",
       "docs/images/room-management-mobile.png"
-    ]
+    ],
+    "initialFailure": {
+      "head": "0fa341f5ce1f586fa525cc26a343ad1e3d46957f",
+      "run": 41296109599,
+      "verify": "success",
+      "deployment": "success",
+      "source": "9 pass / 4 old exact-name UI selectors failed because unread/mention badges changed room button accessible names; new native source management scenario passed. Fixed stable aria-label + separate aria-describedby; existing assertions retained."
+    },
+    "correctionLocal": "36 unit/config, full 214 database/HTTP (module22), 12 combined communication UI, type/build passed. Sticky policy guard abort is propagated to each room step and source dispatch boundary; restoring rules does not resume the old Run; prior dispatched effect retained. Native DSH/Hermes communication joint scenario passed again after signal propagation."
   }
 }

@@ -145,6 +145,12 @@ async function start(page: Page) {
     .getByRole("button", { name: "企业消息", exact: true })
     .click();
   await expect(page.getByLabel("未读 3 条")).toBeVisible();
+  const roomButton = page.getByRole("button", {
+    name: "合成通信验收群",
+    exact: true,
+  });
+  await expect(roomButton).toBeVisible();
+  await expect(roomButton).toHaveAccessibleDescription("未读 3 条，有人提及我");
   await page
     .getByRole("button", { name: "会话与通知管理", exact: true })
     .click();

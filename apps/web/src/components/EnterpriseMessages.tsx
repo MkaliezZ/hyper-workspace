@@ -330,6 +330,8 @@ export function EnterpriseMessages({
           {rooms.map((item) => (
             <button
               key={item.id}
+              aria-label={item.name}
+              aria-describedby={"enterprise-room-status-" + item.id}
               className={
                 selected === item.id
                   ? "enterprise-room selected"
@@ -350,6 +352,15 @@ export function EnterpriseMessages({
             >
               <MessageSquare size={18} />
               <span>{item.name}</span>
+              <span
+                id={"enterprise-room-status-" + item.id}
+                className="sr-only"
+              >
+                {item.unreadMessages == null
+                  ? "未读数未知"
+                  : "未读 " + item.unreadMessages + " 条"}
+                {item.unreadMention === true ? "，有人提及我" : ""}
+              </span>
               {item.unreadMention === true ? (
                 <small aria-label="有人提及我">@</small>
               ) : null}
