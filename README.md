@@ -4,7 +4,7 @@
 
 面向企业内部的 AI 协作 IM：讨论有沉淀，行动有回执，成果能修改，经验能复用。蓝、白、黑配色；拥有自己的业务核心与企业资产服务。
 
-**开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。已用真实 DeepSeek Flash 在本机完成 DSH 纪要/两条待办和 Hermes 同一成果续改的小样例，[结果与边界](docs/REAL-MODEL-SMOKE.md)。组织通讯录/部门/产品角色、通信管理和按重要程度/个人偏好合并的跟进提醒已接入当前开发批次；更多真实模型质量、通知/管理剩余项、跨连接预算整批验证和公司部署验收仍待完成；Calendar 与复杂办公/媒体按基线后续阶段补齐。
+**开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。已用真实 DeepSeek Flash 在本机完成 DSH 纪要/两条待办和 Hermes 同一成果续改的小样例，[结果与边界](docs/REAL-MODEL-SMOKE.md)。组织通讯录/部门/产品角色、通信管理和按重要程度/个人偏好合并的跟进提醒已接入当前开发批次；更多真实模型质量、通知/管理剩余项及公司部署验收仍待完成；Calendar 与复杂办公/媒体按基线后续阶段补齐。
 
 跟进提醒新增工作区/项目/本人三层规则：全部变化、仅重要变化、静默和最短合并间隔；静默检查保留公共待通知变化，其他符合条件的同事仍可合并发布。人工、DSH/Hermes 共用版本与权限服务；个人配置不广播到项目。提醒模块 `1c67e314108247646c35ff0fd9ef3f5d12ce0000` 的 [CI 41301871596](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41301871596) 三项全部成功，共 372 项通过，含本人原任务找回、70 UI、14 真实来源及 4 容器场景。真实 DeepSeek 的 DSH 配置/Hermes 私有回读各一次成功，来源为合成服务、0 次来源写入；整体尚未交付。[功能、API、恢复与验证边界](docs/NOTIFICATION-POLICY.md)。 [桌面](docs/images/notification-policy-desktop.png) · [手机](docs/images/notification-policy-mobile.png)。
 
@@ -12,7 +12,7 @@
 
 2026-11-01 真实 DeepSeek 双执行器业务小样例：14 次实际请求完成纪要、结构化日期、4 次明确员工 ID 指派、同成果往返续改，以及静默解除后仅一条合并提醒；来源为合成 HTTP 服务，0 来源写入。首轮日期字段丢失已修复，首轮失败和 1 条不完整用量保留，费用仍未定价。实现 `0a63287` 的 [CI 41323891692](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41323891692) 三项全部成功，共 386 项通过（含 8 原生、70 UI、14 真实来源和 5 容器）；未完成公司或人工量规验收。[可复查报告、输出原文与复用脚本](docs/REAL-BUSINESS-ACCEPTANCE.md)。
 
-企业预算已接入当前开发批次：管理员企业计价与个人账目分开，工作区/项目额度跨连接统一准入，模型不能用个人零单价或私有声明绕过公司额度；向量、验证和原生任务共用闸门。当前本地数据库、双原生与桌面/手机场景已验证，正在补整批来源/容器 CI；不代表真实账单或完整公司交付。[权限、金额、恢复和验证边界](docs/ORGANIZATION-BUDGETS.md)。[桌面](docs/images/organization-budget-desktop.png) · [手机](docs/images/organization-budget-mobile.png)。
+企业预算已接入当前开发批次：管理员企业计价与个人账目分开，工作区/项目额度跨连接统一准入，模型不能用个人零单价或私有声明绕过公司额度；向量、验证和原生任务共用闸门。实现 `a0a5c52` 的 [CI 41353513303](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41353513303) 三项全部成功，406 项通过（245 数据库、9 原生、72 UI、15 真实来源、6 容器及其余 59 项）；不代表真实账单或完整公司交付。[权限、金额、恢复和验证边界](docs/ORGANIZATION-BUDGETS.md)。[桌面](docs/images/organization-budget-desktop.png) · [手机](docs/images/organization-budget-mobile.png)。
 
 ## 实际界面
 

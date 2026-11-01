@@ -697,7 +697,7 @@
     }
   },
   "organizationBudgets": {
-    "status": "development-local-subsets-verified-own-ci-pending",
+    "status": "implemented-current-code-ci-verified-synthetic-quality-and-company-acceptance-open",
     "contract": "docs/ORGANIZATION-BUDGETS.md",
     "migration": "041_organization_budgets.sql",
     "scope": "Independent administrator-owned corporate pricing/charges; workspace and host-attributed project limits intersect private profile limits before every provider POST, including embeddings/verification. No private zero-price or declaration bypass. Money remains estimates/statements, not invoice verification.",
@@ -713,10 +713,39 @@
       "budgetDb": 15,
       "fullDatabase": 245,
       "rootUnit": 48,
-      "typecheckAndBuild": "passed; existing >500 kB bundle warning remains"
+      "typecheckAndBuild": "passed; existing >500 kB bundle warning remains",
+      "fullRenderedUi": 72,
+      "fullRenderedUiEnvironment": "Isolated synthetic PostgreSQL, API3114/Vite5184; private test copies only replace hard-coded 5173 Origin/URL with 5184, preserving assertions; 1 worker, 6.2 minutes.",
+      "finalJointNativeProtocol": 1,
+      "deploymentModelProtocolProbe": "JSON and SSE both return host-confirmed spending.manage empty arguments and fully reported synthetic 10 input/10 output usage, checked with product UsageCollector."
     },
     "supplierRequestsThisBatch": 0,
-    "ci": "New real Nextcloud and container restart/backup cases load (15 and 6), not executed locally (no Docker); own code CI pending.",
-    "remaining": "Final regression and own CI, actual supplier accounting/invoices and complete company/product acceptance; frozen baseline unchanged."
+    "ci": {
+      "runId": 41353513303,
+      "url": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41353513303",
+      "implementedCommit": "a0a5c5238bc65fe8ea2c634366d62b1c78dc6abc",
+      "conclusion": "success",
+      "counts": {
+        "unit": 48,
+        "downloader": 3,
+        "documentParser": 8,
+        "database": 245,
+        "native": 9,
+        "ui": 72,
+        "nextcloud": 15,
+        "deployment": 6
+      },
+      "total": 406,
+      "jobIds": {
+        "verify": 124988684262,
+        "deployment": 124988684293,
+        "nextcloud": 124988685236
+      },
+      "verifiedAtUtc": "2026-11-01",
+      "verification": "Each completed job log inspected; source 15 passed/14.6m, deployment 6 passed/3.6m. No Docker locally; synthetic accounts, model protocols and data, no real supplier calls in this batch."
+    },
+    "remaining": "Actual supplier accounting/invoices, real model method/retrieval quality, full human rubric and company/product acceptance; frozen baseline unchanged.",
+    "implementedCommit": "a0a5c5238bc65fe8ea2c634366d62b1c78dc6abc",
+    "ciRunId": 41353513303
   }
 }
