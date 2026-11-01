@@ -440,7 +440,7 @@
     }
   },
   "organization": {
-    "status": "local-verified-ci-pending",
+    "status": "ci-verified-company-acceptance-pending",
     "date": "2026-11-01",
     "migrations": [
       "034_organization.sql",
@@ -449,7 +449,7 @@
     "contract": "docs/ORGANIZATION.md",
     "source": "Pinned Nextcloud 33.0.10 group members and ordinary-user autocomplete; current employee credentials only; complete max 2000 group, 30 people/page, bounded search; product departments and roles never grant source access.",
     "local": "32 unit/config, 192 database/HTTP, type/build/frozen package and all 59 Chromium UI passed. Expanded native DSH/Hermes joint case plus 7 organization DB and 3 source protocol cases passed; mobile navigation refinement followed by all 3 organization UI passing. First full UI 57 pass/2 development-restart failures preserved, then code-frozen full 59 pass without retries.",
-    "pending": "Actual-source organization CI, supplier quality and company organization acceptance. Notifications/remaining admin, preferences/aggregate budgets and further method sources remain open.",
+    "pending": "Supplier quality and company organization acceptance; notifications/remaining admin, preferences/aggregate budgets and further method sources remain open.",
     "images": [
       "docs/images/organization-desktop.png",
       "docs/images/organization-mobile.png"
@@ -467,6 +467,53 @@
       "calls": 2,
       "status": "passed-runtime",
       "scope": "DSH reads synthetic demo organization; Hermes creates exact confirmed synthetic department, then manual service removes it with audit retained. One completed HTTP 200 and reported usage per Run; no source/company data or notifications; unpriced, no invoice claim."
+    },
+    "ci": {
+      "head": "0342719d41f89ac28e2e24be9abce4f2c301d59f",
+      "run": 41276609574,
+      "status": "success",
+      "passed": 315,
+      "counts": {
+        "unit": 32,
+        "downloader": 3,
+        "parser": 8,
+        "database": 192,
+        "native": 5,
+        "ui": 59,
+        "source": 12,
+        "container": 4
+      },
+      "limits": "Synthetic employees/data and protocol model; not company deployment or full E01-E10 acceptance."
     }
+  },
+  "communicationManagement": {
+    "status": "local-verified-ci-pending",
+    "date": "2026-11-01",
+    "migrations": [
+      "036_room_management.sql",
+      "037_room_management_policy.sql",
+      "038_room_management_run_scope.sql"
+    ],
+    "contract": "docs/COMMUNICATION-MANAGEMENT.md",
+    "source": "Pinned Talk 23.0.12 public OCS, current employee credentials, exact UID/attendee instance, private ordinary group management, source readback and durable non-replayed steps. Product role never replaces source moderator permissions.",
+    "local": "36 unit/config, 213 database/HTTP, full 64 Chromium UI, 6 native, type/build/frozen package passed. After final historical-room-ID filtering: full 213 DB and new native communication case passed again. Module: 4 provider, 21 DB/Worker and 5 UI. First UI accessible-name failure and audit edge failures retained, fixed and rerun.",
+    "supplierSmoke": {
+      "status": "passed-runtime-protocol-source",
+      "model": "deepseek-flash",
+      "calls": 2,
+      "runs": [
+        "2464e57d-a7b2-43c1-8aaa-7a388b895fa9",
+        "e07f78fe-7fb7-4c71-8d70-6631affe177c"
+      ],
+      "inputTokens": 5571,
+      "outputTokens": 239,
+      "costStatus": "unpriced",
+      "scope": "DSH read and Hermes favorite, synthetic HTTP source only; one source write; current model Key not copied or changed, temporary source removed and employee credential disabled/cleared; no source/company/device or invoice acceptance."
+    },
+    "limits": "No source/database distributed CAS, no guessing/replaying unknown group creation, max20 invited employees per group macro, room count1000/member count2000. Real-source/container CI pending; company device notifications and full E01-E10 not complete.",
+    "images": [
+      "docs/images/room-management-desktop.png",
+      "docs/images/room-management-mobile.png"
+    ]
   }
 }

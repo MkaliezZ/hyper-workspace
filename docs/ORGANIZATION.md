@@ -48,4 +48,4 @@ AI 查询只保存范围、数量、时间和版本等回执元数据，不保�
 
 [实际桌面](images/organization-desktop.png) · [手机首屏](images/organization-mobile.png)。截图为合成验收数据。
 
-首轮提交 15c8013 的 [CI 41275579022](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41275579022)：verify 与 deployment 成功，真实来源 11 过/1 失败。新增组织用例复用了已由登录用例明确撤销产品权限的 employee-two，等待登录时返回 401，尚未进入组织 API；产品正确保持撤权，未自动恢复。修正 CI 初始化与新用例，采用独立 org-reader 普通来源账号，不改鉴权、不改旧撤权断言、不跳过新组织断言。后续结果按修正提交重新核验。
+首轮提交 15c8013 的 [CI 41275579022](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41275579022)：verify 与 deployment 成功，真实来源 11 过/1 失败。新增组织用例复用了已由登录用例明确撤销产品权限的 employee-two，等待登录时返回 401，尚未进入组织 API；产品正确保持撤权，未自动恢复。修正 CI 初始化与新用例，采用独立 org-reader 普通来源账号，不改鉴权、不改旧撤权断言、不跳过新组织断言。修正提交 `0342719d41f89ac28e2e24be9abce4f2c301d59f` 的 [CI 41276609574](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41276609574) 三个 job 全部成功；32 单元、3 下载器、8 解析、192 数据库、5 原生、59 UI、12 真实来源、4 容器，共 315 项通过。真实来源组织用例保留员工 UID/角色/部门、双引擎和撤权断言；容器保留组织/成员实例重启断言。使用合成账号与协议模型，不代表公司验收。

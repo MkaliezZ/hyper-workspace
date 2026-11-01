@@ -33,6 +33,8 @@ const Room = z.object({
   actorId: z.string(),
   participantType: z.number().int(),
   readOnly: z.number().int().default(0),
+  unreadMessages: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  unreadMention: z.boolean().optional(),
 });
 const Message = z.object({
   id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -216,6 +218,8 @@ export class NextcloudTalkProvider implements CommunicationProvider {
       id: room.token,
       name: room.displayName || "未命名会话",
       readOnly: room.readOnly !== 0,
+      unreadMessages: room.unreadMessages ?? null,
+      unreadMention: room.unreadMention ?? null,
     };
   }
   async listRooms() {

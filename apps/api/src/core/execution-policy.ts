@@ -215,7 +215,20 @@ export class ExecutionPolicyService {
     return this.db.tx((c) => this.apply(c, s, projectId, raw, key));
   }
   async projectId(c: Queryable, run: any): Promise<string | undefined> {
-    if (!run.conversation_id) return undefined; // Personal source files do not inherit unrelated project rules.
+    if (run.workflow === "manage_communication")
+      return (
+        await c.query(
+          "SELECT project_id FROM cw_project_sources WHERE workspace_id=$1 AND provider_key=$2 AND source_kind='nextcloud-talk' AND conversation_ref=COALESCE($3::text,(SELECT source_room_ref FROM cw_room_commands WHERE source_run_id=$4 AND workspace_id=$1 AND actor_id=$5 ORDER BY created_at LIMIT 1))",
+          [
+            run.workspace_id,
+            run.room_management_provider_key,
+            run.room_management_plan?.roomId ?? null,
+            run.id,
+            run.actor_id,
+          ],
+        )
+      ).rows[0]?.project_id;
+    if (!run.conversation_id) return undefined; // Personal operations do not inherit unrelated UI project rules.
     return (
       await c.query(
         "SELECT project_id FROM cw_conversations WHERE id=$1 AND workspace_id=$2",

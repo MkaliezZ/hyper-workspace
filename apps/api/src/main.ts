@@ -1,3 +1,8 @@
+import { RoomManagementService } from "./core/room-management.js";
+import {
+  RoomManagementInput,
+  RoomManagementRunInput,
+} from "@hyper/contracts/room-management";
 import { OrganizationService } from "./core/organization.js";
 import { OrganizationPlan, OrganizationQuery } from "@hyper/contracts";
 import { KnowledgeContextService } from "./core/knowledge-context.js";
@@ -448,6 +453,73 @@ class ApiController {
   }
   @Get("knowledge") async knowledge(@Req() req: Request, @Query("q") q = "") {
     return service.search(await subject(req), q.slice(0, 500));
+  }
+  @Get("talk/management") async roomManagement(
+    @Req() req: Request,
+    @Query("roomId") roomId?: string,
+  ) {
+    if (roomId !== undefined && !/^[a-z0-9]{4,30}$/.test(roomId))
+      throw new BadRequestException("会话 ID 无效。");
+    return new RoomManagementService(db).read(await subject(req), roomId);
+  }
+  @Get("talk/management/commands") async roomCommands(@Req() req: Request) {
+    return new RoomManagementService(db).activity(await subject(req));
+  }
+  @Post("talk/management/commands") async roomCommand(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const input = RoomManagementInput.parse(body);
+    return new RoomManagementService(db).execute(
+      await subject(req),
+      input.plan,
+      input.idempotencyKey,
+    );
+  }
+  @Get("talk/management/commands/:id") async roomCommandReceipt(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new RoomManagementService(db).receipt(await subject(req), uuid(id));
+  }
+  @Post("talk/management/commands/:id/reconcile") async reconcileRoom(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new RoomManagementService(db).reconcile(
+      await subject(req),
+      uuid(id),
+    );
+  }
+  @Post("talk/management/commands/:id/stop") async stopRoom(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new RoomManagementService(db).stop(await subject(req), uuid(id));
+  }
+  @Post("talk/management/commands/:id/acknowledge") async acknowledgeRoom(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    z.object({ confirmed: z.literal(true) })
+      .strict()
+      .parse(body);
+    return new RoomManagementService(db).acknowledge(
+      await subject(req),
+      uuid(id),
+    );
+  }
+  @Post("talk/management/runs") async startRoomRun(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    const run = await service.startRoomManagementRun(
+      await subject(req),
+      RoomManagementRunInput.parse(body),
+    );
+    await queue.enqueue(run.id);
+    return run;
   }
   @Post("files/imports/:id/readings") async readFile(
     @Req() req: Request,

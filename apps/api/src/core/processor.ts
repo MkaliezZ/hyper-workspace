@@ -1,3 +1,4 @@
+import { RoomManagementService } from "./room-management.js";
 import { OrganizationService } from "./organization.js";
 import { BadRequestException } from "@nestjs/common";
 import { KnowledgeContextService } from "./knowledge-context.js";
@@ -61,7 +62,7 @@ async function purgeFileRuntime(db: Database, id: string) {
     force: true,
   });
   await db.pool.query(
-    "UPDATE cw_runs SET runtime_cleaned_at=clock_timestamp() WHERE id=$1 AND (source_file_asset_id IS NOT NULL OR workflow IN ('query_knowledge','plan_work'))",
+    "UPDATE cw_runs SET runtime_cleaned_at=clock_timestamp() WHERE id=$1 AND (source_file_asset_id IS NOT NULL OR workflow IN ('query_knowledge','plan_work','manage_communication'))",
     [id],
   );
 }
@@ -126,7 +127,7 @@ export class RunProcessor {
       await this.enqueue(r.id);
     for (const r of (
       await db.pool.query(
-        "SELECT id FROM cw_runs WHERE (source_file_asset_id IS NOT NULL OR workflow IN ('query_knowledge','plan_work')) AND runtime_cleaned_at IS NULL AND state NOT IN ('queued','running') ORDER BY updated_at LIMIT 100",
+        "SELECT id FROM cw_runs WHERE (source_file_asset_id IS NOT NULL OR workflow IN ('query_knowledge','plan_work','manage_communication')) AND runtime_cleaned_at IS NULL AND state NOT IN ('queued','running') ORDER BY updated_at LIMIT 100",
       )
     ).rows)
       await purgeFileRuntime(db, r.id);
@@ -320,15 +321,17 @@ export class RunProcessor {
         onProgress: (text) =>
           event("progress.updated", {
             text:
-              run.workflow === "manage_organization"
-                ? "正在核对当前组织范围和员工确认的操作。"
-                : run.workflow === "plan_work"
-                  ? "正在核对工作范围并整理待确认计划。"
-                  : run.workflow === "query_knowledge"
-                    ? "正在核对已选资料并生成私人回答。"
-                    : isFileWorkflow(run.workflow)
-                      ? "正在阅读所选个人文件。"
-                      : text,
+              run.workflow === "manage_communication"
+                ? "正在核对员工确认的通信操作和来源回执。"
+                : run.workflow === "manage_organization"
+                  ? "正在核对当前组织范围和员工确认的操作。"
+                  : run.workflow === "plan_work"
+                    ? "正在核对工作范围并整理待确认计划。"
+                    : run.workflow === "query_knowledge"
+                      ? "正在核对已选资料并生成私人回答。"
+                      : isFileWorkflow(run.workflow)
+                        ? "正在阅读所选个人文件。"
+                        : text,
           }),
       });
       abort.signal.throwIfAborted();
@@ -363,62 +366,65 @@ export class RunProcessor {
         return;
       }
       const required =
-        run.workflow === "manage_organization"
-          ? ["organization.manage"]
-          : run.workflow === "query_knowledge"
-            ? ["knowledge.answer"]
-            : run.workflow === "manage_decision"
-              ? [
-                  ["create", "revise"].includes(run.decision_plan.operation)
-                    ? "decision.write"
-                    : "decision.manage",
-                ]
-              : run.workflow === "share_attachment"
-                ? ["attachment.share"]
-                : run.workflow === "discussion_to_minutes" ||
-                    run.workflow === "project_report"
-                  ? ["artifact.create", "project.report"]
-                  : run.workflow === "assign_task"
-                    ? ["task.assign"]
-                    : run.workflow === "directory_report"
-                      ? ["directory.read"]
-                      : run.workflow === "manage_brief"
-                        ? [
-                            ["create", "revise"].includes(
-                              run.brief_plan.operation,
-                            )
-                              ? "brief.write"
-                              : "brief.manage",
-                          ]
-                        : run.workflow === "manage_spending"
-                          ? ["spending.manage"]
-                          : run.workflow === "usage_report"
-                            ? ["usage.report"]
-                            : run.workflow === "configure_policy"
-                              ? ["policy.configure"]
-                              : run.workflow === "manage_method"
-                                ? [
-                                    ["create", "revise"].includes(
-                                      run.method_plan.operation,
-                                    )
-                                      ? "method.write"
-                                      : "method.manage",
-                                  ]
-                                : run.workflow === "revise_artifact"
-                                  ? ["artifact.revise"]
-                                  : run.workflow === "revise_task"
-                                    ? ["task.update"]
-                                    : run.workflow === "review_artifact"
-                                      ? ["artifact.review"]
-                                      : run.workflow === "follow_up"
-                                        ? ["follow_up.check"]
-                                        : run.workflow === "configure_follow_up"
-                                          ? ["follow_up.configure"]
-                                          : run.workflow === "draft_reply"
-                                            ? ["communication.draft"]
-                                            : isFileWorkflow(run.workflow)
-                                              ? ["file.reading.save"]
-                                              : [];
+        run.workflow === "manage_communication"
+          ? ["communication.manage"]
+          : run.workflow === "manage_organization"
+            ? ["organization.manage"]
+            : run.workflow === "query_knowledge"
+              ? ["knowledge.answer"]
+              : run.workflow === "manage_decision"
+                ? [
+                    ["create", "revise"].includes(run.decision_plan.operation)
+                      ? "decision.write"
+                      : "decision.manage",
+                  ]
+                : run.workflow === "share_attachment"
+                  ? ["attachment.share"]
+                  : run.workflow === "discussion_to_minutes" ||
+                      run.workflow === "project_report"
+                    ? ["artifact.create", "project.report"]
+                    : run.workflow === "assign_task"
+                      ? ["task.assign"]
+                      : run.workflow === "directory_report"
+                        ? ["directory.read"]
+                        : run.workflow === "manage_brief"
+                          ? [
+                              ["create", "revise"].includes(
+                                run.brief_plan.operation,
+                              )
+                                ? "brief.write"
+                                : "brief.manage",
+                            ]
+                          : run.workflow === "manage_spending"
+                            ? ["spending.manage"]
+                            : run.workflow === "usage_report"
+                              ? ["usage.report"]
+                              : run.workflow === "configure_policy"
+                                ? ["policy.configure"]
+                                : run.workflow === "manage_method"
+                                  ? [
+                                      ["create", "revise"].includes(
+                                        run.method_plan.operation,
+                                      )
+                                        ? "method.write"
+                                        : "method.manage",
+                                    ]
+                                  : run.workflow === "revise_artifact"
+                                    ? ["artifact.revise"]
+                                    : run.workflow === "revise_task"
+                                      ? ["task.update"]
+                                      : run.workflow === "review_artifact"
+                                        ? ["artifact.review"]
+                                        : run.workflow === "follow_up"
+                                          ? ["follow_up.check"]
+                                          : run.workflow ===
+                                              "configure_follow_up"
+                                            ? ["follow_up.configure"]
+                                            : run.workflow === "draft_reply"
+                                              ? ["communication.draft"]
+                                              : isFileWorkflow(run.workflow)
+                                                ? ["file.reading.save"]
+                                                : [];
       if (
         required.length &&
         !result.actions.some((action) => required.includes(action.tool))
@@ -438,6 +444,7 @@ export class RunProcessor {
           "directory_report",
           "share_attachment",
           "manage_organization",
+          "manage_communication",
         ].includes(run.workflow) &&
         result.actions.length !== 1
       )
@@ -539,6 +546,7 @@ export class RunProcessor {
           run.workflow !== "query_knowledge" &&
           run.workflow !== "assign_task" &&
           run.workflow !== "directory_report" &&
+          run.workflow !== "manage_communication" &&
           run.workflow !== "manage_organization" &&
           run.workflow !== "share_attachment" &&
           run.workflow !== "review_artifact" &&
@@ -562,41 +570,43 @@ export class RunProcessor {
             runId,
             {
               text:
-                run.workflow === "manage_organization"
-                  ? "组织操作已按实际回执核对；请打开通讯录读取当前状态。"
-                  : run.workflow === "query_knowledge"
-                    ? "私人资料回答已保存，请核对引用和片段覆盖范围。"
-                    : run.workflow === "manage_decision"
-                      ? "决定对象已按实际回执保存；待确认提议不表示团队已采纳。"
-                      : run.workflow === "draft_reply"
-                        ? "回复草稿已保存，尚未发送。"
-                        : run.workflow === "follow_up"
-                          ? receipts[0]!.summary
-                          : run.workflow === "configure_follow_up"
-                            ? "定时跟进配置已保存。"
-                            : run.workflow === "configure_policy"
-                              ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
-                              : run.workflow === "share_attachment"
-                                ? "附件分享消息已在来源回读；分享的是活文件引用，不表示收件人已阅读。"
-                                : run.workflow === "assign_task"
-                                  ? "已按明确员工身份保存分配记录；不表示已通知该员工或扩大权限。"
-                                  : run.workflow === "directory_report"
-                                    ? "已回读当前项目成员目录；未自动建号或授予权限。"
-                                    : run.workflow === "manage_brief"
-                                      ? "任务说明操作已保存；仍需完成必要澄清并确认当前版本后才能按说明执行。"
-                                      : run.workflow === "usage_report"
-                                        ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
-                                        : run.workflow === "manage_spending"
-                                          ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
-                                          : run.workflow === "review_artifact"
-                                            ? "已记录员工对指定成果版本的验收决定。"
-                                            : run.workflow === "manage_method"
-                                              ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
-                                              : run.workflow === "revise_task"
-                                                ? "待办记录已核对并保存；不代表实际工作已独立验收。"
-                                                : isFileWorkflow(run.workflow)
-                                                  ? "个人文件解读已保存。"
-                                                  : result.text,
+                run.workflow === "manage_communication"
+                  ? "通信操作已按来源回执核对；请查看当前会话与实际步骤。"
+                  : run.workflow === "manage_organization"
+                    ? "组织操作已按实际回执核对；请打开通讯录读取当前状态。"
+                    : run.workflow === "query_knowledge"
+                      ? "私人资料回答已保存，请核对引用和片段覆盖范围。"
+                      : run.workflow === "manage_decision"
+                        ? "决定对象已按实际回执保存；待确认提议不表示团队已采纳。"
+                        : run.workflow === "draft_reply"
+                          ? "回复草稿已保存，尚未发送。"
+                          : run.workflow === "follow_up"
+                            ? receipts[0]!.summary
+                            : run.workflow === "configure_follow_up"
+                              ? "定时跟进配置已保存。"
+                              : run.workflow === "configure_policy"
+                                ? "已保存员工确认的执行规则，后续执行按有效限制检查。"
+                                : run.workflow === "share_attachment"
+                                  ? "附件分享消息已在来源回读；分享的是活文件引用，不表示收件人已阅读。"
+                                  : run.workflow === "assign_task"
+                                    ? "已按明确员工身份保存分配记录；不表示已通知该员工或扩大权限。"
+                                    : run.workflow === "directory_report"
+                                      ? "已回读当前项目成员目录；未自动建号或授予权限。"
+                                      : run.workflow === "manage_brief"
+                                        ? "任务说明操作已保存；仍需完成必要澄清并确认当前版本后才能按说明执行。"
+                                        : run.workflow === "usage_report"
+                                          ? "已回读本人的模型请求与费用记录；估算、员工声明和未知项分别标记。"
+                                          : run.workflow === "manage_spending"
+                                            ? "已保存员工确认的费用操作；价格和核对金额为员工声明，不代表供应商账单验证。"
+                                            : run.workflow === "review_artifact"
+                                              ? "已记录员工对指定成果版本的验收决定。"
+                                              : run.workflow === "manage_method"
+                                                ? "方法操作已保存，请核对实际状态和版本；不代表模型独立验证了方法。"
+                                                : run.workflow === "revise_task"
+                                                  ? "待办记录已核对并保存；不代表实际工作已独立验收。"
+                                                  : isFileWorkflow(run.workflow)
+                                                    ? "个人文件解读已保存。"
+                                                    : result.text,
               receipts,
               evidence: result.evidence,
             },
@@ -625,7 +635,12 @@ export class RunProcessor {
                 "SELECT id FROM cw_attachment_sends WHERE source_run_id=$1 AND state<>'failed' LIMIT 1",
                 [runId],
               )
-            : { rowCount: 0 };
+            : run.workflow === "manage_communication"
+              ? await c.query(
+                  "SELECT id FROM cw_room_commands WHERE source_run_id=$1 AND state<>'failed' LIMIT 1",
+                  [runId],
+                )
+              : { rowCount: 0 };
         const state =
           actions.rowCount || external.rowCount
             ? "recovery_required"
@@ -635,16 +650,19 @@ export class RunProcessor {
           "query_knowledge",
           "plan_work",
           "manage_organization",
+          "manage_communication",
         ].includes(run.workflow)
           ? failure instanceof ExecutionLimitError ||
             failure instanceof SpendLimitError ||
             failure instanceof BadRequestException
             ? failure.message
-            : run.workflow === "manage_organization"
-              ? "组织操作未完成，请核对当前权限、组织版本和实际回执。"
-              : run.workflow === "plan_work"
-                ? "工作计划未完成，请核对来源、模型和当前权限。"
-                : "资料问答未完成，请核对来源、模型和实际引用。"
+            : run.workflow === "manage_communication"
+              ? "通信操作未完成，请核对当前权限与通信管理回执；未知步骤不会自动重发。"
+              : run.workflow === "manage_organization"
+                ? "组织操作未完成，请核对当前权限、组织版本和实际回执。"
+                : run.workflow === "plan_work"
+                  ? "工作计划未完成，请核对来源、模型和当前权限。"
+                  : "资料问答未完成，请核对来源、模型和实际引用。"
           : isFileWorkflow(run.workflow)
             ? failure instanceof ReadingVersionConflict ||
               failure instanceof ReadingInputLimit ||
@@ -673,7 +691,9 @@ export class RunProcessor {
       if (scopeTimer) clearInterval(scopeTimer);
       if (
         isFileWorkflow(run.workflow) ||
-        ["query_knowledge", "plan_work"].includes(run.workflow)
+        ["query_knowledge", "plan_work", "manage_communication"].includes(
+          run.workflow,
+        )
       )
         await purgeFileRuntime(db, runId).catch(() =>
           console.error(
@@ -696,17 +716,33 @@ export class RunProcessor {
   ) {
     if (!toolsForWorkflow(run.workflow).includes(action.tool))
       throw new Error("本次工作类型未授权该业务动作。");
-    if (action.tool === "attachment.share") {
+    if (
+      action.tool === "attachment.share" ||
+      action.tool === "communication.manage"
+    ) {
       z.object({}).strict().parse(action.args);
-      const result = await new AttachmentSendService(this.service.db).send(
-        s,
-        run.attachment_plan,
-        run.id + ":" + index,
-        { row: run, lease, contextBytes, actionCount },
-      );
+      const result =
+        action.tool === "communication.manage"
+          ? await new RoomManagementService(this.service.db).execute(
+              s,
+              run.room_management_plan,
+              run.id + ":" + index,
+              {
+                row: run,
+                lease,
+                contextBytes: contextBytes ?? 0,
+                actionCount: actionCount ?? 1,
+              },
+            )
+          : await new AttachmentSendService(this.service.db).send(
+              s,
+              run.attachment_plan,
+              run.id + ":" + index,
+              { row: run, lease, contextBytes, actionCount },
+            );
       if (result.state === "failed")
-        throw new Error("附件在投递前被拒绝，未确认发送。");
-      const actual = { tool: action.tool, ...result };
+        throw new Error("来源在实际操作前拒绝了请求，请查看对应回执。");
+      const actual = { ...result, tool: action.tool };
       // Capture the external fact even if cancellation happened after the dispatched POST.
       // No external network request is made inside this transaction.
       await this.service.db.tx(async (c) => {
@@ -737,7 +773,7 @@ export class RunProcessor {
         await appendEvent(c, run.id, "action.completed", actual);
       });
       if (result.state !== "succeeded")
-        throw new Error("附件投递结果待核对；请查看附件发送回执，未自动重发。");
+        throw new Error("来源操作结果待核对；请查看实际回执，未自动重发。");
       return actual;
     }
     const organizationService =

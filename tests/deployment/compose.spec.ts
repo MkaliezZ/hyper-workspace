@@ -560,6 +560,34 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     );
     expect(departmentResponse.status()).toBe(201);
     const department = await departmentResponse.json();
+    // Synthetic dispatch evidence only: no source server, credentials or communication write is claimed.
+    const roomCommandId = randomUUID();
+    const seedCommand = `
+      import {Pool} from 'pg';
+      import {randomUUID} from 'node:crypto';
+      import {RoomManagementService} from './dist/core/room-management.js';
+      if(typeof RoomManagementService!=='function') throw Error('Missing compiled room service');
+      const pool=new Pool({connectionString:process.env.DATABASE_URL,max:1});
+      const workspace=randomUUID(),actor=randomUUID(),identity=randomUUID(),credential=randomUUID();
+      await pool.query("INSERT INTO cw_workspaces(id,name)VALUES($1,'Synthetic restart evidence')",[workspace]);
+      await pool.query("INSERT INTO cw_users(id,name)VALUES($1,'Synthetic command owner')",[actor]);
+      await pool.query("INSERT INTO cw_members(workspace_id,user_id,role)VALUES($1,$2,'member')",[workspace,actor]);
+      await pool.query("INSERT INTO cw_external_identities(id,provider_key,remote_uid,user_id,workspace_id)VALUES($1,'synthetic-restart','synthetic-owner',$2,$3)",[identity,actor,workspace]);
+      await pool.query("INSERT INTO cw_identity_credentials(id,identity_id,login_name,credential_enc)VALUES($1,$2,'synthetic-owner','not-a-real-credential')",[credential,identity]);
+      await pool.query("INSERT INTO cw_room_commands(id,workspace_id,actor_id,identity_credential_id,provider_key,binding_ref,remote_uid,operation,plan,params_hash,idempotency_key,source_room_ref,state,outcome)VALUES($1,$2,$3,$4,'synthetic-restart',$5,'synthetic-owner','notify',$6,$5,$7,'syntheticroom','recovery_required','dispatch_unknown')",[${JSON.stringify(roomCommandId)},workspace,actor,credential,'a'.repeat(64),{operation:'notify',roomId:'syntheticroom',level:3,confirmed:true,bindingRef:'a'.repeat(64),expected:'b'.repeat(64)},randomUUID()]);
+      await pool.query("INSERT INTO cw_room_command_steps(command_id,sequence,operation,state,dispatched_at)VALUES($1,0,'notify','unknown',clock_timestamp())",[${JSON.stringify(roomCommandId)}]);
+      await pool.end();`;
+    compose(
+      "exec",
+      "-T",
+      "api",
+      "node",
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "-e",
+      seedCommand,
+    );
     compose("stop", "api", "worker", "db");
     compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120");
     await expect
@@ -574,6 +602,28 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         { timeout: 60000 },
       )
       .toBe(200);
+    const restoredCommand = JSON.parse(
+      compose(
+        "exec",
+        "-T",
+        "api",
+        "node",
+        "--input-type=module",
+        "-e",
+        `
+      import {Pool} from 'pg';
+      const pool=new Pool({connectionString:process.env.DATABASE_URL,max:1});
+      const result=await pool.query("SELECT c.state,c.outcome,s.state AS step FROM cw_room_commands c JOIN cw_room_command_steps s ON s.command_id=c.id WHERE c.id=$1",[${JSON.stringify(roomCommandId)}]);
+      process.stdout.write(JSON.stringify(result.rows));await pool.end();`,
+      ),
+    );
+    expect(restoredCommand).toEqual([
+      {
+        state: "recovery_required",
+        outcome: "dispatch_unknown",
+        step: "unknown",
+      },
+    ]);
     const organizationRestored = await (
       await context.request.get(origin + "/api/organization")
     ).json();

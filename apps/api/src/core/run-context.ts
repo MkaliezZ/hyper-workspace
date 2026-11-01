@@ -1,3 +1,4 @@
+import { RoomManagementService } from "./room-management.js";
 import { OrganizationService } from "./organization.js";
 import { KnowledgeContextService } from "./knowledge-context.js";
 import { WorkPlanService } from "./work-plans.js";
@@ -28,6 +29,8 @@ export async function assertRunScope(
   run: any,
 ) {
   await assertScheduledRun(service.db.pool, run);
+  if (run.workflow === "manage_communication")
+    return new RoomManagementService(service.db).assertRunScope(s, run);
   if (isFileWorkflow(run.workflow))
     return new SourceFileService(service.db).assertVersion(
       s,
@@ -77,6 +80,20 @@ async function baseRunContext(
   subject: Subject,
   run: any,
 ) {
+  if (run.workflow === "manage_communication") {
+    const selected = await new RoomManagementService(service.db).prepare(
+      subject,
+      run.room_management_plan,
+    );
+    return {
+      context:
+        "Host-bound communication operation. Propose exactly one communication.manage with empty args. The host fixes the confirmed source target, settings and identities. Never select people, rooms, permissions or marker positions. No room names, employee roster, messages or private source content are included.\n" +
+        JSON.stringify({ operation: selected.plan.operation }),
+      sourceIds: [],
+      contextRefs: [],
+      live: true,
+    };
+  }
   if (isFileWorkflow(run.workflow)) {
     const file = await new SourceFileService(service.db).get(
       subject,

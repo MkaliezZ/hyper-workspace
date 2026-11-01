@@ -39,6 +39,28 @@ function binding(s: Subject) {
 }
 export class OrganizationService {
   constructor(readonly db: Database) {}
+  /** Exact IDs for communication invitations; no privileged profile lookup, auto-enrollment or credential return. */
+  async eligibleUids(s: Subject, uids: string[]) {
+    if (
+      !Array.isArray(uids) ||
+      uids.length < 1 ||
+      uids.length > 20 ||
+      new Set(uids).size !== uids.length ||
+      uids.some(
+        (uid) =>
+          typeof uid !== "string" ||
+          !uid ||
+          uid.length > 255 ||
+          /[\u0000-\u001f\u007f]/.test(uid),
+      )
+    )
+      throw new BadRequestException("请选择 1–20 个不同的员工 UID。");
+    const scope = await this.scope(s);
+    if (uids.some((uid) => !scope.uids.includes(uid)))
+      throw new NotFoundException("所选员工已不在当前企业成员范围。");
+    await this.recheck(s, scope);
+    return { bindingKey: scope.bindingKey, uids: [...uids] };
+  }
   static async lock(c: PoolClient, workspaceId: string) {
     await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
       "organization:" + workspaceId,

@@ -1,3 +1,5 @@
+import { RoomManagementService } from "./room-management.js";
+import type { RoomManagementRunInput } from "@hyper/contracts/room-management";
 import { OrganizationService } from "./organization.js";
 import { selectTextChunks, MAX_INDEX_TEXT } from "./text-chunks.js";
 import { KnowledgeContextService } from "./knowledge-context.js";
@@ -393,6 +395,120 @@ export class WorkspaceService {
       );
     return model;
   }
+  async startRoomManagementRun(s: Subject, input: RoomManagementRunInput) {
+    const rooms = new RoomManagementService(this.db);
+    const hash = stableDigest({ ...input, idempotencyKey: undefined });
+    const lookup = () =>
+      this.db.pool.query(
+        "SELECT id,state,input_hash,room_management_plan,room_management_provider_key FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+        [s.workspaceId, s.id, input.idempotencyKey],
+      );
+    const replay = async (row: any) => {
+      if (row.input_hash !== hash)
+        throw new ConflictException("相同幂等键不能用于不同通信任务。");
+      await rooms.assertReceiptScope(s, row);
+      return { id: row.id, state: row.state, created: false };
+    };
+    const old = (await lookup()).rows[0];
+    if (old) return replay(old);
+    let prepared: Awaited<ReturnType<RoomManagementService["prepare"]>>;
+    try {
+      prepared = await rooms.prepare(s, input.plan);
+    } catch (error) {
+      const concurrent = (await lookup()).rows[0];
+      if (concurrent) return replay(concurrent);
+      throw error;
+    }
+    if (
+      !this.engines
+        .get(input.engine)
+        ?.describeCapabilities()
+        .operations.includes("manage_communication")
+    )
+      throw new BadRequestException("执行器尚未声明通信管理能力。");
+    const model = await this.runModel(s, input.engine, input.modelProfileId);
+    const result = await this.db.tx(async (c) => {
+      await ExecutionPolicyService.lock(c, s.workspaceId);
+      const creation = ["create_direct", "create_group"].includes(
+        prepared.plan.operation,
+      );
+      const target = "roomId" in prepared.plan ? prepared.plan.roomId : null;
+      await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+        "room-command:" +
+          s.workspaceId +
+          ":" +
+          s.id +
+          ":" +
+          prepared.source.bindingRef +
+          ":" +
+          (creation ? "creation" : target),
+      ]);
+      const prior = (
+        await c.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (prior) return { rows: [], rowCount: 0 };
+      if (
+        !(
+          await c.query(
+            "SELECT user_id FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+            [s.workspaceId, s.id],
+          )
+        ).rowCount ||
+        !(
+          await c.query(
+            "SELECT id FROM cw_identity_credentials WHERE id=$1 AND disabled_at IS NULL FOR SHARE",
+            [s.identityCredentialId],
+          )
+        ).rowCount
+      )
+        throw new ForbiddenException("当前员工或登录已失效。");
+      if (prepared.plan.operation !== "read") {
+        const queued = (
+          await c.query(
+            "SELECT id FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND workflow='manage_communication' AND room_management_provider_key=$3 AND state IN ('queued','running') AND (($4::boolean AND room_management_plan->>'operation' IN ('create_direct','create_group')) OR (NOT $4 AND room_management_plan->>'roomId'=$5)) LIMIT 1",
+            [
+              s.workspaceId,
+              s.id,
+              prepared.source.config.providerKey,
+              creation,
+              target,
+            ],
+          )
+        ).rowCount;
+        const pending = (
+          await c.query(
+            "SELECT id FROM cw_room_commands WHERE workspace_id=$1 AND actor_id=$2 AND binding_ref=$3 AND state IN ('dispatching','recovery_required') AND acknowledged_at IS NULL AND (($4::boolean AND operation IN ('create_direct','create_group')) OR (NOT $4 AND source_room_ref=$5)) LIMIT 1",
+            [s.workspaceId, s.id, prepared.source.bindingRef, creation, target],
+          )
+        ).rowCount;
+        if (queued || pending)
+          throw new ConflictException(
+            "此范围已有通信任务或操作待核对，请查看原任务和回执。",
+          );
+      }
+      return c.query(
+        "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,idempotency_key,input_hash,demo,model_profile_id,identity_credential_id,task_rules,room_management_plan,room_management_provider_key) VALUES($1,$2,$3,NULL,$4,'manage_communication','执行员工明确选定的通信操作；仅以实际回执报告结果。',$5,$6,false,$7,$8,$9,$10,$11) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+        [
+          randomUUID(),
+          s.workspaceId,
+          s.id,
+          input.engine,
+          input.idempotencyKey,
+          hash,
+          model?.id,
+          s.identityCredentialId,
+          input.taskRules ?? {},
+          prepared.plan,
+          prepared.source.config.providerKey,
+        ],
+      );
+    });
+    if (result.rowCount) return { ...result.rows[0], created: true };
+    return replay((await lookup()).rows[0]);
+  }
   async startFileRun(s: Subject, assetId: string, input: FileReadingInput) {
     const files = new SourceFileService(this.db);
     await files.assertVersion(s, assetId, input.expectedSourceVersion);
@@ -525,6 +641,8 @@ export class WorkspaceService {
     });
   }
   async startRun(s: Subject, input: RunInput) {
+    if (input.workflow === "manage_communication")
+      throw new BadRequestException("请从通信管理专用入口发起。");
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
@@ -1121,7 +1239,7 @@ export class WorkspaceService {
     await assertMember(this.db, s);
     const target = (
       await this.db.pool.query(
-        "SELECT conversation_id,source_file_asset_id,expected_file_version,knowledge_plan,(instruction='') AS source_redacted FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
+        "SELECT conversation_id,source_file_asset_id,expected_file_version,knowledge_plan,room_management_plan,room_management_provider_key,(instruction='') AS source_redacted FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3",
         [id, s.workspaceId, s.id],
       )
     ).rows[0];
@@ -1134,6 +1252,11 @@ export class WorkspaceService {
         target.source_file_asset_id,
         target.expected_file_version,
       );
+    else if (target.room_management_plan)
+      await new RoomManagementService(this.db).assertReceiptScope(s, {
+        ...target,
+        id,
+      });
     else await this.conversation(s, target.conversation_id);
     if (target.knowledge_plan) {
       if (target.source_redacted)
@@ -1177,16 +1300,23 @@ export class WorkspaceService {
         knowledge_plan: target.knowledge_plan,
       });
     }
+    if (target.room_management_plan)
+      r.rows[0].result = await new RoomManagementService(
+        this.db,
+      ).publicRunMetadata(s, r.rows[0].result);
     return r.rows[0];
   }
   async events(s: Subject, id: string, after = 0) {
-    await this.getRun(s, id);
-    return (
+    const run = await this.getRun(s, id);
+    const rows = (
       await this.db.pool.query(
         'SELECT event_id AS "eventId",run_id AS "runId",sequence,kind,data,occurred_at AS "occurredAt",\'1.0.0\' AS "schemaVersion" FROM cw_run_events WHERE run_id=$1 AND sequence>$2 ORDER BY sequence',
         [id, after],
       )
     ).rows;
+    return run.workflow === "manage_communication"
+      ? new RoomManagementService(this.db).publicRunMetadata(s, rows)
+      : rows;
   }
   async cancel(s: Subject, id: string) {
     await assertMember(this.db, s);

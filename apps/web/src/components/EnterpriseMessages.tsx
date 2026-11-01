@@ -1,3 +1,4 @@
+import { RoomManagementDialog } from "./RoomManagementDialog";
 import { useEffect, useRef, useState } from "react";
 import { MessageSquare, RefreshCw, Send } from "lucide-react";
 import type {
@@ -37,6 +38,7 @@ export function EnterpriseMessages({
   filesEnabled?: boolean;
   view?: WorkspaceView;
 }) {
+  const [managementOpen, setManagementOpen] = useState(false);
   const [rooms, setRooms] = useState<CommunicationRoom[]>([]),
     [selected, setSelected] = useState("");
   const [messages, setMessages] = useState<CommunicationMessage[]>([]),
@@ -284,6 +286,26 @@ export function EnterpriseMessages({
     );
   return (
     <section className="enterprise-panel" aria-label="企业会话">
+      {managementOpen && view ? (
+        <RoomManagementDialog
+          view={view}
+          roomId={selected || undefined}
+          messages={messages}
+          onClose={() => setManagementOpen(false)}
+          onChanged={(roomId) => {
+            if (roomId && roomId !== current.current) {
+              scopeEpoch.current++;
+              setSelected(roomId);
+              setMessages([]);
+              setBefore(null);
+              setPending([]);
+              setProposal(undefined);
+            }
+            void loadRooms();
+            setRefresh((v) => v + 1);
+          }}
+        />
+      ) : null}
       <aside className="enterprise-rooms">
         <div className="enterprise-room-heading">
           <h3>我的会话</h3>
@@ -296,6 +318,14 @@ export function EnterpriseMessages({
             <RefreshCw size={17} />
           </button>
         </div>
+        {view ? (
+          <button
+            className="room-management-open"
+            onClick={() => setManagementOpen(true)}
+          >
+            会话与通知管理
+          </button>
+        ) : null}
         <div role="list" aria-label="企业会话列表">
           {rooms.map((item) => (
             <button
@@ -320,6 +350,14 @@ export function EnterpriseMessages({
             >
               <MessageSquare size={18} />
               <span>{item.name}</span>
+              {item.unreadMention === true ? (
+                <small aria-label="有人提及我">@</small>
+              ) : null}
+              {item.unreadMessages != null && item.unreadMessages > 0 ? (
+                <small aria-label={"未读 " + item.unreadMessages + " 条"}>
+                  {item.unreadMessages > 99 ? "99+" : item.unreadMessages}
+                </small>
+              ) : null}
               {item.readOnly ? <small>只读</small> : null}
             </button>
           ))}
@@ -549,7 +587,15 @@ export function EnterpriseMessages({
                 </div>
               </div>
             ))}
-            {filesEnabled && view ? <AttachmentControls key={selected} room={room} view={view} disabled={busy||loading} onChange={()=>setRefresh(v=>v+1)}/> : null}
+            {filesEnabled && view ? (
+              <AttachmentControls
+                key={selected}
+                room={room}
+                view={view}
+                disabled={busy || loading}
+                onChange={() => setRefresh((v) => v + 1)}
+              />
+            ) : null}
             {draft.draftId ? (
               <p className="reply-draft-notice">
                 AI 起草的回复，可修改后发送。发送结果以会话回执为准。

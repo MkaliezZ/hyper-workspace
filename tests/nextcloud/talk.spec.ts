@@ -2120,3 +2120,237 @@ test("Both native engines prepare private Talk replies that an employee reviews 
     await peer.context.close();
   }
 });
+
+test("Real Talk management shares current-source permissions, exact member instances and native AI receipts without a project conversation", async ({
+  browser,
+}) => {
+  test.setTimeout(300000);
+  const owner = await login(browser, "org-reader"),
+    peer = await login(browser, "employee-one"),
+    headers = { Origin: origin },
+    key = "synthetic-communication-" + randomUUID(),
+    model = modelFixture([key], (body) => {
+      const text = JSON.stringify(body.messages);
+      expect(text).not.toContain("Source communication private group");
+      expect(text).not.toContain("Synthetic renamed group");
+    });
+  await new Promise<void>((resolve) =>
+    model.server.listen(0, "127.0.0.1", resolve),
+  );
+  let groupId: string | undefined;
+  try {
+    for (const actor of [owner, peer])
+      await expect
+        .poll(async () =>
+          (await actor.context.request.get(origin + "/api/workspace")).status(),
+        )
+        .toBe(200);
+    const request = owner.context.request,
+      read = async (room?: string) => {
+        const response = await request.get(
+          origin + "/api/talk/management" + (room ? "?roomId=" + room : ""),
+        );
+        expect(response.status()).toBe(200);
+        return response.json();
+      };
+    const initial = await read();
+    expect(initial.actorUid).toBe("org-reader");
+    expect(initial.features).toContain("notification-levels");
+    const profileResponse = await request.post(origin + "/api/models", {
+      headers,
+      data: {
+        name: "Synthetic source communication model",
+        provider: "openai-compatible",
+        endpoint:
+          "http://127.0.0.1:" + (model.server.address() as any).port + "/v1",
+        model: "native-test-model",
+        purpose: "chat",
+        scope: "personal",
+        apiKey: key,
+      },
+    });
+    expect(profileResponse.status()).toBe(201);
+    const profile = await profileResponse.json();
+    const direct = async (plan: any, actor = owner, key = randomUUID()) => {
+      const response = await actor.context.request.post(
+        origin + "/api/talk/management/commands",
+        { headers, data: { plan, idempotencyKey: key } },
+      );
+      expect(response.status()).toBe(201);
+      const result = await response.json();
+      expect(result.state).toBe("succeeded");
+      return result;
+    };
+    const native = async (engine: string, plan: any) => {
+      const response = await request.post(
+        origin + "/api/talk/management/runs",
+        {
+          headers,
+          data: {
+            engine,
+            plan,
+            modelProfileId: profile.id,
+            idempotencyKey: randomUUID(),
+          },
+        },
+      );
+      expect(response.status()).toBe(201);
+      const run = await response.json();
+      await expect
+        .poll(
+          async () => {
+            const result = await request.get(origin + "/api/runs/" + run.id);
+            expect(result.status()).toBe(200);
+            const current = await result.json();
+            return ["failed", "recovery_required"].includes(current.state)
+              ? current.state + ": " + current.error
+              : current.state;
+          },
+          { timeout: 120000, intervals: [1000] },
+        )
+        .toBe("succeeded");
+      const result = await (
+        await request.get(origin + "/api/runs/" + run.id)
+      ).json();
+      expect(result.result.evidence).toBe("runtime");
+      expect(JSON.stringify(result.result)).not.toContain(
+        "Source communication private group",
+      );
+      return result.result.receipts[0];
+    };
+    const group = await native("dsh", {
+      operation: "create_group",
+      bindingRef: initial.bindingRef,
+      name: "Source communication private group " + randomUUID().slice(0, 8),
+      uids: ["employee-one"],
+      confirmed: true,
+    });
+    groupId = group.roomId;
+    expect(groupId).toBeTruthy();
+    expect(group.completedSteps).toBe(2);
+    const state = await read(groupId),
+      room = state.rooms[0],
+      person = state.participants.rows.find(
+        (p: any) => p.uid === "employee-one",
+      );
+    expect(person.attendeeId).toBeGreaterThan(0);
+    expect(person.participantType).toBe(3);
+    const plan = (operation: string, extra: any = {}, current = state) => ({
+      operation,
+      bindingRef: current.bindingRef,
+      roomId: groupId,
+      expected: current.rooms[0].expected[operation],
+      confirmed: true,
+      ...extra,
+    });
+    const preference = await native(
+      "hermes",
+      plan("favorite", { enabled: true }),
+    );
+    expect(preference.state).toBe("succeeded");
+    expect((await read(groupId)).rooms[0].favorite).toBe(true);
+    const notified = await direct(plan("notify", { level: 3 })),
+      sameKey = notified.requestKey;
+    expect((await read(groupId)).rooms[0].notificationLevel).toBe(3);
+    const replayResponse = await request.post(
+      origin + "/api/talk/management/commands",
+      {
+        headers,
+        data: { plan: plan("notify", { level: 3 }), idempotencyKey: sameKey },
+      },
+    );
+    expect(replayResponse.status()).toBe(201);
+    expect((await replayResponse.json()).id).toBe(notified.id);
+    const peerStateResponse = await peer.context.request.get(
+      origin + "/api/talk/management?roomId=" + groupId,
+    );
+    expect(peerStateResponse.status()).toBe(200);
+    const peerState = await peerStateResponse.json();
+    const denied = await peer.context.request.post(
+      origin + "/api/talk/management/commands",
+      {
+        headers,
+        data: {
+          plan: {
+            operation: "rename",
+            bindingRef: peerState.bindingRef,
+            roomId: groupId,
+            expected: peerState.rooms[0].expected.rename,
+            name: "Cannot bypass source role",
+            confirmed: true,
+          },
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(denied.status()).toBe(403);
+    await direct(
+      plan(
+        "moderator",
+        { uid: person.uid, attendeeId: person.attendeeId, enabled: true },
+        await read(groupId),
+      ),
+    );
+    expect(
+      (await read(groupId)).participants.rows.find(
+        (p: any) => p.uid === "employee-one",
+      ).participantType,
+    ).toBe(2);
+    await direct(
+      plan(
+        "moderator",
+        { uid: person.uid, attendeeId: person.attendeeId, enabled: false },
+        await read(groupId),
+      ),
+    );
+    await direct(
+      plan(
+        "remove_member",
+        { uid: person.uid, attendeeId: person.attendeeId },
+        await read(groupId),
+      ),
+    );
+    expect(
+      (
+        await peer.context.request.get(
+          origin + "/api/talk/management?roomId=" + groupId,
+        )
+      ).status(),
+    ).toBe(404);
+    const report = await native("dsh", {
+      operation: "read",
+      bindingRef: initial.bindingRef,
+      roomId: groupId,
+    });
+    expect(report.roomCount).toBe(1);
+    expect(report.rows).toBeUndefined();
+    const deletion = await native(
+      "hermes",
+      plan("delete", {}, await read(groupId)),
+    );
+    expect(deletion.scopeAvailable).toBe(false);
+    expect(deletion.roomId).toBeNull();
+    groupId = undefined;
+    expect(model.calls()).toBe(4);
+  } finally {
+    if (groupId)
+      await fetch(
+        source +
+          "/ocs/v2.php/apps/spreed/api/v4/room/" +
+          groupId +
+          "?format=json",
+        {
+          method: "DELETE",
+          headers: {
+            Authorization:
+              "Basic " +
+              Buffer.from("org-reader:" + password).toString("base64"),
+            "OCS-APIRequest": "true",
+          },
+        },
+      ).catch(() => {});
+    await new Promise<void>((resolve) => model.server.close(() => resolve()));
+    await owner.context.close();
+    await peer.context.close();
+  }
+});
