@@ -1,4 +1,9 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { SpendLimitError } from "./money.js";
+import {
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { Subject } from "@hyper/contracts";
 import type { Database } from "../db/database.js";
@@ -74,56 +79,101 @@ export class KnowledgeService {
         plan.chunks.map((chunk) => ({ row: plan.row, chunk })),
       ),
       vectors = new Map<string, number[]>();
-    for (let offset = 0; offset < items.length; offset += 32) {
-      const batch = items.slice(offset, offset + 32),
-        batchIds = [...new Set(batch.map((item) => item.row.id))],
-        current = await this.allowed(s, batchIds);
-      const versions = (
-        await this.db.pool.query(
-          "SELECT id,content,source_version,project_id,visibility,owner_id,validity,deleted_at FROM cw_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[])",
-          [s.workspaceId, batchIds],
-        )
-      ).rows;
-      const allowed = await MethodsService.filterAssets(
-        this.db,
-        batch.map((item) => item.row),
-      );
-      const currentBindings = new Map<string, string>();
-      for (const projectId of new Set(
-        batch.map((item) => item.row.project_id).filter(Boolean),
-      ))
-        currentBindings.set(
-          projectId,
-          bindingKey(await access.binding(s, projectId)),
+    let completedModelBatches = 0;
+    try {
+      for (let offset = 0; offset < items.length; offset += 32) {
+        const batch = items.slice(offset, offset + 32),
+          batchIds = [...new Set(batch.map((item) => item.row.id))],
+          current = await this.allowed(s, batchIds);
+        const versions = (
+          await this.db.pool.query(
+            "SELECT id,content,source_version,project_id,visibility,owner_id,validity,deleted_at FROM cw_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[])",
+            [s.workspaceId, batchIds],
+          )
+        ).rows;
+        const allowed = await MethodsService.filterAssets(
+          this.db,
+          batch.map((item) => item.row),
         );
-      const send = batch.filter(
-        ({ row }) =>
-          (!row.project_id ||
-            currentBindings.get(row.project_id) ===
-              bindings.get(row.project_id)) &&
-          allowed.some((value) => value.id === row.id) &&
-          versions.some(
-            (value) =>
-              value.id === row.id &&
-              value.content === row.content &&
-              value.source_version === row.source_version &&
-              value.validity === "active" &&
-              !value.deleted_at &&
-              (value.visibility === "workspace" || value.owner_id === s.id) &&
-              (!value.project_id ||
-                current.projects.includes(value.project_id)),
-          ) &&
-          (!row.fileSource ||
-            current.files.allowed.get(row.id) === row.source_version),
-      );
-      if (!send.length) continue;
-      const result = await embed(
-        connection,
-        send.map(({ row, chunk }) => row.title + "\n" + chunk.content),
-      );
-      send.forEach((item, i) =>
-        vectors.set(item.row.id + ":" + item.chunk.ordinal, result[i]!),
-      );
+        const currentBindings = new Map<string, string>();
+        for (const projectId of new Set(
+          batch.map((item) => item.row.project_id).filter(Boolean),
+        ))
+          currentBindings.set(
+            projectId,
+            bindingKey(await access.binding(s, projectId)),
+          );
+        const send = batch.filter(
+          ({ row }) =>
+            (!row.project_id ||
+              currentBindings.get(row.project_id) ===
+                bindings.get(row.project_id)) &&
+            allowed.some((value) => value.id === row.id) &&
+            versions.some(
+              (value) =>
+                value.id === row.id &&
+                value.content === row.content &&
+                value.source_version === row.source_version &&
+                value.validity === "active" &&
+                !value.deleted_at &&
+                (value.visibility === "workspace" || value.owner_id === s.id) &&
+                (!value.project_id ||
+                  current.projects.includes(value.project_id)),
+            ) &&
+            (!row.fileSource ||
+              current.files.allowed.get(row.id) === row.source_version),
+        );
+        if (!send.length) continue;
+        // A single supplier request must have an honest project attribution. Do not
+        // mix chunks from multiple projects into an unattributed budget request.
+        const groups = new Map<string | null, typeof send>();
+        for (const item of send) {
+          const key = item.row.project_id ?? null;
+          const group = groups.get(key) ?? [];
+          group.push(item);
+          groups.set(key, group);
+        }
+        for (const [projectId, group] of groups) {
+          const scopedConnection = projectId
+            ? await new ModelService(this.db).resolve(
+                s,
+                "embedding",
+                connection.id,
+                projectId,
+              )
+            : connection;
+          if (
+            projectId &&
+            bindingKey(await access.binding(s, projectId)) !==
+              bindings.get(projectId)
+          )
+            throw new ConflictException(
+              "资料来源已变化，未发出此项目的向量请求。",
+            );
+          if (
+            scopedConnection.model !== connection.model ||
+            scopedConnection.endpoint !== connection.endpoint ||
+            scopedConnection.provider !== connection.provider
+          )
+            throw new ConflictException(
+              "模型连接已变化，本轮索引不混用不同模型。",
+            );
+          const result = await embed(
+            scopedConnection,
+            group.map(({ row, chunk }) => row.title + "\n" + chunk.content),
+          );
+          completedModelBatches++;
+          group.forEach((item, i) =>
+            vectors.set(item.row.id + ":" + item.chunk.ordinal, result[i]!),
+          );
+        }
+      }
+    } catch (error) {
+      if (completedModelBatches > 0)
+        throw new BadRequestException(
+          `本次索引未完成；此前已完成 ${completedModelBatches} 批模型请求，相关用量与费用按实际记录核对。本轮新向量尚未提交。${error instanceof SpendLimitError ? error.message : "请核对当前索引状态和模型用量后继续。"}`,
+        );
+      throw error;
     }
     const final = await this.allowed(s, ids),
       indexed: string[] = [];

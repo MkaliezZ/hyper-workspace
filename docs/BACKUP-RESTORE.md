@@ -44,7 +44,7 @@ node --env-file=.env.compose scripts/workspace-backup.mjs restore-check \
 
 使用其他 Compose 文件时，逐一增加 `--file compose.yaml --file deploy/your-overlay.yaml`。配置文件必须是普通私有文件，不能为符号链接。Docker 子进程仅继承所需的 Docker/系统环境，部署参数从指定私有文件读取，不打印完整 Compose 配置。
 
-备份使用数据库一致快照；建议在维护窗口停止新的 API/Worker 写入，并暂停主密钥、结构或扩展变更。结构/扩展在备份前后不一致时不生成成功清单；创建时源凭据检查不能替代后续恢复检查。仅支持与本代码版本完整迁移集匹配的专用产品库（当前到 040），拒绝混入其他应用表、无效约束/索引及不匹配的 PG 客户端主版本。
+备份使用数据库一致快照；建议在维护窗口停止新的 API/Worker 写入，并暂停主密钥、结构或扩展变更。结构/扩展在备份前后不一致时不生成成功清单；创建时源凭据检查不能替代后续恢复检查。仅支持与本代码版本完整迁移集匹配的专用产品库（当前到 041），拒绝混入其他应用表、无效约束/索引及不匹配的 PG 客户端主版本。
 
 ## 已有本机 PostgreSQL
 
@@ -84,3 +84,10 @@ node --env-file=/private-config/hyper-backup.env scripts/workspace-backup.mjs re
 首轮失败保留：本机 PG 客户端尚引用改名前的编译路径，修复被忽略的本机客户端链接后继续；PG 工具对 `--version` 的参数位置要求与 `psql` 不同，现保留版本参数首位，原断言继续执行。修复后实际数据库和文件/进程验证通过。
 
 依据：[PG17 pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html)、[pg_restore](https://www.postgresql.org/docs/17/app-pgrestore.html)、[SQL dump 与全局角色边界](https://www.postgresql.org/docs/17/backup-dump.html)。仅恢复可信来源归档；PostgreSQL 恢复会执行归档中的 SQL。
+
+
+## 企业金额账本恢复（041）
+
+新版本要求完整迁移集包含 `041_organization_budgets.sql`。独立企业计价版本、工作区/项目控制、原请求关联、估算/管理员声明及未结算预留随原库归档，不使用个人单价重算。恢复库中未结束且未由有权人员声明的模型请求和企业费用标记为待核对；保留金额、价格版本和原始用量，不计为免费、不退款，也不重发供应商请求。启用的预算据此暂停后续准入。已明确声明的金额与原估算同时保留，恢复不会替管理员编造账单。
+
+旧迁移集的归档须使用与该归档匹配的代码/工具先做隔离恢复，再按升级说明迁移；不把新版工具强套到旧结构。开发机在应用 041 前，使用保留的 040 代码快照生成并校验了独立受限备份；未覆盖原库或重置主密钥。扩展的本地真 PG 用例已验证未知预留、已声明金额/原估算与源库不变，以及恢复后拒绝新准入；真实 Compose 场景按本代码提交的 CI 单独核对。

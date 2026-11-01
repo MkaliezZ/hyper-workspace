@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { Subject } from "@hyper/contracts";
+import { isOrganizationBudgetPlan, type Subject } from "@hyper/contracts";
 import type { Database } from "../db/database.js";
 import { assertMember } from "./security.js";
 import { appendEvent } from "./workspace.js";
 import { ModelSpendingService, units } from "./model-spending.js";
+import { OrganizationBudgetService } from "./organization-budgets.js";
 export interface ProviderUsage {
   status: "unknown" | "partial" | "reported" | "invalid";
   inputTokens: number | null;
@@ -96,7 +97,14 @@ export class ModelAccounting {
   constructor(
     readonly db: Database,
     readonly subject: Subject,
-    readonly profile: { id: string; model: string; provider: string },
+    readonly profile: {
+      id: string;
+      model: string;
+      provider: string;
+      endpoint: string;
+      purpose: "chat" | "embedding";
+    },
+    readonly projectContext?: { id: string; bindingHash: string },
   ) {}
   async begin(
     purpose: "run" | "chat" | "embedding" | "verification",
@@ -105,36 +113,59 @@ export class ModelAccounting {
     const id = randomUUID(),
       s = this.subject;
     await this.db.tx(async (c) => {
+      await OrganizationBudgetService.lock(c, s.workspaceId);
       await ModelSpendingService.lock(c, this.profile.id);
+      const member = (
+        await c.query(
+          "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+          [s.workspaceId, s.id],
+        )
+      ).rows[0];
+      if (!member) throw new Error("模型调用权限已撤销。");
       if (
         !(
           await c.query(
-            "SELECT role FROM cw_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
-            [s.workspaceId, s.id],
-          )
-        ).rowCount
-      )
-        throw new Error("模型调用权限已撤销。");
-      if (
-        !(
-          await c.query(
-            "SELECT id FROM cw_model_profiles WHERE id=$1 AND workspace_id=$2 AND (owner_id IS NULL OR owner_id=$3)",
-            [this.profile.id, s.workspaceId, s.id],
+            "SELECT id FROM cw_model_profiles WHERE id=$1 AND workspace_id=$2 AND (owner_id IS NULL OR owner_id=$3) AND model=$4 AND provider=$5 AND endpoint=$6 AND purpose=$7 FOR SHARE",
+            [
+              this.profile.id,
+              s.workspaceId,
+              s.id,
+              this.profile.model,
+              this.profile.provider,
+              this.profile.endpoint,
+              this.profile.purpose,
+            ],
           )
         ).rowCount
       )
         throw new Error("模型连接已不可访问。");
       if (
-        purpose === "run" &&
-        (!runId ||
-          !(
-            await c.query(
-              "SELECT id FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3 AND model_profile_id=$4 AND state='running'",
-              [runId, s.workspaceId, s.id, this.profile.id],
-            )
-          ).rowCount)
+        s.identityCredentialId &&
+        !(
+          await c.query(
+            `SELECT c.id FROM cw_identity_credentials c JOIN cw_external_identities i ON i.id=c.identity_id WHERE c.id=$1 AND i.workspace_id=$2 AND i.user_id=$3 AND c.disabled_at IS NULL FOR SHARE OF c,i`,
+            [s.identityCredentialId, s.workspaceId, s.id],
+          )
+        ).rowCount
       )
-        throw new Error("模型执行范围已停止或不匹配。");
+        throw new Error("模型调用身份凭据已撤销。");
+      if (purpose === "run") {
+        const active = runId
+          ? (
+              await c.query(
+                "SELECT id,spending_plan FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3 AND model_profile_id=$4 AND state='running'",
+                [runId, s.workspaceId, s.id, this.profile.id],
+              )
+            ).rows[0]
+          : null;
+        if (!active) throw new Error("模型执行范围已停止或不匹配。");
+        if (
+          active.spending_plan &&
+          isOrganizationBudgetPlan(active.spending_plan) &&
+          member.role !== "admin"
+        )
+          throw new Error("企业费用管理权限已撤销，未发出模型请求。");
+      }
       await c.query(
         `INSERT INTO cw_model_requests(id,workspace_id,actor_id,model_profile_id,run_id,purpose,model,provider) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
         [
@@ -149,6 +180,13 @@ export class ModelAccounting {
         ],
       );
       await new ModelSpendingService(this.db).admit(c, this.profile.id, id);
+      await new OrganizationBudgetService(this.db).admit(
+        c,
+        s,
+        this.profile.id,
+        id,
+        this.projectContext,
+      );
     });
     return id;
   }
@@ -159,6 +197,7 @@ export class ModelAccounting {
     httpStatus?: number,
   ) {
     return this.db.tx(async (c) => {
+      await OrganizationBudgetService.lock(c, this.subject.workspaceId);
       await ModelSpendingService.lock(c, this.profile.id);
       const r = await c.query(
         `UPDATE cw_model_requests SET transport=$2,usage_status=$3,input_tokens=$4,output_tokens=$5,cache_read_tokens=$6,cache_write_tokens=$7,reasoning_tokens=$8,http_status=$9,settled_at=clock_timestamp()
@@ -179,6 +218,13 @@ export class ModelAccounting {
       );
       if (r.rowCount)
         await new ModelSpendingService(this.db).settle(
+          c,
+          r.rows[0],
+          usage,
+          transport,
+        );
+      if (r.rowCount)
+        await new OrganizationBudgetService(this.db).settle(
           c,
           r.rows[0],
           usage,

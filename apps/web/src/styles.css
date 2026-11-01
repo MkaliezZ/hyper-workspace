@@ -2598,3 +2598,12 @@ p {
 .room-command code {font-size:12px;overflow-wrap:anywhere;}
 .room-command label {display:flex;gap:10px;line-height:1.6;font-size:13px;}
 @media(max-width:600px){.room-management-fields{grid-template-columns:1fr}.room-management-search{flex-wrap:wrap}.room-management .dialog-actions{flex-wrap:wrap}.room-command{padding:10px}}
+
+.organization-budget-panel .panel-heading {flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+.organization-budget-panel .policy-summary article + article {margin-top:14px;padding-top:14px;border-top:1px solid #dbe6fc;}
+.organization-budget-form {max-width:600px;}
+.organization-budget-form input,.organization-budget-form select,.organization-budget-form textarea {min-width:0;width:100%;}
+.organization-budget-form .policy-confirm input {width:auto;flex:none;}
+.organization-budget-panel details {margin-top:20px;overflow-wrap:anywhere;}
+.organization-budget-panel details pre {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;}
+.organization-budget-panel .toolbar {display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}

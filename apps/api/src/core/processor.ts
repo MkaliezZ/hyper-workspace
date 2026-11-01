@@ -1,3 +1,5 @@
+import { isOrganizationBudgetPlan } from "@hyper/contracts";
+import { OrganizationBudgetService } from "./organization-budgets.js";
 import {
   NotificationPolicyService,
   effectiveNotifications,
@@ -804,6 +806,17 @@ export class RunProcessor {
         throw new Error("来源操作结果待核对；请查看实际回执，未自动重发。");
       return actual;
     }
+    const budgetProof =
+      action.tool === "spending.manage" &&
+      isOrganizationBudgetPlan(run.spending_plan)
+        ? (
+            await new OrganizationBudgetService(this.service.db).prepare(
+              s,
+              run.spending_plan,
+              false,
+            )
+          ).proof
+        : undefined;
     const notificationService =
       action.tool === "notifications.manage"
         ? new NotificationPolicyService(this.service.db)
@@ -919,13 +932,10 @@ export class RunProcessor {
       if (configuration)
         await FollowUpScheduleService.lockTarget(c, s, configuration);
       if (run.workflow === "manage_spending")
-        await ModelSpendingService.lock(
+        await new ModelSpendingService(this.service.db).lockPlan(
           c,
-          await new ModelSpendingService(this.service.db).target(
-            c,
-            s,
-            run.spending_plan,
-          ),
+          s,
+          run.spending_plan,
         );
       if (run.method_refs?.length || run.workflow === "manage_method") {
         const scope = (
@@ -1150,6 +1160,7 @@ export class RunProcessor {
           run.spending_plan,
           "spending:" + run.id,
           run.id,
+          budgetProof,
         );
       } else if (action.tool === "usage.report") {
         z.object({}).strict().parse(action.args);

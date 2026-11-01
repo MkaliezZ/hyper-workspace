@@ -379,7 +379,7 @@ async function metadata(transport, db) {
     value.foreignObjects ||
     value.invalidConstraints ||
     value.invalidIndexes ||
-    !value.migrations?.includes("040_notification_run_history.sql") ||
+    !value.migrations?.includes("041_organization_budgets.sql") ||
     !value.extensions?.some((e) => e.name === "vector")
   )
     fail(
@@ -543,11 +543,17 @@ function quarantineSql(restoreId, backupId) {
     UPDATE cw_communication_sends SET state='recovery_required',error=${quote(reason)},updated_at=clock_timestamp() WHERE state='sending';
     UPDATE cw_attachment_sends SET state='recovery_required',error=${quote(reason)},updated_at=clock_timestamp() WHERE state='sending';
     UPDATE cw_attachment_uploads SET state='recovery_required',error=${quote(reason)},updated_at=clock_timestamp() WHERE state IN ('prepared','uploading');
+    UPDATE cw_model_requests SET charge_review_required=true WHERE settled_at IS NULL AND declared_cost_picos IS NULL;
+    UPDATE cw_budget_charges q SET review_required=true FROM cw_model_requests m WHERE m.id=q.request_id AND m.settled_at IS NULL AND q.declared_picos IS NULL;
     DELETE FROM cw_login_flows; DELETE FROM cw_sessions;
     COMMIT;
     SELECT json_build_object('activeRuns',(SELECT count(*) FROM cw_runs WHERE state IN ('queued','running')),
       'activeSchedules',(SELECT count(*) FROM cw_follow_up_schedules WHERE state='active'),
       'recoveryRuns',(SELECT count(*) FROM cw_run_events WHERE data->>'restoreId'=${quote(restoreId)}),
+      'reviewModelRequests',(SELECT count(*) FROM cw_model_requests WHERE settled_at IS NULL AND declared_cost_picos IS NULL AND charge_review_required),
+      'reviewCompanyCharges',(SELECT count(*) FROM cw_budget_charges q JOIN cw_model_requests m ON m.id=q.request_id WHERE m.settled_at IS NULL AND q.declared_picos IS NULL AND q.review_required),
+      'unreviewedModelRequests',(SELECT count(*) FROM cw_model_requests WHERE settled_at IS NULL AND declared_cost_picos IS NULL AND NOT charge_review_required),
+      'unreviewedCompanyCharges',(SELECT count(*) FROM cw_budget_charges q JOIN cw_model_requests m ON m.id=q.request_id WHERE m.settled_at IS NULL AND q.declared_picos IS NULL AND NOT q.review_required),
       'sessions',(SELECT count(*) FROM cw_sessions), 'loginFlows',(SELECT count(*) FROM cw_login_flows),
       'queueAbsent',to_regnamespace('hyper_jobs') IS NULL)`;
 }
@@ -616,6 +622,8 @@ export async function restoreWorkspaceBackup(
       quarantine.activeSchedules ||
       quarantine.sessions ||
       quarantine.loginFlows ||
+      quarantine.unreviewedModelRequests ||
+      quarantine.unreviewedCompanyCharges ||
       !quarantine.queueAbsent
     )
       fail("恢复隔离检查未通过；不要启动此库的服务。");

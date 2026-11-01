@@ -2354,3 +2354,262 @@ test("Real Talk management shares current-source permissions, exact member insta
     await peer.context.close();
   }
 });
+
+test("Real source permissions constrain shared native company budgets while independent financial review survives room deletion", async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const admin = await login(browser, "employee-one"),
+    member = await login(browser, "org-reader"),
+    headers = { Origin: origin },
+    key = "synthetic-company-source-" + randomUUID(),
+    peerKey = "synthetic-company-member-" + randomUUID(),
+    note = "synthetic-private-company-basis-" + randomUUID();
+  const fixture = modelFixture(
+    [key, peerKey],
+    (body) => {
+      expect(JSON.stringify(body.messages)).not.toContain(note);
+    },
+    () => ({
+      text: "Synthetic company finance protocol result",
+      actions: [{ tool: "spending.manage", args: {} }],
+    }),
+  );
+  await new Promise<void>((r) => fixture.server.listen(0, "127.0.0.1", r));
+  let room: any,
+    deleted = false;
+  try {
+    for (const a of [admin, member])
+      await expect
+        .poll(async () =>
+          (await a.context.request.get(origin + "/api/workspace")).status(),
+        )
+        .toBe(200);
+    room = await talk("employee-one", "v4/room", "POST", {
+      roomType: "2",
+      roomName: "Synthetic company budget " + randomUUID().slice(0, 6),
+    });
+    await talk(
+      "employee-one",
+      "v4/room/" + room.token + "/participants",
+      "POST",
+      { newParticipant: "org-reader", source: "users" },
+    );
+    const created = await admin.context.request.post(
+      origin + "/api/projects/from-talk",
+      {
+        headers,
+        data: {
+          roomId: room.token,
+          name: "Synthetic financial source scope",
+          goal: "Test only company financial permissions, no source content publication",
+        },
+      },
+    );
+    expect(created.status()).toBe(201);
+    const project = await created.json();
+    const endpoint =
+        "http://127.0.0.1:" + (fixture.server.address() as any).port + "/v1",
+      profiles: any[] = [];
+    for (const [i, a] of [admin, member].entries()) {
+      const response = await a.context.request.post(origin + "/api/models", {
+        headers,
+        data: {
+          name: "Synthetic personal finance source",
+          provider: "openai-compatible",
+          endpoint,
+          model: "native-test-model",
+          purpose: "chat",
+          scope: "personal",
+          apiKey: i ? peerKey : key,
+        },
+      });
+      expect(response.status()).toBe(201);
+      profiles.push(await response.json());
+    }
+    const price = {
+      operation: "budget_price",
+      provider: "openai-compatible",
+      endpoint,
+      model: "native-test-model",
+      purpose: "chat",
+      expectedRevision: 0,
+      currency: "USD",
+      inputPerMillion: "1",
+      outputPerMillion: "1",
+      cacheReadPerMillion: "1",
+      cacheWritePerMillion: "1",
+      source: note,
+      confirmed: true,
+    };
+    expect(
+      (
+        await admin.context.request.post(origin + "/api/model-spending", {
+          headers,
+          data: { plan: price, idempotencyKey: randomUUID() },
+        })
+      ).status(),
+    ).toBe(201);
+    async function perform(
+      a: typeof admin,
+      engine: string,
+      plan: any,
+      profile: any,
+      workflow = "manage_spending",
+    ) {
+      const response = await a.context.request.post(origin + "/api/runs", {
+        headers,
+        data: {
+          conversationId: project.conversationId,
+          engine,
+          workflow,
+          modelProfileId: profile.id,
+          ...(plan ? { spendingPlan: plan } : {}),
+          instruction:
+            "Only execute the exact host-confirmed synthetic operation; never publish private financial notes",
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(response.status()).toBe(201);
+      const started = await response.json();
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await a.context.request.get(origin + "/api/runs/" + started.id)
+              ).json()
+            ).state,
+          { timeout: 120000 },
+        )
+        .toMatch(/^(succeeded|failed|recovery_required)$/);
+      return (
+        await a.context.request.get(origin + "/api/runs/" + started.id)
+      ).json();
+    }
+    const control = {
+      operation: "budget_configure",
+      scope: "project",
+      projectId: project.id,
+      expectedRevision: 0,
+      currency: "USD",
+      dailyLimit: "0.01",
+      requestReservation: "0.001",
+      confirmed: true,
+    };
+    const dsh = await perform(admin, "dsh", control, profiles[0]);
+    expect(dsh.state).toBe("succeeded");
+    expect(dsh.result.evidence).toBe("runtime");
+    const hermes = await perform(
+      admin,
+      "hermes",
+      { ...price, expectedRevision: 1 },
+      profiles[0],
+    );
+    expect(hermes.state).toBe("succeeded");
+    expect(hermes.result.receipts[0].revision).toBe(2);
+    expect(fixture.calls()).toBe(2);
+    const current = await (
+        await admin.context.request.get(
+          origin + "/api/organization-budgets?projectId=" + project.id,
+        )
+      ).json(),
+      charge = current.charges.find(
+        (c: any) => c.projectId === project.id && c.estimate !== null,
+      );
+    expect(charge).toBeTruthy();
+    const zero = await admin.context.request.post(
+      origin + "/api/model-spending",
+      {
+        headers,
+        data: {
+          plan: { ...control, expectedRevision: 1, dailyLimit: "0" },
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(zero.status()).toBe(201);
+    const blocked = await perform(
+      member,
+      "dsh",
+      undefined,
+      profiles[1],
+      "discussion_to_minutes",
+    );
+    expect(blocked.state).toBe("failed");
+    expect(fixture.calls()).toBe(2);
+    expect(
+      (
+        await member.context.request.get(origin + "/api/organization-budgets")
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await member.context.request.post(origin + "/api/model-spending", {
+          headers,
+          data: {
+            plan: { ...price, expectedRevision: 2 },
+            idempotencyKey: randomUUID(),
+          },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(
+      (
+        await admin.context.request.get(origin + "/api/runs/" + blocked.id)
+      ).status(),
+    ).toBe(404);
+    await talk("employee-one", "v4/room/" + room.token, "DELETE");
+    deleted = true;
+    expect(
+      (
+        await admin.context.request.get(
+          origin + "/api/organization-budgets?projectId=" + project.id,
+        )
+      ).status(),
+    ).toBe(404);
+    const reconcile = await admin.context.request.post(
+      origin + "/api/model-spending",
+      {
+        headers,
+        data: {
+          plan: {
+            operation: "budget_reconcile",
+            requestId: charge.id,
+            expectedRevision: charge.revision,
+            currency: "USD",
+            amount: charge.estimate,
+            evidence: note,
+            confirmed: true,
+          },
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(reconcile.status()).toBe(201);
+    expect((await reconcile.json()).notInvoice).toBe(true);
+    const financial = await (
+      await admin.context.request.get(origin + "/api/organization-budgets")
+    ).json();
+    expect(
+      financial.charges.find((c: any) => c.id === charge.id),
+    ).toMatchObject({
+      scope: "other-project",
+      projectId: null,
+      status: "declared",
+    });
+    const text = JSON.stringify(financial);
+    expect(text).not.toContain(project.id);
+    expect(text).not.toContain(profiles[1].id);
+    expect(text).not.toContain(peerKey);
+  } finally {
+    if (room && !deleted)
+      await talk("employee-one", "v4/room/" + room.token, "DELETE").catch(
+        () => {},
+      );
+    fixture.server.closeAllConnections();
+    await new Promise<void>((r) => fixture.server.close(() => r()));
+    await admin.context.close();
+    await member.context.close();
+  }
+});

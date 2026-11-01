@@ -5,6 +5,8 @@ import { assertMember } from "./security.js";
 import { Vault } from "./credentials.js";
 import { ModelAccounting, providerUsage, unknownUsage } from "./model-usage.js";
 
+import { ProjectAccess } from "./project-access.js";
+import { stableDigest } from "./credentials.js";
 export interface ModelConnection {
   id: string;
   provider: string;
@@ -24,6 +26,7 @@ export class ModelService {
     s: Subject,
     purpose: ModelConnection["purpose"],
     id?: string,
+    projectId?: string,
   ): Promise<ModelConnection> {
     await assertMember(this.db, s);
     const row = (
@@ -34,10 +37,19 @@ export class ModelService {
     ).rows[0];
     if (!row)
       throw new NotFoundException("没有可用的模型配置，或无权使用该连接。");
+    let projectContext: { id: string; bindingHash: string } | undefined;
+    if (projectId) {
+      const access = new ProjectAccess(this.db);
+      await access.assert(s, projectId);
+      projectContext = {
+        id: projectId,
+        bindingHash: stableDigest((await access.binding(s, projectId)) ?? null),
+      };
+    }
     const { credential_enc, ...profile } = row;
     return {
       ...profile,
-      accounting: new ModelAccounting(this.db, s, profile),
+      accounting: new ModelAccounting(this.db, s, profile, projectContext),
       apiKey: credential_enc ? new Vault().decrypt(credential_enc) : undefined,
     };
   }

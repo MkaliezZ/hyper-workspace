@@ -5,69 +5,38 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
-import { ModelSpendingPlan, type Subject } from "@hyper/contracts";
+import {
+  ModelSpendingPlan,
+  isOrganizationBudgetPlan,
+  type OrganizationBudgetPlan,
+  type Subject,
+} from "@hyper/contracts";
 import type { Pool, PoolClient } from "pg";
 import type { Database } from "../db/database.js";
 import type { ProviderUsage } from "./model-usage.js";
 import { assertMember } from "./security.js";
 import { stableDigest } from "./credentials.js";
-export class SpendLimitError extends BadRequestException {}
-export const micros = (value: string) =>
-  BigInt(value.split(".")[0]!) * 1000000n +
-  BigInt((value.split(".")[1] ?? "").padEnd(6, "0"));
-export const picos = (value: string) =>
-  BigInt(value.split(".")[0]!) * 1000000000000n +
-  BigInt((value.split(".")[1] ?? "").padEnd(12, "0"));
-export function units(value: bigint | string, scale = 12): string {
-  const n = BigInt(value),
-    negative = n < 0n,
-    raw = (negative ? -n : n).toString().padStart(scale + 1, "0");
-  const tail = raw.slice(-scale).replace(/0+$/, "");
-  return (
-    (negative ? "-" : "") + raw.slice(0, -scale) + (tail ? "." + tail : "")
-  );
-}
-/** Rates are micro-currency per million tokens: multiplying tokens produces pico-currency exactly. */
-export function estimateUsage(
-  price: any,
-  usage: ProviderUsage,
-  transport: string,
-) {
-  if (
-    usage.status !== "reported" ||
-    transport !== "completed" ||
-    usage.inputTokens === null
-  )
-    return null;
-  const input = BigInt(usage.inputTokens),
-    read =
-      usage.cacheReadTokens === null ? null : BigInt(usage.cacheReadTokens),
-    write =
-      usage.cacheWriteTokens === null ? null : BigInt(usage.cacheWriteTokens);
-  const base = BigInt(price.input_rate),
-    readRate = BigInt(price.cache_read_rate),
-    writeRate = BigInt(price.cache_write_rate),
-    outputRate = BigInt(price.output_rate);
-  const remaining = input - (read ?? 0n) - (write ?? 0n);
-  if (remaining < 0n) return null;
-  const possibilities = [
-    base,
-    ...(read === null ? [readRate] : []),
-    ...(write === null ? [writeRate] : []),
-  ];
-  const upper = possibilities.reduce((a, b) => (a > b ? a : b)),
-    lower = possibilities.reduce((a, b) => (a < b ? a : b));
-  return {
-    amount:
-      remaining * upper +
-      (read ?? 0n) * readRate +
-      (write ?? 0n) * writeRate +
-      BigInt(usage.outputTokens ?? 0) * outputRate,
-    upper: remaining > 0n && upper !== lower,
-  };
-}
+import {
+  SpendLimitError,
+  micros,
+  picos,
+  units,
+  estimateUsage,
+} from "./money.js";
+export {
+  SpendLimitError,
+  micros,
+  picos,
+  units,
+  estimateUsage,
+} from "./money.js";
 type Queryable = Pool | PoolClient;
+import {
+  OrganizationBudgetService,
+  type BudgetProof,
+} from "./organization-budgets.js";
 type Plan = ModelSpendingPlan;
+type LegacyPlan = Exclude<Plan, OrganizationBudgetPlan>;
 export class ModelSpendingService {
   constructor(readonly db: Database) {}
   static async lock(c: PoolClient, profileId: string) {
@@ -75,7 +44,13 @@ export class ModelSpendingService {
       "model-spending:" + profileId,
     ]);
   }
-  async target(c: Queryable, s: Subject, plan: Plan) {
+  async lockPlan(c: PoolClient, s: Subject, raw: Plan) {
+    const plan = ModelSpendingPlan.parse(raw);
+    await OrganizationBudgetService.lock(c, s.workspaceId);
+    if (!isOrganizationBudgetPlan(plan))
+      await ModelSpendingService.lock(c, await this.target(c, s, plan));
+  }
+  async target(c: Queryable, s: Subject, plan: LegacyPlan) {
     const profileId =
       plan.operation === "configure"
         ? plan.modelProfileId
@@ -114,6 +89,8 @@ export class ModelSpendingService {
   }
   async prepare(s: Subject, raw: Plan) {
     const plan = ModelSpendingPlan.parse(raw);
+    if (isOrganizationBudgetPlan(plan))
+      return new OrganizationBudgetService(this.db).prepare(s, plan);
     await assertMember(this.db, s);
     const profileId = await this.target(this.db.pool, s, plan);
     await this.authorize(this.db.pool, s, profileId);
@@ -236,9 +213,29 @@ export class ModelSpendingService {
     raw: Plan,
     key: string,
     runId?: string,
+    budgetProof?: BudgetProof,
   ) {
-    const plan = ModelSpendingPlan.parse(raw),
-      profileId = await this.target(c, s, plan);
+    const plan = ModelSpendingPlan.parse(raw);
+    if (isOrganizationBudgetPlan(plan))
+      return new OrganizationBudgetService(this.db).apply(
+        c,
+        s,
+        plan,
+        key,
+        runId,
+        budgetProof,
+      );
+    await OrganizationBudgetService.lock(c, s.workspaceId);
+    if (
+      (
+        await c.query(
+          "SELECT 1 FROM cw_budget_actions WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, key],
+        )
+      ).rowCount
+    )
+      throw new ConflictException("费用操作幂等键冲突。");
+    const profileId = await this.target(c, s, plan);
     await ModelSpendingService.lock(c, profileId);
     await this.authorize(c, s, profileId, true);
     const hash = stableDigest(plan),
@@ -379,6 +376,9 @@ export class ModelSpendingService {
     return receipt;
   }
   async save(s: Subject, raw: Plan, key: string) {
+    const plan = ModelSpendingPlan.parse(raw);
+    if (isOrganizationBudgetPlan(plan))
+      return new OrganizationBudgetService(this.db).save(s, plan, key);
     await assertMember(this.db, s);
     return this.db.tx((c) => this.apply(c, s, raw, key));
   }

@@ -71,6 +71,7 @@ import { RunProcessor } from "./core/processor.js";
 import { engineRegistry } from "./engines/adapters.js";
 import { ModelService } from "./core/models.js";
 import { ModelUsageService } from "./core/model-usage.js";
+import { OrganizationBudgetService } from "./core/organization-budgets.js";
 import { ModelSpendingService } from "./core/model-spending.js";
 import { KnowledgeService } from "./core/knowledge.js";
 import { CommunicationService } from "./core/communication.js";
@@ -983,6 +984,29 @@ class ApiController {
   }
   @Get("model-usage") async modelUsage(@Req() req: Request) {
     return new ModelUsageService(db).view(await subject(req));
+  }
+  @Get("organization-budgets") async organizationBudgets(
+    @Req() req: Request,
+    @Query("projectId") projectId?: string,
+    @Query("before") before?: string,
+    @Query("pendingOnly") pendingOnly?: string,
+    @Query("requestId") requestId?: string,
+  ) {
+    return new OrganizationBudgetService(db).view(
+      await subject(req),
+      projectId ? uuid(projectId) : null,
+      {
+        before: before ? uuid(before) : undefined,
+        pendingOnly: pendingOnly === "true",
+        requestId: requestId ? uuid(requestId) : undefined,
+      },
+    );
+  }
+  @Post("organization-budgets/price-lookup") async lookupBudgetPrice(
+    @Req() req: Request,
+    @Body() body: unknown,
+  ) {
+    return new OrganizationBudgetService(db).lookup(await subject(req), body);
   }
   @Get("model-spending") async modelSpending(
     @Req() req: Request,

@@ -228,21 +228,34 @@ export class MethodsService {
       plan: input.plan,
       draft: input.draft,
     });
-    const old = (
-      await this.db.pool.query(
-        "SELECT input_hash,receipt,method_id FROM cw_method_actions WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
-        [s.workspaceId, s.id, input.idempotencyKey],
-      )
-    ).rows[0];
-    if (old) {
+    const existing = async () => {
+      const old = (
+        await this.db.pool.query(
+          "SELECT input_hash,receipt,method_id FROM cw_method_actions WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (!old) return undefined;
       if (old.input_hash !== hash)
         throw new ConflictException("相同幂等键不能用于不同方法操作。");
-      // The former maintainer may lose candidate visibility immediately on transfer.
-      // Their own immutable receipt remains readable under current project access.
+      // A concurrent same-key transfer can finish after our initial lookup and
+      // remove our candidate visibility before prepare. Read only our receipt,
+      // under current project access, without pretending we still own the method.
+      await assertMember(this.db, s);
+      await this.access.assert(s, projectId);
       if (input.plan.operation !== "transfer") await this.row(s, old.method_id);
       return old.receipt;
+    };
+    const prior = await existing();
+    if (prior) return prior;
+    let prepared: Awaited<ReturnType<MethodsService["prepare"]>>;
+    try {
+      prepared = await this.prepare(s, input.plan, projectId);
+    } catch (error) {
+      const completed = await existing();
+      if (completed) return completed;
+      throw error;
     }
-    const prepared = await this.prepare(s, input.plan, projectId);
     return this.db.tx(async (c) => {
       await MethodsService.lockTarget(c, s, input.plan, projectId);
       return MethodsService.apply(

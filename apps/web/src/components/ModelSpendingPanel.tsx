@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ModelSpendingPlan, WorkspaceView } from "@hyper/contracts";
+import type { ModelSpendingPlan, OrganizationBudgetPlan, WorkspaceView } from "@hyper/contracts";
 import { api, mutation } from "../api";
 import type { ModelSummary } from "./ModelSettings";
 import { Dialog } from "./Dialog";
@@ -37,7 +37,7 @@ type Account = {
   } | null;
   requests: Charge[];
   history: {
-    plan: ModelSpendingPlan;
+    plan: Exclude<ModelSpendingPlan, OrganizationBudgetPlan>;
     receipt: any;
     actorName: string;
     createdAt: string;

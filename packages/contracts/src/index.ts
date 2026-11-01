@@ -311,7 +311,66 @@ export const MoneyAmount = z
 export const ExactMoneyAmount = z
   .string()
   .regex(/^(0|[1-9]\d{0,8})(\.\d{1,12})?$/, "核对金额最多保留十二位小数。");
+export const BudgetPriceIdentity = z
+  .object({
+    provider: z.enum(["openai-compatible", "deepseek", "anthropic"]),
+    endpoint: z.url(),
+    model: z.string().trim().min(1).max(200),
+    purpose: z.enum(["chat", "embedding"]),
+  })
+  .strict();
+export const OrganizationBudgetPlan = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("budget_price"),
+      provider: z.enum(["openai-compatible", "deepseek", "anthropic"]),
+      endpoint: z.url(),
+      model: z.string().trim().min(1).max(200),
+      purpose: z.enum(["chat", "embedding"]),
+      expectedRevision: z.number().int().min(0),
+      currency: z.enum(["CNY", "USD"]),
+      inputPerMillion: MoneyAmount,
+      outputPerMillion: MoneyAmount,
+      cacheReadPerMillion: MoneyAmount,
+      cacheWritePerMillion: MoneyAmount,
+      source: z.string().trim().min(1).max(1000),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("budget_configure"),
+      scope: z.enum(["workspace", "project"]),
+      projectId: z.uuid().nullable(),
+      expectedRevision: z.number().int().min(0),
+      currency: z.enum(["CNY", "USD"]),
+      dailyLimit: MoneyAmount.nullable(),
+      requestReservation: MoneyAmount,
+      confirmed: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("budget_reconcile"),
+      requestId: z.uuid(),
+      expectedRevision: z.number().int().min(0),
+      currency: z.enum(["CNY", "USD"]),
+      amount: ExactMoneyAmount,
+      evidence: z.string().trim().min(1).max(2000),
+      confirmed: z.literal(true),
+    })
+    .strict(),
+]);
+export type OrganizationBudgetPlan = z.infer<typeof OrganizationBudgetPlan>;
+export function isOrganizationBudgetPlan(plan: {
+  operation: string;
+}): plan is OrganizationBudgetPlan {
+  return ["budget_price", "budget_configure", "budget_reconcile"].includes(
+    plan.operation,
+  );
+}
 export const ModelSpendingPlan = z.discriminatedUnion("operation", [
+  ...OrganizationBudgetPlan.options,
   z
     .object({
       operation: z.literal("configure"),

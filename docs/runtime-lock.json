@@ -687,6 +687,36 @@
       "explicitTestTaskDone": 1,
       "syntheticCredentialsDisabledAndCleared": 3,
       "scope": "Exact fixture Run/task/provider IDs; no upstream request, permission change or ledger reset."
+    },
+    "humanFeedback": {
+      "date": "2026-11-02",
+      "source": "User reply in current chat after reading linked two v2 report artifacts",
+      "criterion": "Results, status, responsible people and next steps are clear",
+      "response": "这项清晰度满足",
+      "scope": "Only clarity of these two synthetic outputs; on-demand logs, actionable failures and full E08 not signed off."
     }
+  },
+  "organizationBudgets": {
+    "status": "development-local-subsets-verified-own-ci-pending",
+    "contract": "docs/ORGANIZATION-BUDGETS.md",
+    "migration": "041_organization_budgets.sql",
+    "scope": "Independent administrator-owned corporate pricing/charges; workspace and host-attributed project limits intersect private profile limits before every provider POST, including embeddings/verification. No private zero-price or declaration bypass. Money remains estimates/statements, not invoice verification.",
+    "authority": "Current workspace admin owns company financial metadata; source access remains required for project-rule management and all original business data. Deleted-source financial statements expose no other project ID/content or private profile metadata.",
+    "hostOnly": "Prices and reconciliation evidence omitted from model context; host-confirmed existing spending workflow/tool, actor/target/version/parameters checked server-side.",
+    "localEvidence": {
+      "fullDatabaseBeforeFinalRefinements": 241,
+      "jointNativeProtocol": 1,
+      "jointNativeRequests": 6,
+      "fullNativeBeforeFinalAdmissionRefinement": 9,
+      "renderedUi": 2,
+      "realPgRestore": 3,
+      "budgetDb": 15,
+      "fullDatabase": 245,
+      "rootUnit": 48,
+      "typecheckAndBuild": "passed; existing >500 kB bundle warning remains"
+    },
+    "supplierRequestsThisBatch": 0,
+    "ci": "New real Nextcloud and container restart/backup cases load (15 and 6), not executed locally (no Docker); own code CI pending.",
+    "remaining": "Final regression and own CI, actual supplier accounting/invoices and complete company/product acceptance; frozen baseline unchanged."
   }
 }

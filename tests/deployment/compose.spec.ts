@@ -1013,3 +1013,247 @@ test("Interrupted worker containers quarantine expired work without replaying mo
     await context.close();
   }
 });
+
+test("Restricted containers persist active company quotas and independent financial receipts across API Worker and database restart", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(240000);
+  const context = await browser.newContext();
+  await session(context);
+  const headers = { Origin: origin },
+    endpoint = "http://model-fixture:8100/v1";
+  const stats = () =>
+    JSON.parse(
+      compose(
+        "exec",
+        "-T",
+        "api",
+        "node",
+        "--input-type=module",
+        "-e",
+        `process.stdout.write(await(await fetch('http://model-fixture:8100/stats')).text())`,
+      ),
+    );
+  try {
+    const created = await context.request.post(origin + "/api/projects", {
+      headers,
+      data: {
+        name: "预算容器独立验收 " + randomUUID().slice(0, 6),
+        goal: "Synthetic company money controls; no supplier invoice claims",
+      },
+    });
+    expect(created.status()).toBe(201);
+    const project = await created.json();
+    const profileResponse = await context.request.post(origin + "/api/models", {
+      headers,
+      data: {
+        name: "Synthetic container company finance",
+        provider: "openai-compatible",
+        endpoint,
+        model: "compose-model",
+        purpose: "chat",
+        scope: "personal",
+        apiKey: "synthetic-compose-model-key",
+      },
+    });
+    expect(profileResponse.status()).toBe(201);
+    const profile = await profileResponse.json();
+    const save = async (plan: any, key = randomUUID()) => {
+      const response = await context.request.post(
+        origin + "/api/model-spending",
+        { headers, data: { plan, idempotencyKey: key } },
+      );
+      expect(response.status()).toBe(201);
+      return response.json();
+    };
+    const price = {
+      operation: "budget_price",
+      provider: "openai-compatible",
+      endpoint,
+      model: "compose-model",
+      purpose: "chat",
+      expectedRevision: 0,
+      currency: "USD",
+      inputPerMillion: "0",
+      outputPerMillion: "0",
+      cacheReadPerMillion: "0",
+      cacheWritePerMillion: "0",
+      source:
+        "Synthetic explicit free company price for container protocol fixture",
+      confirmed: true,
+    };
+    await save(price);
+    const control = {
+      operation: "budget_configure",
+      scope: "project",
+      projectId: project.id,
+      expectedRevision: 0,
+      currency: "USD",
+      dailyLimit: "0",
+      requestReservation: "0",
+      confirmed: true,
+    };
+    await save(control);
+    const input = {
+      conversationId: project.conversationId,
+      workflow: "manage_spending",
+      engine: "dsh",
+      modelProfileId: profile.id,
+      spendingPlan: { ...control, expectedRevision: 1 },
+      instruction:
+        "Execute only the exact company finance plan; no notification or invoice verification",
+      idempotencyKey: randomUUID(),
+    };
+    async function perform(body: any, expected = "succeeded") {
+      const response = await context.request.post(origin + "/api/runs", {
+        headers,
+        data: body,
+      });
+      expect(response.status()).toBe(201);
+      const started = await response.json();
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await context.request.get(origin + "/api/runs/" + started.id)
+              ).json()
+            ).state,
+          { timeout: 90000 },
+        )
+        .toBe(expected);
+      return (
+        await context.request.get(origin + "/api/runs/" + started.id)
+      ).json();
+    }
+    const before = stats().calls;
+    const dsh = await perform(input);
+    expect(dsh.result.receipts[0]).toMatchObject({
+      operation: "budget_configure",
+      scope: "project",
+      revision: 2,
+      dailyLimit: "0",
+    });
+    const data = await (
+        await context.request.get(
+          origin + "/api/organization-budgets?projectId=" + project.id,
+        )
+      ).json(),
+      charge = data.charges.find((c: any) => c.projectId === project.id);
+    expect(charge).toMatchObject({
+      status: "estimated",
+      estimate: "0",
+      currency: "USD",
+    });
+    compose("stop", "api", "worker", "db");
+    compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120");
+    await expect
+      .poll(
+        async () => {
+          try {
+            return (await request.get("/api/health")).status();
+          } catch {
+            return 0;
+          }
+        },
+        { timeout: 60000 },
+      )
+      .toBe(200);
+    const persisted = await (
+      await context.request.get(
+        origin + "/api/organization-budgets?projectId=" + project.id,
+      )
+    ).json();
+    expect(
+      persisted.controls.find((c: any) => c.scope === "project"),
+    ).toMatchObject({
+      revision: 2,
+      dailyLimit: "0",
+      requestReservation: "0",
+      currency: "USD",
+    });
+    expect(
+      persisted.charges.find((c: any) => c.id === charge.id),
+    ).toMatchObject({ status: "estimated", estimate: "0" });
+    const replay = await context.request.post(origin + "/api/runs", {
+      headers,
+      data: input,
+    });
+    expect(replay.status()).toBe(201);
+    expect((await replay.json()).id).toBe(dsh.id);
+    const hermes = await perform({
+      ...input,
+      engine: "hermes",
+      spendingPlan: {
+        operation: "budget_reconcile",
+        requestId: charge.id,
+        expectedRevision: 0,
+        currency: "USD",
+        amount: "0",
+        evidence:
+          "Synthetic admin declaration after restart; original free estimate retained",
+        confirmed: true,
+      },
+      idempotencyKey: randomUUID(),
+    });
+    expect(hermes.result.receipts[0]).toMatchObject({
+      operation: "budget_reconcile",
+      requestId: charge.id,
+      revision: 1,
+      notInvoice: true,
+    });
+    const after = stats().calls;
+    expect(after).toBe(before + 2);
+    await save({
+      ...price,
+      expectedRevision: 1,
+      inputPerMillion: "1",
+      outputPerMillion: "1",
+      cacheReadPerMillion: "1",
+      cacheWritePerMillion: "1",
+    });
+    await save({
+      ...control,
+      expectedRevision: 2,
+      requestReservation: "0.001",
+    });
+    await perform(
+      {
+        ...input,
+        spendingPlan: {
+          ...control,
+          expectedRevision: 3,
+          dailyLimit: "1",
+          requestReservation: "0.001",
+        },
+        idempotencyKey: randomUUID(),
+      },
+      "failed",
+    );
+    expect(stats().calls).toBe(after);
+    const actual = await (
+      await context.request.get(
+        origin + "/api/organization-budgets?projectId=" + project.id,
+      )
+    ).json();
+    expect(
+      actual.controls.find((c: any) => c.scope === "project"),
+    ).toMatchObject({ revision: 3, dailyLimit: "0" });
+    expect(actual.charges.find((c: any) => c.id === charge.id)).toMatchObject({
+      status: "declared",
+      declared: "0",
+      estimate: "0",
+    });
+    // Explicitly retire this isolated test rule; no other project ever inherited it.
+    await save({
+      ...control,
+      expectedRevision: 3,
+      dailyLimit: null,
+      requestReservation: "0",
+    });
+    await save({ ...price, expectedRevision: 2 });
+  } finally {
+    await context.close();
+  }
+});

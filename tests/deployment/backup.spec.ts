@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -26,7 +26,8 @@ test("Compose PG17 backs up and independently restores encrypted product assets 
     project = randomUUID(),
     conversation = randomUUID(),
     run = randomUUID(),
-    profile = randomUUID();
+    profile = randomUUID(),
+    companyRequest = randomUUID();
   const q = (v: string) => "'" + v.replaceAll("'", "''") + "'";
   let created = false,
     restored: string | undefined;
@@ -59,6 +60,32 @@ test("Compose PG17 backs up and independently restores encrypted product assets 
       INSERT INTO cw_conversations(id,workspace_id,project_id)VALUES('${conversation}','${workspace}','${project}');
       INSERT INTO cw_model_profiles(id,workspace_id,owner_id,name,provider,endpoint,model,purpose,credential_enc)VALUES('${profile}','${workspace}','${actor}','Synthetic backup model','openai-compatible','https://synthetic.invalid','synthetic','chat',${q(new Vault(key).encrypt("synthetic-backup-only-key"))});
       INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,idempotency_key,input_hash,state,demo)VALUES('${run}','${workspace}','${actor}','${conversation}','fixture','follow_up','Synthetic interrupted check','${randomUUID()}','synthetic-hash','running',true);
+      INSERT INTO cw_budget_price_versions(workspace_id,price_key,version,provider,endpoint,model,purpose,currency,input_rate,output_rate,cache_read_rate,cache_write_rate,source_note,declared_by)VALUES('${workspace}',${q(
+        createHash("sha256")
+          .update(
+            JSON.stringify([
+              "openai-compatible",
+              "https://synthetic.invalid",
+              "synthetic",
+              "chat",
+            ]),
+          )
+          .digest("hex"),
+      )},1,'openai-compatible','https://synthetic.invalid','synthetic','chat','USD',1000000,1000000,1000000,1000000,'Synthetic company archive price','${actor}');
+      INSERT INTO cw_budget_controls(workspace_id,scope,scope_id,revision,currency,daily_limit_picos,reservation_picos)VALUES('${workspace}','workspace','${workspace}',1,'USD',1000000000000,10000000000);
+      INSERT INTO cw_model_requests(id,workspace_id,actor_id,model_profile_id,purpose,model,provider)VALUES('${companyRequest}','${workspace}','${actor}','${profile}','verification','synthetic','openai-compatible');
+      INSERT INTO cw_budget_charges(request_id,workspace_id,started_at,price_key,price_version,currency,status,workspace_revision,workspace_reserved)VALUES('${companyRequest}','${workspace}',clock_timestamp(),${q(
+        createHash("sha256")
+          .update(
+            JSON.stringify([
+              "openai-compatible",
+              "https://synthetic.invalid",
+              "synthetic",
+              "chat",
+            ]),
+          )
+          .digest("hex"),
+      )},1,'USD','unknown',1,10000000000);
       CREATE SCHEMA hyper_jobs; CREATE TABLE hyper_jobs.synthetic_pending(id uuid); INSERT INTO hyper_jobs.synthetic_pending VALUES('${run}'); COMMIT;`);
     const input = join(dir, "synthetic-fixture.sql");
     await writeFile(input, sql.join("\n"), { mode: 0o600 });
@@ -83,6 +110,8 @@ test("Compose PG17 backs up and independently restores encrypted product assets 
     expect(result.status).toBe("verified_isolated");
     expect(result.quarantine.recoveryRuns).toBe(1);
     expect(result.quarantine.queueAbsent).toBe(true);
+    expect(result.quarantine.reviewModelRequests).toBe(1);
+    expect(result.quarantine.reviewCompanyCharges).toBe(1);
     expect(result.servicesStarted).toBe(false);
     expect(result.productionPromoted).toBe(false);
     const sourceState = JSON.parse(
@@ -105,6 +134,32 @@ test("Compose PG17 backs up and independently restores encrypted product assets 
       ]),
     );
     expect(targetState.state).toBe("recovery_required");
+    const restoredCompany = JSON.parse(
+      await transport.run("psql", [
+        "-XqAt",
+        "--dbname",
+        restored,
+        "--command",
+        `SELECT json_build_object('status',status,'reserved',workspace_reserved::text,'review',review_required,'currency',currency) FROM cw_budget_charges WHERE request_id='${companyRequest}'`,
+      ]),
+    );
+    expect(restoredCompany).toEqual({
+      status: "unknown",
+      reserved: "10000000000",
+      review: true,
+      currency: "USD",
+    });
+    const originalCompany = JSON.parse(
+      await transport.run("psql", [
+        "-XqAt",
+        "--dbname",
+        source,
+        "--command",
+        `SELECT json_build_object('review',review_required) FROM cw_budget_charges WHERE request_id='${companyRequest}'`,
+      ]),
+    );
+    expect(originalCompany.review).toBe(false);
+
     expect(
       await transport.run("psql", [
         "-XqAt",

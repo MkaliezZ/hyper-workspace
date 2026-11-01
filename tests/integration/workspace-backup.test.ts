@@ -1,3 +1,5 @@
+import { OrganizationBudgetService } from "../../apps/api/src/core/organization-budgets.js";
+import { ModelAccounting } from "../../apps/api/src/core/model-usage.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -151,6 +153,83 @@ async function fixture(t: any) {
       "a".repeat(64),
     ],
   );
+  const company = new OrganizationBudgetService(db),
+    subject = {
+      id: DEMO.user,
+      workspaceId: DEMO.workspace,
+      name: "Synthetic archive finance admin",
+      role: "admin" as const,
+      demo: true,
+    };
+  await company.save(
+    subject,
+    {
+      operation: "budget_price",
+      provider: "openai-compatible",
+      endpoint: "https://synthetic.invalid",
+      model: "synthetic",
+      purpose: "chat",
+      expectedRevision: 0,
+      currency: "USD",
+      inputPerMillion: "1",
+      outputPerMillion: "1",
+      cacheReadPerMillion: "1",
+      cacheWritePerMillion: "1",
+      source: "Synthetic archive company declaration",
+      confirmed: true,
+    },
+    randomUUID(),
+  );
+  await company.save(
+    subject,
+    {
+      operation: "budget_configure",
+      scope: "workspace",
+      projectId: null,
+      expectedRevision: 0,
+      currency: "USD",
+      dailyLimit: "1",
+      requestReservation: "0.01",
+      confirmed: true,
+    },
+    randomUUID(),
+  );
+  const accounting = new ModelAccounting(db, subject, {
+    id: profile,
+    provider: "openai-compatible",
+    endpoint: "https://synthetic.invalid",
+    model: "synthetic",
+    purpose: "chat",
+  });
+  const companyUnknown = await accounting.begin("verification"),
+    companyDeclared = await accounting.begin("verification");
+  await accounting.settle(
+    companyDeclared,
+    {
+      status: "reported",
+      inputTokens: 1000,
+      outputTokens: 1000,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+    },
+    "completed",
+    200,
+  );
+  await company.save(
+    subject,
+    {
+      operation: "budget_reconcile",
+      requestId: companyDeclared,
+      expectedRevision: 0,
+      currency: "USD",
+      amount: "0.003",
+      evidence:
+        "Synthetic explicit admin amount for archive verification, not an invoice",
+      confirmed: true,
+    },
+    randomUUID(),
+  );
   const boss = new PgBoss({ connectionString: url.href, schema: "hyper_jobs" });
   boss.on("error", () => {});
   await boss.start();
@@ -169,6 +248,8 @@ async function fixture(t: any) {
     dir,
     key,
     profile,
+    companyUnknown,
+    companyDeclared,
     asset,
     run,
     transport,
@@ -204,10 +285,64 @@ test("A real PostgreSQL archive restores stable assets, vectors, encrypted crede
   assert.equal(report.credentialChecks, 2);
   assert.equal(report.quarantine.recoveryRuns, 1);
   assert.equal(report.quarantine.queueAbsent, true);
+  assert.equal(report.quarantine.reviewModelRequests, 1);
+  assert.equal(report.quarantine.reviewCompanyCharges, 1);
   const url = new URL(f.url);
   url.pathname = "/" + report.database;
   const restored = new Pool({ connectionString: url.href, max: 1 });
   try {
+    const preserved = (
+      await restored.query(
+        "SELECT request_id,status,estimated_picos::text,declared_picos::text,workspace_reserved::text,review_required FROM cw_budget_charges ORDER BY request_id",
+      )
+    ).rows;
+    const unknown = preserved.find((x) => x.request_id === f.companyUnknown),
+      declared = preserved.find((x) => x.request_id === f.companyDeclared);
+    assert.equal(unknown.status, "unknown");
+    assert.equal(unknown.workspace_reserved, "10000000000");
+    assert.equal(unknown.review_required, true);
+    const restoredDb = new Database(url.href);
+    try {
+      const accounting = new ModelAccounting(
+        restoredDb,
+        {
+          id: DEMO.user,
+          workspaceId: DEMO.workspace,
+          name: "Synthetic restored admin",
+          role: "admin",
+          demo: true,
+        },
+        {
+          id: f.profile,
+          provider: "openai-compatible",
+          endpoint: "https://synthetic.invalid",
+          model: "synthetic",
+          purpose: "chat",
+        },
+      );
+      await assert.rejects(accounting.begin("verification"), /未知、待核对/);
+      assert.equal(
+        (await restored.query("SELECT count(*)::int n FROM cw_model_requests"))
+          .rows[0].n,
+        2,
+      );
+    } finally {
+      await restoredDb.close();
+    }
+
+    assert.equal(declared.status, "declared");
+    assert.equal(declared.estimated_picos, "2000000000");
+    assert.equal(declared.declared_picos, "3000000000");
+    assert.equal(declared.review_required, false);
+    assert.equal(
+      (
+        await f.db.pool.query(
+          "SELECT review_required FROM cw_budget_charges WHERE request_id=$1",
+          [f.companyUnknown],
+        )
+      ).rows[0].review_required,
+      false,
+    );
     for (const table of [
       "cw_room_commands",
       "cw_communication_sends",

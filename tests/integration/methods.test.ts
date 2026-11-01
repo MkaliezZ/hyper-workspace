@@ -175,10 +175,45 @@ test("Maintainer transfer binds an exact member, preserves content and verificat
     maintainerId: f.peer.id,
     confirmed: true,
   };
-  const [receipt, duplicate] = await Promise.all([
-    f.record(plan, f.owner, undefined, key),
-    f.record(plan, f.owner, undefined, key),
-  ]);
+  // Force the retry's first receipt read to precede commit, while its target
+  // preparation happens after the first transfer removed candidate access.
+  const originalPrepare = f.methods.prepare.bind(f.methods);
+  let calls = 0,
+    secondEntered = () => {},
+    firstCommitted = () => {};
+  const secondReady = new Promise<void>((r) => {
+    secondEntered = r;
+  });
+  const firstDone = new Promise<void>((r) => {
+    firstCommitted = r;
+  });
+  f.methods.prepare = async (...args: Parameters<typeof originalPrepare>) => {
+    if (++calls === 1) await secondReady;
+    else {
+      secondEntered();
+      await firstDone;
+    }
+    return originalPrepare(...args);
+  };
+  let receipt: any, duplicate: any;
+  try {
+    const first = f.record(plan, f.owner, undefined, key).then(
+      (r) => {
+        firstCommitted();
+        return r;
+      },
+      (error) => {
+        firstCommitted();
+        throw error;
+      },
+    );
+    [receipt, duplicate] = await Promise.all([
+      first,
+      f.record(plan, f.owner, undefined, key),
+    ]);
+  } finally {
+    f.methods.prepare = originalPrepare;
+  }
   assert.deepEqual(receipt, duplicate);
   assert.equal(receipt.previousMaintainerId, f.owner.id);
   assert.equal(receipt.maintainerId, f.peer.id);

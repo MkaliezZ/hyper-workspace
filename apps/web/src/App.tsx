@@ -1,3 +1,4 @@
+import { OrganizationBudgetPanel } from "./components/OrganizationBudgetPanel";
 import { OrganizationPanel } from "./components/OrganizationPanel";
 import { DecisionPanel } from "./components/DecisionPanel";
 import { WorkPlanPanel } from "./components/WorkPlanPanel";
@@ -756,11 +757,28 @@ export function App() {
               >
                 价格与预算
               </button>
+              <button
+                role="tab"
+                aria-selected={settingsTab === "budgets"}
+                className={settingsTab === "budgets" ? "active" : ""}
+                onClick={() => setSettingsTab("budgets")}
+              >
+                企业预算
+              </button>
             </div>
             {settingsTab === "models" ? (
               <ModelSettings view={view} busy={busy} act={act} />
             ) : settingsTab === "notifications" ? (
               <NotificationPolicyPanel
+                key={view.user.id + view.project.id}
+                view={view}
+                run={run}
+                onRun={(r) => {
+                  if (loadedProject.current === view.project.id) setRun(r);
+                }}
+              />
+            ) : settingsTab === "budgets" ? (
+              <OrganizationBudgetPanel
                 key={view.user.id + view.project.id}
                 view={view}
                 run={run}

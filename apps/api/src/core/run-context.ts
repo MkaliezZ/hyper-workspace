@@ -1,4 +1,6 @@
 import { NotificationPolicyService } from "./notification-policy.js";
+import { isOrganizationBudgetPlan } from "@hyper/contracts";
+import { OrganizationBudgetService } from "./organization-budgets.js";
 import { RoomManagementService } from "./room-management.js";
 import { OrganizationService } from "./organization.js";
 import { KnowledgeContextService } from "./knowledge-context.js";
@@ -39,6 +41,16 @@ export async function assertRunScope(
       run.expected_file_version,
     );
   const scope = await service.conversation(s, run.conversation_id);
+  if (
+    run.workflow === "manage_spending" &&
+    run.spending_plan &&
+    isOrganizationBudgetPlan(run.spending_plan)
+  )
+    await new OrganizationBudgetService(service.db).prepare(
+      s,
+      run.spending_plan,
+      false,
+    );
   if (run.workflow === "manage_organization")
     await new OrganizationService(service.db).prepare(s, run.organization_plan);
   if (run.workflow === "plan_work") {
@@ -395,7 +407,10 @@ async function baseRunContext(
       subject,
       run.spending_plan,
     );
-    const { source, evidence, ...safePlan } = prepared.plan as any;
+    const safePlan = {
+      operation: prepared.plan.operation,
+      expectedRevision: prepared.plan.expectedRevision,
+    };
     return {
       context:
         "Host-bound model spending plan. Propose exactly one spending.manage with empty args. Scope, currency, prices, reservation, budget and declared reconciliation amount were explicitly chosen by the employee and must not change. Evidence notes remain in the host, not model context. Prices/amounts are employee declarations, not verified invoices. No discussion is included.\n" +
