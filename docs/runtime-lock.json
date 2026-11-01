@@ -453,6 +453,20 @@
     "images": [
       "docs/images/organization-desktop.png",
       "docs/images/organization-mobile.png"
-    ]
+    ],
+    "initialFailure": {
+      "head": "15c80135c9cc0538e20e9430e6480c70aafa8043",
+      "run": 41275579022,
+      "verify": "success",
+      "deployment": "success",
+      "source": "11 pass / 1 fail: new org case reused employee-two deliberately deprovisioned by login test; login stays 401 as required, before organization API. Fix uses dedicated org-reader account; no permission guard, assertion or timeout relaxation."
+    },
+    "supplierSmoke": {
+      "date": "2026-11-01",
+      "model": "deepseek-flash",
+      "calls": 2,
+      "status": "passed-runtime",
+      "scope": "DSH reads synthetic demo organization; Hermes creates exact confirmed synthetic department, then manual service removes it with audit retained. One completed HTTP 200 and reported usage per Run; no source/company data or notifications; unpriced, no invoice claim."
+    }
   }
 }

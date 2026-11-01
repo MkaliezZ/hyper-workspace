@@ -42,6 +42,10 @@ AI 查询只保存范围、数量、时间和版本等回执元数据，不保�
 
 本地完整 32 单元/配置、192 数据库/HTTP、类型/构建/冻结包通过；另复测 7 组织数据库、3 来源协议及扩展后的原生联合场景。完整 UI 首轮 57 过/2 失败，发生于开发监听重启，保留拒绝连接日志与 trace；固定代码后的完整 59 项重跑通过，无重试。手机部门导航再限制高度，首屏可见联系人，原 3 项再次通过。新增真实 Nextcloud 组织场景与受限容器重启持久化按本提交 Actions 核验，不能把来源协议 fixture、SDK 或页面通过写成公司正式验收。新增真实来源用例包含普通来源账号读取、DSH 查询、Hermes 员工部门/角色、撤回产品管理员权后的拒绝；该 job 因新增完整业务场景由 15 分钟扩至 25 分钟，保持所有权限与精确回执断言。
 
+实际 DeepSeek Flash 两次小样例亦已通过：DSH 当前组织回读、Hermes 明确参数建立合成部门；随后人工删除合成部门并保留审计。每次恰好一条实际供应商请求且用量完整，未发送来源资料或通知，不代替公司验收。[实际模型记录](REAL-MODEL-SMOKE.md)。
+
 官方固定源码依据：[成员组公开路由](https://github.com/nextcloud/server/blob/v33.0.10/apps/provisioning_api/appinfo/routes.php)、[成员组读取权限](https://github.com/nextcloud/server/blob/v33.0.10/apps/provisioning_api/lib/Controller/GroupsController.php)、[普通员工 autocomplete](https://github.com/nextcloud/server/blob/v33.0.10/core/Controller/AutoCompleteController.php)。只使用普通成员有权调用的路径，不把需来源管理员权限的详细成员接口当作通用联系人来源。
 
 [实际桌面](images/organization-desktop.png) · [手机首屏](images/organization-mobile.png)。截图为合成验收数据。
+
+首轮提交 15c8013 的 [CI 41275579022](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41275579022)：verify 与 deployment 成功，真实来源 11 过/1 失败。新增组织用例复用了已由登录用例明确撤销产品权限的 employee-two，等待登录时返回 401，尚未进入组织 API；产品正确保持撤权，未自动恢复。修正 CI 初始化与新用例，采用独立 org-reader 普通来源账号，不改鉴权、不改旧撤权断言、不跳过新组织断言。后续结果按修正提交重新核验。

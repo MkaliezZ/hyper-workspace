@@ -11,8 +11,9 @@ test("Real ordinary-source credentials support organization directory and host-c
   browser,
 }) => {
   test.setTimeout(240000);
+  // employee-two is intentionally deprovisioned by login.spec.ts. Use an independent ordinary-source account; never restore revoked product membership for this test.
   const admin = await login(browser, "employee-one"),
-    member = await login(browser, "employee-two"),
+    member = await login(browser, "org-reader"),
     headers = { Origin: origin };
   const key = "synthetic-organization-" + randomUUID(),
     model = modelFixture([key]);
@@ -39,9 +40,7 @@ test("Real ordinary-source credentials support organization directory and host-c
     ).json();
     memberId = memberView.user.id;
     workspaceId = memberView.user.workspaceId;
-    const contact = organization.rows.find(
-      (p: any) => p.uid === "employee-two",
-    );
+    const contact = organization.rows.find((p: any) => p.uid === "org-reader");
     expect(contact.id).toBe(memberId);
     expect(contact.role).toBe("member");
     const departmentResponse = await admin.context.request.post(
@@ -120,14 +119,14 @@ test("Real ordinary-source credentials support organization directory and host-c
     const read = await perform(member, "dsh", {
       operation: "read",
       bindingKey: organization.bindingKey,
-      query: { query: "employee-two" },
+      query: { query: "org-reader" },
     });
     expect(read.count).toBe(1);
     expect(read.rows).toBeUndefined();
     await perform(admin, "hermes", {
       operation: "assign_department",
       bindingKey: organization.bindingKey,
-      uid: "employee-two",
+      uid: "org-reader",
       departmentId: department.departmentId,
       expectedRevision: department.revision,
       confirmed: true,
@@ -136,7 +135,7 @@ test("Real ordinary-source credentials support organization directory and host-c
       await admin.context.request.get(origin + "/api/organization")
     ).json();
     expect(
-      current.rows.find((p: any) => p.uid === "employee-two").departmentId,
+      current.rows.find((p: any) => p.uid === "org-reader").departmentId,
     ).toBe(department.departmentId);
     const change = {
       operation: "change_role",
