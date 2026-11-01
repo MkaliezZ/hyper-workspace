@@ -1,3 +1,4 @@
+import { OrganizationService } from "./organization.js";
 import { KnowledgeContextService } from "./knowledge-context.js";
 import { WorkPlanService } from "./work-plans.js";
 import { selectTextChunks } from "./text-chunks.js";
@@ -34,6 +35,8 @@ export async function assertRunScope(
       run.expected_file_version,
     );
   const scope = await service.conversation(s, run.conversation_id);
+  if (run.workflow === "manage_organization")
+    await new OrganizationService(service.db).prepare(s, run.organization_plan);
   if (run.workflow === "plan_work") {
     const snapshot = (
       await service.db.pool.query(
@@ -286,6 +289,20 @@ async function baseRunContext(
       contextRefs: [
         "attachment:" + prepared.file.id + "@" + prepared.file.etag,
       ],
+      live: true,
+    };
+  }
+  if (run.workflow === "manage_organization") {
+    const selected = await new OrganizationService(service.db).prepare(
+      subject,
+      run.organization_plan,
+    );
+    return {
+      context:
+        "Host-bound organization operation. Return exactly one organization.manage with empty args. The host binds the employee-confirmed operation, organization revision, identity and current permissions. Never choose a role, department, person, source membership or grant project/file access. No employee roster or private names are included.\n" +
+        JSON.stringify({ operation: selected.plan.operation }),
+      sourceIds: [],
+      contextRefs: [],
       live: true,
     };
   }

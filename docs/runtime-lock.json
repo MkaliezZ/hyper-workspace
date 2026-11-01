@@ -46,15 +46,15 @@
     }
   },
   "nextcloud": {
-    "status": "identity-talk-personal-files-and-ai-readings-ci-verified",
+    "status": "identity-talk-files-documents-and-work-context-ci-verified",
     "runtimeVersion": "33.0.10",
     "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
     "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
-    "scope": "Identity, Talk, source projects and private reviewed replies; personal text Files, pgvector and private AI readings with revisions and source invalidation; shared file publication, PDF/Office, Calendar, autonomous sends and production pending",
+    "scope": "Identity, Talk, source projects, current UID assignments and private drafts; explicit Files import, bounded PDF/Office extraction, chunk indexes/private cited answers; confirmed attachment upload/share; work plans, decisions and method transfer. Organization module has separate pending CI evidence. Shared source-file publication, Calendar, broader communication administration and company production remain open.",
     "companySourceConnected": false,
-    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/40869859532",
-    "evidenceCommit": "38de92795eb611ae3c46d57ed3d17b5f29df49c1",
-    "evidenceScope": "Eight real Nextcloud/Talk/Files tests with synthetic employees, including native DSH v1 / Hermes v2 private readings and manual revisions; local model protocol service; no real company or model quality claim",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41205371816",
+    "evidenceCommit": "dde6c56d1c02656b97276712f0ee741410801424",
+    "evidenceScope": "Eleven real Nextcloud/Talk/Files scenarios with synthetic employees/data and local model protocol service. Three successful jobs and 298 checks for this commit; no company or supplier-quality acceptance.",
     "talk": {
       "version": "23.0.12",
       "lock": "runtime/nextcloud/talk.lock.json",
@@ -404,7 +404,7 @@
     "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41124972265"
   },
   "deliveryBatch": {
-    "status": "local-verified-ci-pending",
+    "status": "ci-verified-synthetic-source-and-model",
     "date": "2026-10-31",
     "migrations": [
       "025_decisions.sql",
@@ -424,7 +424,35 @@
       "docs/API-RECOVERY.md",
       "docs/WORK-PLANS.md"
     ],
-    "pending": "New actual-source/container cases included for CI; real supplier quality, full organization/admin/notifications, aggregate budgets/preferences and further method sources remain open. No full-delivery claim.",
-    "localVerified": "29 unit/config, 182 database/HTTP, 5 native SDK cases, 56 Chromium UI, type/build, 8 extraction (UTF-16-aware), 3 downloader and frozen package passed. UI first 55 pass / 1 fixture-cookie failure retained, corrected case then all 56 passed without retry. Audit update followed by 8 planning database cases plus native joint case passing. Actual-source/container CI and supplier/company acceptance remain separate."
+    "pending": "Real supplier quality, notifications/admin coverage, aggregate budgets/preferences, further method sources and company acceptance remain open. Organization module is under current development. No full-delivery claim.",
+    "localVerified": "29 unit/config, 182 database/HTTP, 5 native SDK cases, 56 Chromium UI, type/build, 8 extraction (UTF-16-aware), 3 downloader and frozen package passed. UI first 55 pass / 1 fixture-cookie failure retained, corrected case then all 56 passed without retry. Audit update followed by 8 planning database cases plus native joint case passing. Actual-source/container CI and supplier/company acceptance remain separate.",
+    "commit": "dde6c56d1c02656b97276712f0ee741410801424",
+    "ciRun": 41205371816,
+    "ciChecks": {
+      "unit": 29,
+      "downloader": 3,
+      "parser": 8,
+      "database": 182,
+      "native": 5,
+      "ui": 56,
+      "nextcloud": 11,
+      "container": 4
+    }
+  },
+  "organization": {
+    "status": "local-verified-ci-pending",
+    "date": "2026-11-01",
+    "migrations": [
+      "034_organization.sql",
+      "035_organization_membership_instances.sql"
+    ],
+    "contract": "docs/ORGANIZATION.md",
+    "source": "Pinned Nextcloud 33.0.10 group members and ordinary-user autocomplete; current employee credentials only; complete max 2000 group, 30 people/page, bounded search; product departments and roles never grant source access.",
+    "local": "32 unit/config, 192 database/HTTP, type/build/frozen package and all 59 Chromium UI passed. Expanded native DSH/Hermes joint case plus 7 organization DB and 3 source protocol cases passed; mobile navigation refinement followed by all 3 organization UI passing. First full UI 57 pass/2 development-restart failures preserved, then code-frozen full 59 pass without retries.",
+    "pending": "Actual-source organization CI, supplier quality and company organization acceptance. Notifications/remaining admin, preferences/aggregate budgets and further method sources remain open.",
+    "images": [
+      "docs/images/organization-desktop.png",
+      "docs/images/organization-mobile.png"
+    ]
   }
 }

@@ -535,6 +535,31 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
       (await completed(context.request, knowledgeRun)).knowledgeAnswer
         .citations[0].assetId,
     ).toBe(citationSource.id);
+    const organizationBefore = await (
+      await context.request.get(origin + "/api/organization")
+    ).json();
+    const organizationMember = organizationBefore.rows.find(
+      (p: any) => p.id === workspace.user.id,
+    );
+    const departmentResponse = await context.request.post(
+      origin + "/api/organization",
+      {
+        headers: { Origin: origin },
+        data: {
+          plan: {
+            operation: "create_department",
+            bindingKey: organizationBefore.bindingKey,
+            name: "Container persistent department",
+            parentId: null,
+            expectedRevision: organizationBefore.revision,
+            confirmed: true,
+          },
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(departmentResponse.status()).toBe(201);
+    const department = await departmentResponse.json();
     compose("stop", "api", "worker", "db");
     compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120");
     await expect
@@ -549,6 +574,19 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         { timeout: 60000 },
       )
       .toBe(200);
+    const organizationRestored = await (
+      await context.request.get(origin + "/api/organization")
+    ).json();
+    expect(organizationRestored.revision).toBe(department.revision);
+    expect(
+      organizationRestored.departments.find(
+        (d: any) => d.id === department.departmentId,
+      )?.name,
+    ).toBe("Container persistent department");
+    expect(
+      organizationRestored.rows.find((p: any) => p.id === workspace.user.id)
+        .membershipId,
+    ).toBe(organizationMember.membershipId);
     const restoredBrief = await (
       await context.request.get(briefBase + "/" + brief.briefId)
     ).json();

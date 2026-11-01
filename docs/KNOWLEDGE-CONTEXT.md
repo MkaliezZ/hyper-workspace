@@ -14,6 +14,6 @@ DSH/Hermes 的共同工具 `knowledge.answer` 只可提交回答正文，引用�
 
 迁移 `027_knowledge_chunks.sql`、`028_knowledge_queries.sql`、`029_knowledge_source_deletion.sql` 分别建立可重建分块、私有问答与源删除清理。升级需先迁移再更新 API/Worker/Web，不必更新模型密钥。旧 `text-v1` 索引有兼容读取；重建为 `text-chunks-v1` 会消耗所选 embedding 额度。回退先停止问答/索引任务并对账，保留业务 Run 历史和源清理触发器，不直接退回会暴露过期派生答案的旧读取路径。
 
-本地现有证据：2 个分块单元场景，8 个数据库/Worker/HTTP 模型协议场景，2 个桌面/手机问答场景与 8 个 Python 解析场景通过；含批量边界、独立向量空间、多资料、源变化/删除、假引用、私有回答、迟到引用清理。新增执行器前端可用性检查已复测。联合真实 DSH/Hermes 用例已通过（协议模型）；固定真实 Nextcloud、容器与真实供应商的整批回归仍待完成。
+本地现有证据：2 个分块单元场景，8 个数据库/Worker/HTTP 模型协议场景，2 个桌面/手机问答场景与 8 个 Python 解析场景通过；含批量边界、独立向量空间、多资料、源变化/删除、假引用、私有回答、迟到引用清理。新增执行器前端可用性检查已复测。联合真实 DSH/Hermes 用例已通过（协议模型）；提交 `dde6c56` 的 [CI 41205371816](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41205371816) 三个 job 已全部成功，含真实 Nextcloud 合成账号和受限容器重启；真实供应商质量、正式 E01–E10 与公司验收仍待完成。
 
 [桌面](images/knowledge-question-desktop.png) · [手机](images/knowledge-question-mobile.png)，合成协议资料。

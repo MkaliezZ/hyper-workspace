@@ -1,3 +1,4 @@
+import { OrganizationService } from "../../apps/api/src/core/organization.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -18,8 +19,8 @@ import { engineRegistry } from "../../apps/api/src/engines/adapters.js";
 import { RunProcessor } from "../../apps/api/src/core/processor.js";
 import { modelFixture } from "./business-contract.js";
 test(
-  "Native engines share product-owned work clarification, decisions, private retrieval and maintainer transfer",
-  { timeout: 180000 },
+  "Native engines share product-owned work clarification, decisions, private retrieval, maintainer transfer and organization operations",
+  { timeout: 240000 },
   async () => {
     const url = process.env.TEST_DATABASE_URL;
     assert.ok(url && new URL(url).pathname.endsWith("_test"));
@@ -222,6 +223,60 @@ test(
       assert.equal(transferred.result.receipts[0].maintainerId, peer.id);
       assert.equal(
         (await methods.get(peer, candidate.id)).current.canManage,
+        true,
+      );
+      const organizationActor = { ...actor, demo: true },
+        organization = new OrganizationService(db);
+      const organizationRun = async (engine: "dsh" | "hermes", plan: any) => {
+        const run = await workspace.startRun(organizationActor, {
+          conversationId: project.conversationId,
+          engine,
+          workflow: "manage_organization",
+          organizationPlan: { bindingKey: "demo:workspace-members", ...plan },
+          instruction:
+            "Apply only the employee-confirmed synthetic organization operation.",
+          modelProfileId: profile.id,
+          idempotencyKey: randomUUID(),
+        });
+        await processor.process(run.id);
+        const result = await workspace.getRun(organizationActor, run.id);
+        assert.equal(result.state, "succeeded", result.error);
+        return result.result.receipts[0];
+      };
+      const department = await organizationRun("dsh", {
+        operation: "create_department",
+        name: "Native protocol department",
+        parentId: null,
+        expectedRevision: 0,
+        confirmed: true,
+      });
+      await organizationRun("hermes", {
+        operation: "assign_department",
+        uid: peer.id,
+        departmentId: department.departmentId,
+        expectedRevision: 1,
+        confirmed: true,
+      });
+      const organizationRead = await organizationRun("dsh", {
+        operation: "read",
+        query: { departmentId: department.departmentId },
+      });
+      assert.equal(organizationRead.count, 1);
+      assert.equal(organizationRead.rows, undefined);
+      await organizationRun("hermes", {
+        operation: "change_role",
+        userId: peer.id,
+        role: "admin",
+        expectedRole: "member",
+        expectedRoleRevision: 1,
+        expectedMembershipId: (
+          await organization.read(organizationActor)
+        ).rows.find((r) => r.id === peer.id)!.membershipId!,
+        expectedRevision: 2,
+        confirmed: true,
+      });
+      assert.equal(
+        (await organization.read({ ...peer, demo: true })).canManage,
         true,
       );
       assert.deepEqual(fixture.violations, []);

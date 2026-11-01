@@ -1,3 +1,5 @@
+import { OrganizationService } from "./core/organization.js";
+import { OrganizationPlan, OrganizationQuery } from "@hyper/contracts";
 import { KnowledgeContextService } from "./core/knowledge-context.js";
 import { WorkPlanService } from "./core/work-plans.js";
 import { WorkPlanResponse, WorkProposal } from "@hyper/contracts";
@@ -852,6 +854,35 @@ class ApiController {
       uuid(id),
       plan,
       idempotencyKey,
+    );
+  }
+  @Get("organization") async organization(
+    @Req() req: Request,
+    @Query("query") query = "",
+    @Query("offset") offset = "0",
+    @Query("departmentId") departmentId?: string,
+  ) {
+    return new OrganizationService(db).read(
+      await subject(req),
+      OrganizationQuery.parse({
+        query,
+        offset: Number(offset),
+        ...(departmentId ? { departmentId } : {}),
+      }),
+    );
+  }
+  @Post("organization") async saveOrganization(
+    @Req() req: Request,
+    @Body() raw: unknown,
+  ) {
+    const input = z
+      .object({ plan: OrganizationPlan, idempotencyKey: z.uuid() })
+      .strict()
+      .parse(raw);
+    return new OrganizationService(db).save(
+      await subject(req),
+      input.plan,
+      input.idempotencyKey,
     );
   }
   @Get("models") async models(@Req() req: Request) {

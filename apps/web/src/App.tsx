@@ -1,3 +1,4 @@
+import { OrganizationPanel } from "./components/OrganizationPanel";
 import { DecisionPanel } from "./components/DecisionPanel";
 import { WorkPlanPanel } from "./components/WorkPlanPanel";
 import { ProjectMembers } from "./components/MemberPanels";
@@ -326,13 +327,15 @@ export function App() {
       />
     );
   const projectTitle =
-    section === "knowledge"
-      ? "知识库"
-      : section === "settings"
-        ? "设置"
-        : section === "enterprise"
-          ? "企业消息"
-          : view.project.name;
+    section === "organization"
+      ? "通讯录"
+      : section === "knowledge"
+        ? "知识库"
+        : section === "settings"
+          ? "设置"
+          : section === "enterprise"
+            ? "企业消息"
+            : view.project.name;
   const selectedRunModel = runModels.find(
     (model) => model.id === modelProfileId,
   );
@@ -347,7 +350,10 @@ export function App() {
   return (
     <div
       className={
-        "app-shell" + (section === "enterprise" ? " enterprise-view" : "")
+        "app-shell" +
+        (["enterprise", "organization"].includes(section)
+          ? " enterprise-view"
+          : "")
       }
     >
       <Navigation
@@ -381,14 +387,17 @@ export function App() {
         <MainHeader
           title={projectTitle}
           enterprise={section === "enterprise"}
+          hideProjectTools={section === "organization"}
           subtitle={
-            section === "knowledge"
-              ? "有来源、可复用的工作资料"
-              : section === "settings"
-                ? "模型与执行服务"
-                : section === "enterprise"
-                  ? "查看和回复你有权限访问的会话"
-                  : "项目空间"
+            section === "organization"
+              ? "企业成员、组织部门与当前角色"
+              : section === "knowledge"
+                ? "有来源、可复用的工作资料"
+                : section === "settings"
+                  ? "模型与执行服务"
+                  : section === "enterprise"
+                    ? "查看和回复你有权限访问的会话"
+                    : "项目空间"
           }
           query={query}
           onQuery={setQuery}
@@ -689,6 +698,16 @@ export function App() {
             engines={view.engines}
           />
         ) : null}
+        {section === "organization" ? (
+          <OrganizationPanel
+            key={view.user.id + view.user.workspaceId}
+            view={view}
+            run={run}
+            onRun={(r) => {
+              if (loadedProject.current === view.project.id) setRun(r);
+            }}
+          />
+        ) : null}
         {section === "settings" ? (
           <>
             <div
@@ -762,7 +781,7 @@ export function App() {
           </>
         ) : null}
       </main>
-      {section !== "enterprise" ? (
+      {section !== "enterprise" && section !== "organization" ? (
         <ContextPanel
           view={view}
           open={contextOpen}

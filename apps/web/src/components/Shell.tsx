@@ -1,4 +1,5 @@
 import {
+  Users,
   MessageSquare,
   MessagesSquare,
   Folder,
@@ -15,10 +16,12 @@ export type Section =
   | "projects"
   | "knowledge"
   | "settings"
-  | "enterprise";
+  | "enterprise"
+  | "organization";
 const navigation = [
   { id: "messages", label: "消息", Icon: MessageSquare },
   { id: "enterprise", label: "企业消息", Icon: MessagesSquare },
+  { id: "organization", label: "通讯录", Icon: Users },
   { id: "projects", label: "项目", Icon: Folder },
   { id: "knowledge", label: "知识库", Icon: FileText },
   { id: "settings", label: "设置", Icon: Settings },
@@ -135,6 +138,7 @@ export function MainHeader({
   onMenu,
   onContext,
   enterprise = false,
+  hideProjectTools = false,
 }: {
   title: string;
   subtitle: string;
@@ -143,6 +147,7 @@ export function MainHeader({
   onMenu: () => void;
   onContext: () => void;
   enterprise?: boolean;
+  hideProjectTools?: boolean;
 }) {
   return (
     <header className="main-header">
@@ -157,22 +162,28 @@ export function MainHeader({
         <h2>{title}</h2>
         <p>{subtitle}</p>
       </div>
-      <label className="search-box">
-        <Search size={18} />
-        <input
-          aria-label={enterprise ? "搜索当前页企业消息" : "搜索当前项目"}
-          placeholder={enterprise ? "搜索当前页消息…" : "搜索讨论、任务或文件…"}
-          value={query}
-          onChange={(e) => onQuery(e.target.value)}
-        />
-      </label>
-      <button
-        className="icon-button context-toggle"
-        aria-label="项目上下文"
-        onClick={onContext}
-      >
-        <PanelRight size={21} />
-      </button>
+      {!hideProjectTools ? (
+        <label className="search-box">
+          <Search size={18} />
+          <input
+            aria-label={enterprise ? "搜索当前页企业消息" : "搜索当前项目"}
+            placeholder={
+              enterprise ? "搜索当前页消息…" : "搜索讨论、任务或文件…"
+            }
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+          />
+        </label>
+      ) : null}
+      {!hideProjectTools ? (
+        <button
+          className="icon-button context-toggle"
+          aria-label="项目上下文"
+          onClick={onContext}
+        >
+          <PanelRight size={21} />
+        </button>
+      ) : null}
     </header>
   );
 }

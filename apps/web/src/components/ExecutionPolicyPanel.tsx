@@ -41,6 +41,7 @@ const labels: Record<string, string> = {
   manage_brief: "任务说明与澄清",
   assign_task: "分配真实员工",
   directory_report: "读取项目成员",
+  manage_organization: "组织通讯录与部门管理",
   share_attachment: "发送已确认附件",
   manage_decision: "记录与管理项目决定",
   query_knowledge: "查询选定企业资料",

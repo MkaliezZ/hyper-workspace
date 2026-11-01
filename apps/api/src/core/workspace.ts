@@ -1,3 +1,4 @@
+import { OrganizationService } from "./organization.js";
 import { selectTextChunks, MAX_INDEX_TEXT } from "./text-chunks.js";
 import { KnowledgeContextService } from "./knowledge-context.js";
 import { DecisionService } from "./decisions.js";
@@ -527,6 +528,48 @@ export class WorkspaceService {
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
+    if (input.organizationPlan || input.workflow === "manage_organization") {
+      const allowed = new Set([
+        "conversationId",
+        "workflow",
+        "engine",
+        "instruction",
+        "modelProfileId",
+        "organizationPlan",
+        "taskRules",
+        "idempotencyKey",
+      ]);
+      if (
+        input.workflow !== "manage_organization" ||
+        !input.organizationPlan ||
+        Object.keys(input).some((key) => !allowed.has(key))
+      )
+        throw new BadRequestException(
+          "组织操作只接受一个明确的员工选择，不混入其他业务目标。",
+        );
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("manage_organization")
+      )
+        throw new BadRequestException("执行器未声明组织管理能力。");
+      const previous = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (previous) {
+        if (
+          previous.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能更换任务。");
+        return { id: previous.id, state: previous.state, created: false };
+      }
+      await new OrganizationService(this.db).prepare(s, input.organizationPlan);
+    }
     let knowledgeScope:
       | Awaited<ReturnType<KnowledgeContextService["prepare"]>>
       | undefined;
@@ -1011,7 +1054,7 @@ export class WorkspaceService {
     const id = randomUUID();
     const insertRun = (c: PoolClient | Database["pool"]) =>
       c.query(
-        "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref,task_assignment_plan,attachment_plan,decision_plan,knowledge_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+        "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref,task_assignment_plan,attachment_plan,decision_plan,knowledge_plan,organization_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
         [
           id,
           s.workspaceId,
@@ -1042,6 +1085,7 @@ export class WorkspaceService {
           input.attachmentPlan ?? null,
           input.decisionPlan ?? null,
           input.knowledgePlan ?? null,
+          input.organizationPlan ?? null,
         ],
       );
     const r = knowledgeScope
@@ -1100,7 +1144,7 @@ export class WorkspaceService {
       });
     }
     const r = await this.db.pool.query(
-      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",execution_policy_snapshot AS "executionPolicy",brief_ref AS "briefRef",task_assignment_plan AS "taskAssignmentPlan",attachment_plan AS "attachmentPlan",decision_plan AS "decisionPlan",knowledge_plan AS "knowledgePlan",knowledge_answer AS "knowledgeAnswer",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
+      'SELECT id,state,engine,workflow,artifact_id AS "artifactId",task_id AS "taskId",method_plan AS "methodPlan",method_refs AS "methodRefs",execution_policy_snapshot AS "executionPolicy",brief_ref AS "briefRef",task_assignment_plan AS "taskAssignmentPlan",attachment_plan AS "attachmentPlan",decision_plan AS "decisionPlan",organization_plan AS "organizationPlan",knowledge_plan AS "knowledgePlan",knowledge_answer AS "knowledgeAnswer",instruction,result,error,context_refs AS "contextRefs",created_at AS "createdAt",updated_at AS "updatedAt" FROM cw_runs WHERE id=$1 AND workspace_id=$2 AND actor_id=$3',
       [id, s.workspaceId, s.id],
     );
     if (!r.rowCount) throw new NotFoundException("执行不存在或无权访问。");

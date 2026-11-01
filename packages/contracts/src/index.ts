@@ -47,6 +47,7 @@ export const Workflow = z.enum([
   "manage_brief",
   "assign_task",
   "directory_report",
+  "manage_organization",
   "share_attachment",
   "manage_decision",
   "query_knowledge",
@@ -56,6 +57,76 @@ export const Workflow = z.enum([
   "revise_file_reading",
 ]);
 export type Workflow = z.infer<typeof Workflow>;
+export const OrganizationQuery = z
+  .object({
+    query: z.string().trim().max(200).default(""),
+    offset: z.number().int().min(0).max(2000).default(0),
+    departmentId: z.uuid().optional(),
+  })
+  .strict();
+const OrganizationBinding = { bindingKey: z.string().min(1).max(128) };
+const OrganizationChange = {
+  ...OrganizationBinding,
+  expectedRevision: z.number().int().nonnegative(),
+  confirmed: z.literal(true),
+};
+export const OrganizationPlan = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("read"),
+      ...OrganizationBinding,
+      query: OrganizationQuery,
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("create_department"),
+      ...OrganizationChange,
+      name: z.string().trim().min(1).max(100),
+      parentId: z.uuid().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("update_department"),
+      ...OrganizationChange,
+      departmentId: z.uuid(),
+      name: z.string().trim().min(1).max(100),
+      parentId: z.uuid().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("delete_department"),
+      ...OrganizationChange,
+      departmentId: z.uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("assign_department"),
+      ...OrganizationChange,
+      uid: z
+        .string()
+        .min(1)
+        .max(255)
+        .regex(/^[^\u0000-\u001f\u007f]+$/),
+      departmentId: z.uuid().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("change_role"),
+      ...OrganizationChange,
+      userId: z.uuid(),
+      role: z.enum(["admin", "member"]),
+      expectedRole: z.enum(["admin", "member"]),
+      expectedRoleRevision: z.number().int().positive(),
+      expectedMembershipId: z.uuid(),
+    })
+    .strict(),
+]);
+export type OrganizationPlan = z.infer<typeof OrganizationPlan>;
 export const WorkSelector = z
   .object({
     name: z.string().trim().min(1).max(300),
@@ -458,6 +529,7 @@ export const RunInput = z
     attachmentPlan: z.lazy(() => AttachmentSendPlan).optional(),
     decisionPlan: z.lazy(() => DecisionPlan).optional(),
     knowledgePlan: z.lazy(() => KnowledgePlan).optional(),
+    organizationPlan: OrganizationPlan.optional(),
     taskRules: ExecutionRules.omit({ dailyRuns: true }).optional(),
     idempotencyKey: z.string().min(8).max(128),
   })
@@ -593,6 +665,7 @@ export interface PlannedAction {
     | "brief.manage"
     | "task.assign"
     | "directory.read"
+    | "organization.manage"
     | "attachment.share"
     | "decision.write"
     | "decision.manage"
@@ -656,6 +729,8 @@ export function toolsForWorkflow(
       return ["brief.write", "brief.manage"];
     case "assign_task":
       return ["task.assign"];
+    case "manage_organization":
+      return ["organization.manage"];
     case "directory_report":
       return ["directory.read"];
     case "query_knowledge":

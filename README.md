@@ -4,7 +4,7 @@
 
 面向企业内部的 AI 协作 IM：讨论有沉淀，行动有回执，成果能修改，经验能复用。蓝、白、黑配色；拥有自己的业务核心与企业资产服务。
 
-**开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。已用真实 DeepSeek Flash 在本机完成 DSH 纪要/两条待办和 Hermes 同一成果续改的小样例，[结果与边界](docs/REAL-MODEL-SMOKE.md)。更多真实模型质量、完整组织/通知/管理、跨连接预算和公司部署验收仍待完成；Calendar 与复杂办公/媒体按基线后续阶段补齐。
+**开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。已用真实 DeepSeek Flash 在本机完成 DSH 纪要/两条待办和 Hermes 同一成果续改的小样例，[结果与边界](docs/REAL-MODEL-SMOKE.md)。组织通讯录/部门/产品角色已接入当前开发批次；更多真实模型质量、通知/管理剩余项、跨连接预算和公司部署验收仍待完成；Calendar 与复杂办公/媒体按基线后续阶段补齐。
 
 ## 实际界面
 
@@ -55,7 +55,7 @@
 
 任务页可查看、筛选当前项目成员；来源 UID 与产品员工精确对应，同名不自动匹配，尚无当前工作区身份/权限的人不可分配，不自动建号或授权。人工与 AI 共用目录及分配服务；绑定员工后不能通过旧文字标记改选身份，同名人员之间的改派也能被跟进识别。
 
-[范围、权限、迁移与实际证据](docs/PROJECT-DIRECTORY-ASSIGNMENTS.md) · [桌面](docs/images/task-assignment-desktop.png) · [手机](docs/images/task-assignment-mobile.png)。当前是项目范围目录和明确身份分配，完整组织通讯录、部门树与讨论中自动消歧仍待补齐。
+[范围、权限、迁移与实际证据](docs/PROJECT-DIRECTORY-ASSIGNMENTS.md) · [桌面](docs/images/task-assignment-desktop.png) · [手机](docs/images/task-assignment-mobile.png)。项目范围目录与分配保持来源交集；新增组织通讯录、部门和产品角色见下节，其他自然语言指代和真实理解质量仍需验收。
 
 目录分配实现 `7de26bb353dc2c267644784e38f673bd13322ac0` 的 [CI 41075340989](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41075340989) 三个 job 全部成功，227 项首轮通过：25 单元/配置、3 下载器、8 解析、132 数据库、4 原生执行器、42 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。CI 使用合成账号/资料和协议模型，不等于公司全量验收。 实际 DeepSeek Flash 的目录回读与明确员工 ID 分配两个合成小样例通过，[实际模型记录](docs/REAL-MODEL-SMOKE.md)。
 
@@ -71,15 +71,23 @@
 
 新增本机附件上传入口：先明确确认保存至当前员工 Files，核对原始字节后选中，再人工或交给 DSH/Hermes 分享；不自动把字节交给模型。持久上传意图、条件创建、未知核对和大小限制已接通，本地 155 数据库/HTTP、25 单元、完整 47 UI、类型/构建和冻结包通过，上传实现 `73fced090dc36a00996f701fcca0be76715b1ff9` 的 [CI 41124972265](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41124972265) 三个 job 全部成功，共 256 项首轮通过，包含真实 Nextcloud 合成账号上传/双引擎分享及容器验证；不代表真实供应商质量或公司验收。[上传与恢复契约](docs/ATTACHMENT-UPLOADS.md) · [桌面](docs/images/attachment-upload-desktop.png) · [手机](docs/images/attachment-upload-mobile.png)。整体尚未交付。
 
+## 组织通讯录与部门
+
+“通讯录”已接入当前企业成员组，支持按姓名/UID 查找、分页和部门筛选；区分来源联系人与已验证产品员工。部门建立/移动/归属及产品角色调整由当前管理员明确确认，人工与 DSH/Hermes 共用业务服务；部门不授予项目/文件权限，产品管理员不获得 Nextcloud 管理权限。
+
+当前本地 32 单元/配置、192 数据库/HTTP、完整 59 UI、类型/构建/冻结包通过；扩展后的双原生联合场景以及 7 组织/3 来源协议场景通过。全量 UI 首轮因开发监听重启有 2 项失败，固定代码后完整重跑通过，无重试；手机导航优化后原 3 项再通过。新增真实来源/容器 CI 与公司验收单独记录。[范围、审计、迁移与验证边界](docs/ORGANIZATION.md)。通知偏好、其他通信管理与公司实际组织验收继续开发。
+
+![组织通讯录（合成验收资料）](docs/images/organization-desktop.png)
+
 ## 当前整批开发状态
 
-独立项目决定、工作计划/自然语言消歧、长文分块/多资料私人问答、方法维护人移交正在同一批次整合。已有人工/AI 业务入口、本地权限/版本/源变化测试与界面；尚未完成本批次原生 SDK、真实来源/容器及真实供应商验收，不据此宣称整体交付。[决定](docs/DECISIONS.md) · [工作计划与澄清](docs/WORK-PLANS.md) · [多资料问答与索引](docs/KNOWLEDGE-CONTEXT.md) · [方法](docs/METHODS.md)。
+独立项目决定、工作计划/自然语言消歧、长文分块/多资料私人问答、方法维护人移交已作为提交 `dde6c56d1c02656b97276712f0ee741410801424` 完成整批集成。已有人工/AI 业务入口、权限/版本/源变化测试与界面；[CI 41205371816](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41205371816) 三个 job 全部成功，真实供应商质量与公司验收仍未完成，不据此宣称整体交付。[决定](docs/DECISIONS.md) · [工作计划与澄清](docs/WORK-PLANS.md) · [多资料问答与索引](docs/KNOWLEDGE-CONTEXT.md) · [方法](docs/METHODS.md)。
 
-本地整批回归已通过：29 单元/配置、182 数据库/HTTP、5 原生执行器、56 Chromium UI、8 文档解析、3 下载回归，以及类型/构建/冻结包。首次 UI 55 过/1 个 fixture 会话失败，修正后原场景及完整 56 项重跑通过，无重试。审计补充另复测 8 个工作计划数据库场景及原生联合场景；新增真实 Nextcloud/容器覆盖随本批提交核验，不把本地结果写成公司上线结论。
+本地整批回归已通过：29 单元/配置、182 数据库/HTTP、5 原生执行器、56 Chromium UI、8 文档解析、3 下载回归，以及类型/构建/冻结包。首次 UI 55 过/1 个 fixture 会话失败，修正后原场景及完整 56 项重跑通过，无重试。审计补充另复测 8 个工作计划数据库场景及原生联合场景；该提交的 CI 同时通过 11 项真实 Nextcloud 与 4 项受限容器场景，共 298 项通过；使用合成账号、资料和协议模型，不代表公司上线结论。
 
 已修复当前页面的空响应 JSON 异常：失败保留草稿，写操作先核对原回执；Run 轮询恢复后自动清除临时错误。[恢复契约与本地证据](docs/API-RECOVERY.md)。
 
-项目“工作计划”已接通：AI 整理步骤，服务端固定人员 ID 和目标版本；同名、旧版本与缺失信息由员工澄清，可人工接管或明确让 AI 据答案续改，最后确认才保存实际任务/成果。当前本地 8 个数据库、2 个桌面/手机场景通过，联合真实 DSH/Hermes 的整批用例通过；模型为本地协议服务。来源/容器及真实供应商质量仍需本批次核验。
+项目“工作计划”已接通：AI 整理步骤，服务端固定人员 ID 和目标版本；同名、旧版本与缺失信息由员工澄清，可人工接管或明确让 AI 据答案续改，最后确认才保存实际任务/成果。当前本地 8 个数据库、2 个桌面/手机场景通过，联合真实 DSH/Hermes 的整批用例通过；模型为本地协议服务。该提交已通过真实来源/容器 CI；真实供应商理解质量和公司验收仍待完成。
 
 ![工作计划与真实回执（合成验收资料）](docs/images/work-plan-desktop.png)
 
@@ -162,7 +170,7 @@ HYPER_REVISION=$(git rev-parse HEAD) docker compose --env-file .env.compose up -
 
 ## 企业文件与个人资料
 
-Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。文本/Markdown 与 PDF/DOCX/XLSX/PPTX 受控文本提取的真实来源/容器场景已通过 CI，成果保存界面竞态修复也已通过完整 CI。长文分块、共享发布和 Calendar 仍待完成。[文件契约](docs/NEXTCLOUD-FILES.md) · [文档提取、限额与部署](docs/DOCUMENT-INGESTION.md)。
+Nextcloud Files/WebDAV 支持浏览与显式导入，副本仅本人可见，可建立语义索引。读取、检索和索引重新检查来源；源更新、删除或撤权后停止使用旧正文和向量。文本/Markdown 与 PDF/DOCX/XLSX/PPTX 受控文本提取的真实来源/容器场景已通过 CI，成果保存界面竞态修复也已通过完整 CI。长文分块与多资料问答已通过整批 CI；来源文件共享发布、Calendar 和真实检索质量仍待完成。[文件契约](docs/NEXTCLOUD-FILES.md) · [文档提取、限额与部署](docs/DOCUMENT-INGESTION.md)。
 
 下图使用明确 UI 协议测试资料，非真实公司文件。
 

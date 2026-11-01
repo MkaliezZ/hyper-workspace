@@ -7,6 +7,207 @@ const db = new Database(process.env.TEST_DATABASE_URL);
 test.afterAll(async () => {
   await db.close();
 });
+test("Real ordinary-source credentials support organization directory and host-confirmed departments and product roles through both native engines", async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const admin = await login(browser, "employee-one"),
+    member = await login(browser, "employee-two"),
+    headers = { Origin: origin };
+  const key = "synthetic-organization-" + randomUUID(),
+    model = modelFixture([key]);
+  await new Promise<void>((resolve) =>
+    model.server.listen(0, "127.0.0.1", resolve),
+  );
+  let memberId: string | undefined, workspaceId: string | undefined;
+  try {
+    for (const actor of [admin, member])
+      await expect
+        .poll(async () =>
+          (await actor.context.request.get(origin + "/api/workspace")).status(),
+        )
+        .toBe(200);
+    const orgResponse = await admin.context.request.get(
+      origin + "/api/organization",
+    );
+    expect(orgResponse.status()).toBe(200);
+    const organization = await orgResponse.json();
+    expect(organization.origin).toBe("nextcloud");
+    expect(organization.canManage).toBe(true);
+    const memberView = await (
+      await member.context.request.get(origin + "/api/workspace")
+    ).json();
+    memberId = memberView.user.id;
+    workspaceId = memberView.user.workspaceId;
+    const contact = organization.rows.find(
+      (p: any) => p.uid === "employee-two",
+    );
+    expect(contact.id).toBe(memberId);
+    expect(contact.role).toBe("member");
+    const departmentResponse = await admin.context.request.post(
+      origin + "/api/organization",
+      {
+        headers,
+        data: {
+          plan: {
+            operation: "create_department",
+            bindingKey: organization.bindingKey,
+            name: "Source directory " + randomUUID(),
+            parentId: null,
+            expectedRevision: organization.revision,
+            confirmed: true,
+          },
+          idempotencyKey: randomUUID(),
+        },
+      },
+    );
+    expect(departmentResponse.status()).toBe(201);
+    const department = await departmentResponse.json();
+    const modelResponse = await admin.context.request.post(
+      origin + "/api/models",
+      {
+        headers,
+        data: {
+          name: "Synthetic source organization model",
+          provider: "openai-compatible",
+          endpoint:
+            "http://127.0.0.1:" + (model.server.address() as any).port + "/v1",
+          model: "native-test-model",
+          purpose: "chat",
+          scope: "workspace",
+          apiKey: key,
+        },
+      },
+    );
+    expect(modelResponse.status()).toBe(201);
+    const profile = await modelResponse.json();
+    const perform = async (actor: typeof admin, engine: string, plan: any) => {
+      const current = await (
+        await actor.context.request.get(origin + "/api/workspace")
+      ).json();
+      const response = await actor.context.request.post(origin + "/api/runs", {
+        headers,
+        data: {
+          conversationId: current.project.conversationId,
+          workflow: "manage_organization",
+          organizationPlan: plan,
+          engine,
+          modelProfileId: profile.id,
+          instruction:
+            "Use only the host-confirmed current synthetic organization operation.",
+          idempotencyKey: randomUUID(),
+        },
+      });
+      expect(response.status()).toBe(201);
+      const run = await response.json();
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await actor.context.request.get(origin + "/api/runs/" + run.id)
+              ).json()
+            ).state,
+          { timeout: 120000 },
+        )
+        .toBe("succeeded");
+      return (
+        await (
+          await actor.context.request.get(origin + "/api/runs/" + run.id)
+        ).json()
+      ).result.receipts[0];
+    };
+    const read = await perform(member, "dsh", {
+      operation: "read",
+      bindingKey: organization.bindingKey,
+      query: { query: "employee-two" },
+    });
+    expect(read.count).toBe(1);
+    expect(read.rows).toBeUndefined();
+    await perform(admin, "hermes", {
+      operation: "assign_department",
+      bindingKey: organization.bindingKey,
+      uid: "employee-two",
+      departmentId: department.departmentId,
+      expectedRevision: department.revision,
+      confirmed: true,
+    });
+    let current = await (
+      await admin.context.request.get(origin + "/api/organization")
+    ).json();
+    expect(
+      current.rows.find((p: any) => p.uid === "employee-two").departmentId,
+    ).toBe(department.departmentId);
+    const change = {
+      operation: "change_role",
+      bindingKey: current.bindingKey,
+      userId: memberId,
+      role: "admin",
+      expectedRole: "member",
+      expectedRoleRevision: contact.roleRevision,
+      expectedMembershipId: contact.membershipId,
+      expectedRevision: current.revision,
+      confirmed: true,
+    };
+    await perform(admin, "hermes", change);
+    expect(
+      (
+        await (
+          await member.context.request.get(origin + "/api/organization")
+        ).json()
+      ).canManage,
+    ).toBe(true);
+    current = await (
+      await admin.context.request.get(origin + "/api/organization")
+    ).json();
+    expect(
+      (
+        await admin.context.request.post(origin + "/api/organization", {
+          headers,
+          data: {
+            plan: {
+              ...change,
+              role: "member",
+              expectedRole: "admin",
+              expectedRoleRevision: contact.roleRevision + 1,
+              expectedRevision: current.revision,
+            },
+            idempotencyKey: randomUUID(),
+          },
+        })
+      ).status(),
+    ).toBe(201);
+    expect(
+      (
+        await member.context.request.post(origin + "/api/organization", {
+          headers,
+          data: {
+            plan: {
+              operation: "create_department",
+              bindingKey: current.bindingKey,
+              name: "Denied stale role",
+              parentId: null,
+              expectedRevision: current.revision + 1,
+              confirmed: true,
+            },
+            idempotencyKey: randomUUID(),
+          },
+        })
+      ).status(),
+    ).toBe(403);
+    expect(model.violations).toEqual([]);
+  } finally {
+    if (memberId && workspaceId)
+      await db.pool.query(
+        "UPDATE cw_members SET role='member',role_revision=role_revision+1 WHERE workspace_id=$1 AND user_id=$2 AND role='admin'",
+        [workspaceId, memberId],
+      );
+    model.server.closeAllConnections();
+    await new Promise<void>((resolve) => model.server.close(() => resolve()));
+    await admin.context.close();
+    await member.context.close();
+  }
+});
 test("Real source membership gates native work plans, decisions, private knowledge and method ownership across revocation", async ({
   browser,
 }) => {
