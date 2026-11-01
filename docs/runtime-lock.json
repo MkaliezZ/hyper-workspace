@@ -46,15 +46,15 @@
     }
   },
   "nextcloud": {
-    "status": "identity-talk-files-documents-and-work-context-ci-verified",
+    "status": "identity-talk-files-documents-organization-and-communication-management-ci-verified",
     "runtimeVersion": "33.0.10",
     "ciImage": "nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305",
     "pinEvidence": "Docker Registry v2 manifest digest verified 2026-10-29; server source tag v33.0.10",
-    "scope": "Identity, Talk, source projects, current UID assignments and private drafts; explicit Files import, bounded PDF/Office extraction, chunk indexes/private cited answers; confirmed attachment upload/share; work plans, decisions and method transfer. Organization module has separate pending CI evidence. Shared source-file publication, Calendar, broader communication administration and company production remain open.",
+    "scope": "Identity, Talk, source projects, current UID assignments and private drafts; explicit Files import, bounded PDF/Office extraction, private cited retrieval; confirmed upload/share; work plans, decisions, methods, organization directory/departments/product roles and source-bound communication management with durable receipts. Company source/device acceptance, organization notification preferences, aggregate budgets and shared source-file publication remain open; Calendar remains a later frozen phase.",
     "companySourceConnected": false,
-    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41205371816",
-    "evidenceCommit": "dde6c56d1c02656b97276712f0ee741410801424",
-    "evidenceScope": "Eleven real Nextcloud/Talk/Files scenarios with synthetic employees/data and local model protocol service. Three successful jobs and 298 checks for this commit; no company or supplier-quality acceptance.",
+    "evidenceRun": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41297748241",
+    "evidenceCommit": "9bdb5095d0fa1d8c5a666a6e10900ae29210980d",
+    "evidenceScope": "Thirteen real Nextcloud/Talk/Files scenarios with synthetic employees/data and a protocol model. All three jobs and 348 checks passed; supplier smoke separate, not company acceptance.",
     "talk": {
       "version": "23.0.12",
       "lock": "runtime/nextcloud/talk.lock.json",
@@ -487,7 +487,7 @@
     }
   },
   "communicationManagement": {
-    "status": "ci-failure-fixed-locally-retest-pending",
+    "status": "ci-verified-company-acceptance-pending",
     "date": "2026-11-01",
     "migrations": [
       "036_room_management.sql",
@@ -510,7 +510,7 @@
       "costStatus": "unpriced",
       "scope": "DSH read and Hermes favorite, synthetic HTTP source only; one source write; current model Key not copied or changed, temporary source removed and employee credential disabled/cleared; no source/company/device or invoice acceptance."
     },
-    "limits": "No source/database distributed CAS, no guessing/replaying unknown group creation, max20 invited employees per group macro, room count1000/member count2000. Real-source/container CI pending; company device notifications and full E01-E10 not complete.",
+    "limits": "No source/database distributed CAS, no guessing/replaying unknown group creation, max20 invited employees per group macro, room count1000/member count2000. Real-source/container CI passed; company device notifications and full E01-E10 not complete.",
     "images": [
       "docs/images/room-management-desktop.png",
       "docs/images/room-management-mobile.png"
@@ -522,6 +522,23 @@
       "deployment": "success",
       "source": "9 pass / 4 old exact-name UI selectors failed because unread/mention badges changed room button accessible names; new native source management scenario passed. Fixed stable aria-label + separate aria-describedby; existing assertions retained."
     },
-    "correctionLocal": "36 unit/config, full 214 database/HTTP (module22), 12 combined communication UI, type/build passed. Sticky policy guard abort is propagated to each room step and source dispatch boundary; restoring rules does not resume the old Run; prior dispatched effect retained. Native DSH/Hermes communication joint scenario passed again after signal propagation."
+    "correctionLocal": "36 unit/config, full 214 database/HTTP (module22), 12 combined communication UI, type/build passed. Sticky policy guard abort is propagated to each room step and source dispatch boundary; restoring rules does not resume the old Run; prior dispatched effect retained. Native DSH/Hermes communication joint scenario passed again after signal propagation.",
+    "ci": {
+      "head": "9bdb5095d0fa1d8c5a666a6e10900ae29210980d",
+      "run": 41297748241,
+      "status": "success",
+      "passed": 348,
+      "counts": {
+        "unit": 36,
+        "downloader": 3,
+        "parser": 8,
+        "database": 214,
+        "native": 6,
+        "ui": 64,
+        "source": 13,
+        "container": 4
+      },
+      "limits": "Synthetic source employees/data and protocol model in CI. Supplier smoke recorded separately; no company/device or full E01-E10 acceptance."
+    }
   }
 }
