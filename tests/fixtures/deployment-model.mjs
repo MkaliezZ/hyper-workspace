@@ -65,86 +65,92 @@ createServer(async (req, res) => {
     )
   )
     violations++;
+  const spending = input.includes("Host-bound model spending plan.");
   const text = JSON.stringify({
     text: "Synthetic container model result.",
     actions: [
-      input.includes("Host-bound work planning.")
-        ? {
-            tool: "work.plan",
-            args: {
-              summary: "Synthetic container work plan",
-              questions: [],
-              operations: [
-                {
-                  operation: "create_task",
-                  title: "Container confirmed plan task",
-                  assignee: { name: "我" },
-                  dueDate: null,
-                },
-              ],
-            },
-          }
-        : input.includes("Host-bound decision draft.")
+      spending
+        ? { tool: "spending.manage", args: {} }
+        : input.includes("Host-bound work planning.")
           ? {
-              tool: "decision.write",
+              tool: "work.plan",
               args: {
-                title: "Synthetic container decision",
-                content: "Candidate direction, employee confirmation required.",
-                rationale: "Synthetic source only",
-                links: [],
+                summary: "Synthetic container work plan",
+                questions: [],
+                operations: [
+                  {
+                    operation: "create_task",
+                    title: "Container confirmed plan task",
+                    assignee: { name: "我" },
+                    dueDate: null,
+                  },
+                ],
               },
             }
-          : input.includes("Host-bound decision operation.")
-            ? { tool: "decision.manage", args: {} }
-            : input.includes("Host-bound knowledge question.")
-              ? {
-                  tool: "knowledge.answer",
-                  args: {
-                    content: "Partial synthetic evidence [" + citation + "]",
-                  },
-                }
-              : input.includes("Host-bound task assignment.")
-                ? { tool: "task.assign", args: {} }
-                : input.includes("Host-bound project directory query.")
-                  ? { tool: "directory.read", args: {} }
-                  : methodDraft
-                    ? {
-                        tool: "method.write",
-                        args: {
-                          title: "Synthetic container method",
-                          kind: "sop",
-                          content:
-                            "synthetic-container-method-guidance: check evidence before saving.",
-                        },
-                      }
-                    : methodManagement
-                      ? { tool: "method.manage", args: {} }
-                      : taskRevision
-                        ? {
-                            tool: "task.update",
-                            args: {
-                              title: "synthetic-container-task-update",
-                              status: "done",
-                            },
-                          }
-                        : review
-                          ? { tool: "artifact.review", args: {} }
-                          : followUp
-                            ? { tool: "follow_up.check", args: {} }
-                            : revision
-                              ? {
-                                  tool: "artifact.revise",
-                                  args: {
-                                    content: "synthetic-container-version-two",
+          : input.includes("Host-bound decision draft.")
+            ? {
+                tool: "decision.write",
+                args: {
+                  title: "Synthetic container decision",
+                  content:
+                    "Candidate direction, employee confirmation required.",
+                  rationale: "Synthetic source only",
+                  links: [],
+                },
+              }
+            : input.includes("Host-bound decision operation.")
+              ? { tool: "decision.manage", args: {} }
+              : input.includes("Host-bound knowledge question.")
+                ? {
+                    tool: "knowledge.answer",
+                    args: {
+                      content: "Partial synthetic evidence [" + citation + "]",
+                    },
+                  }
+                : input.includes("Host-bound task assignment.")
+                  ? { tool: "task.assign", args: {} }
+                  : input.includes("Host-bound project directory query.")
+                    ? { tool: "directory.read", args: {} }
+                    : methodDraft
+                      ? {
+                          tool: "method.write",
+                          args: {
+                            title: "Synthetic container method",
+                            kind: "sop",
+                            content:
+                              "synthetic-container-method-guidance: check evidence before saving.",
+                          },
+                        }
+                      : methodManagement
+                        ? { tool: "method.manage", args: {} }
+                        : taskRevision
+                          ? {
+                              tool: "task.update",
+                              args: {
+                                title: "synthetic-container-task-update",
+                                status: "done",
+                              },
+                            }
+                          : review
+                            ? { tool: "artifact.review", args: {} }
+                            : followUp
+                              ? { tool: "follow_up.check", args: {} }
+                              : revision
+                                ? {
+                                    tool: "artifact.revise",
+                                    args: {
+                                      content:
+                                        "synthetic-container-version-two",
+                                    },
+                                  }
+                                : {
+                                    tool: "artifact.create",
+                                    args: {
+                                      title: "Container native artifact",
+                                      content:
+                                        "synthetic-container-version-one",
+                                    },
                                   },
-                                }
-                              : {
-                                  tool: "artifact.create",
-                                  args: {
-                                    title: "Container native artifact",
-                                    content: "synthetic-container-version-one",
-                                  },
-                                },
     ],
   });
   if (body.stream) {
@@ -165,6 +171,22 @@ createServer(async (req, res) => {
             created: 1,
             model: body.model,
             choices: [choice],
+          }) +
+          "\n\n",
+      );
+    if (spending)
+      res.write(
+        "data: " +
+          JSON.stringify({
+            id: "compose-fixture",
+            object: "chat.completion.chunk",
+            model: body.model,
+            choices: [],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 10,
+              total_tokens: 20,
+            },
           }) +
           "\n\n",
       );
