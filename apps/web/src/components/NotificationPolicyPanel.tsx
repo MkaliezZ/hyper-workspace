@@ -17,7 +17,19 @@ type PolicyView = {
   }[];
   effective: Required<NotificationRules>;
   canManageShared: boolean;
-  recentChanges: { id: string; scope: Scope; revision: number }[];
+  recentChanges: {
+    id: string;
+    scope: Scope;
+    revision: number;
+    requestKey?: string;
+  }[];
+  recentRuns?: {
+    id: string;
+    state: string;
+    engine: string;
+    operation: string;
+    requestKey: string;
+  }[];
 };
 type Attempt = {
   path: string;
@@ -89,6 +101,8 @@ export function NotificationPolicyPanel({
   const denied = (e: unknown) =>
     e instanceof ApiError && [401, 403, 404].includes(e.status);
   function clearPrivate() {
+    generation.current++;
+    controller.current?.abort();
     modelController.current?.abort();
     admitted.current = undefined;
     setData(undefined);
@@ -204,6 +218,86 @@ export function NotificationPolicyPanel({
       if (alive.current) setBusy(false);
     }
   }
+  async function inspectOwn() {
+    if (busy || configuring) return;
+    setBusy(true);
+    setError("");
+    controller.current?.abort();
+    const control = new AbortController(),
+      version = ++generation.current;
+    controller.current = control;
+    try {
+      const value = await api<PolicyView>(path, { signal: control.signal });
+      if (!alive.current || version !== generation.current) return;
+      // A history check must not silently rebase an unsaved edit onto a newer revision.
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              recentChanges: value.recentChanges,
+              recentRuns: value.recentRuns,
+            }
+          : value,
+      );
+      const known = pending?.ai
+        ? value.recentRuns?.find(
+            (item) => item.requestKey === pending.body.idempotencyKey,
+          )
+        : undefined;
+      if (known) {
+        const actual = await api(`/runs/${known.id}`, {
+          signal: control.signal,
+        });
+        if (!alive.current || version !== generation.current) return;
+        admitted.current = { id: actual.id, operation: known.operation };
+        setPending(undefined);
+        onRun(actual);
+        setNotice("已找到原提醒执行，未提交第二次请求。");
+      } else if (
+        pending &&
+        !pending.ai &&
+        value.recentChanges.some(
+          (item) => item.requestKey === pending.body.idempotencyKey,
+        )
+      ) {
+        setPending(undefined);
+        await load();
+        if (alive.current) setNotice("已找到原提醒设置回执，未再次写入。");
+      } else
+        setNotice(
+          pending
+            ? "当前最近记录中尚未找到原回执，不能据此判断失败；可继续使用原请求键核对。"
+            : "已读取本人最近操作；未更改当前编辑方案或规则版本。",
+        );
+    } catch (e) {
+      if (
+        !alive.current ||
+        version !== generation.current ||
+        control.signal.aborted
+      )
+        return;
+      if (denied(e)) clearPrivate();
+      setError((e as Error).message);
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  }
+  async function openRecent(id: string) {
+    if (busy || pending || configuring) return;
+    const version = generation.current;
+    setBusy(true);
+    setError("");
+    try {
+      const actual = await api(`/runs/${id}`);
+      if (alive.current && version === generation.current) onRun(actual);
+    } catch (e) {
+      if (!alive.current) return;
+      if (denied(e)) clearPrivate();
+      setError((e as Error).message);
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  }
   function start(operation: "configure" | "read") {
     if (
       !data ||
@@ -283,6 +377,13 @@ export function NotificationPolicyPanel({
         onClick={() => void load()}
       >
         重新读取提醒规则
+      </button>
+      <button
+        className="secondary"
+        disabled={busy || configuring || (!data && !pending)}
+        onClick={() => void inspectOwn()}
+      >
+        核对本人提醒操作
       </button>
       {data ? (
         <>
@@ -365,7 +466,7 @@ export function NotificationPolicyPanel({
                     ))}
                   </select>
                 </label>
-                <label>
+                <label className="policy-confirm">
                   <input
                     type="checkbox"
                     checked={rules.importantFields !== undefined}
@@ -512,6 +613,35 @@ export function NotificationPolicyPanel({
               </button>
             </fieldset>
           </form>
+          {data.recentRuns?.length ? (
+            <details>
+              <summary>本人最近的提醒执行</summary>
+              <ul>
+                {data.recentRuns.map((item) => (
+                  <li key={item.id}>
+                    {item.engine} ·{" "}
+                    {(
+                      {
+                        queued: "已排队",
+                        running: "执行中",
+                        succeeded: "已完成",
+                        failed: "未完成",
+                        cancelled: "已停止",
+                        recovery_required: "待核对",
+                      } as Record<string, string>
+                    )[item.state] ?? "状态待核对"}{" "}
+                    <button
+                      className="secondary"
+                      disabled={busy || configuring || !!pending}
+                      onClick={() => void openRecent(item.id)}
+                    >
+                      查看提醒执行 {item.id.slice(0, 8)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           {data.recentChanges.length ? (
             <details>
               <summary>本人最近的提醒设置回执</summary>

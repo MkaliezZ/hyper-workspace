@@ -255,3 +255,63 @@ test("Ordinary employees may read shared reminder rules and edit only their pers
   await expect(panel.getByLabel("提醒模式", { exact: true })).toBeEnabled();
   await expect(panel).toContainText("只约束由本人发起");
 });
+
+test("A lost AI admission can be recovered by the original private request key without submitting another Run", async ({
+  page,
+}) => {
+  const id = randomUUID();
+  let attempt: any,
+    writes = 0;
+  await page.route("**/api/projects/*/notification-policy", (r) =>
+    r.fulfill({
+      json: {
+        ...policy(),
+        recentRuns: attempt
+          ? [
+              {
+                id,
+                state: "succeeded",
+                engine: "fixture",
+                operation: "read",
+                requestKey: attempt.idempotencyKey,
+              },
+            ]
+          : [],
+      },
+    }),
+  );
+  await page.route("**/api/runs", (r) => {
+    attempt = r.request().postDataJSON();
+    writes++;
+    return r.fulfill({ status: 503, body: "" });
+  });
+  await page.route("**/api/runs/" + id, (r) =>
+    r.fulfill({
+      json: {
+        id,
+        state: "succeeded",
+        workflow: "manage_notifications",
+        engine: "fixture",
+        result: { text: "已回读有效提醒规则", receipts: [] },
+      },
+    }),
+  );
+  const panel = await settings(page);
+  await panel.getByLabel("提醒执行服务").selectOption("fixture");
+  await panel
+    .getByRole("button", { name: "AI 回读提醒规则", exact: true })
+    .click();
+  await expect(
+    panel.getByRole("button", { name: "重试原提醒请求" }),
+  ).toBeVisible();
+  await panel
+    .getByRole("button", { name: "核对本人提醒操作", exact: true })
+    .click();
+  await expect(
+    panel.getByRole("button", { name: "重试原提醒请求" }),
+  ).toHaveCount(0);
+  await expect(panel.getByRole("status")).toContainText(
+    "AI 已回读当前有效规则",
+  );
+  expect(writes).toBe(1);
+});

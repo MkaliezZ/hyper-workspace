@@ -6,7 +6,7 @@
 
 **开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。已用真实 DeepSeek Flash 在本机完成 DSH 纪要/两条待办和 Hermes 同一成果续改的小样例，[结果与边界](docs/REAL-MODEL-SMOKE.md)。组织通讯录/部门/产品角色、通信管理和按重要程度/个人偏好合并的跟进提醒已接入当前开发批次；更多真实模型质量、通知/管理剩余项、跨连接预算和公司部署验收仍待完成；Calendar 与复杂办公/媒体按基线后续阶段补齐。
 
-跟进提醒新增工作区/项目/本人三层规则：全部变化、仅重要变化、静默和最短合并间隔；静默检查保留公共待通知变化，其他符合条件的同事仍可合并发布。人工、DSH/Hermes 共用版本与权限服务；个人配置不广播到项目。新增模块当前通过本地行为验证，新来源/容器断言仍待此版本 CI。[功能、API、恢复与验证边界](docs/NOTIFICATION-POLICY.md)。
+跟进提醒新增工作区/项目/本人三层规则：全部变化、仅重要变化、静默和最短合并间隔；静默检查保留公共待通知变化，其他符合条件的同事仍可合并发布。人工、DSH/Hermes 共用版本与权限服务；个人配置不广播到项目。主实现 `a4857a3` 的 [CI 41300542152](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41300542152) 三个任务全部成功，包含新增真实来源与容器断言；随后补本人原任务找回和布局，模块本地 13 DB/6 UI、最新完整 227 DB 已通过，后续提交按自己的 CI 核对。真实 DeepSeek 的 DSH 配置/Hermes 私有回读各一次成功，来源为合成服务、0 次来源写入；整体尚未交付。[功能、API、恢复与验证边界](docs/NOTIFICATION-POLICY.md)。 [桌面](docs/images/notification-policy-desktop.png) · [手机](docs/images/notification-policy-mobile.png)。
 
 ## 实际界面
 

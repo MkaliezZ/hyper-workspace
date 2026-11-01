@@ -515,3 +515,36 @@ test("Own reminder audit history is restricted to the selected project, workspac
   assert.equal(view.recentChanges[0].scope, "personal");
   assert.ok(!JSON.stringify(view).includes(other.id));
 });
+
+test("Queued reminder Runs remain discoverable only to their owner in the exact current project after a lost admission response", async () => {
+  const f = await setup(),
+    key = randomUUID(),
+    started = await f.work.startRun(f.admin, {
+      conversationId: f.project.conversationId,
+      engine: "fixture",
+      workflow: "manage_notifications",
+      instruction: "Read current reminder rules",
+      notificationPlan: { operation: "read" },
+      idempotencyKey: key,
+    });
+  const own = await f.service.view(f.admin, f.project.id);
+  assert.deepEqual(
+    own.recentRuns.map((r: any) => [r.id, r.state, r.requestKey]),
+    [[started.id, "queued", key]],
+  );
+  assert.equal(
+    (await f.service.view(f.peer, f.project.id)).recentRuns.length,
+    0,
+  );
+  const other = await f.work.createProject(
+    f.admin,
+    "Other queued reminder project",
+    "Keep private Run scopes separate",
+  );
+  assert.equal((await f.service.view(f.admin, other.id)).recentRuns.length, 0);
+  await f.processor.process(started.id);
+  assert.equal(
+    (await f.service.view(f.admin, f.project.id)).recentRuns[0].state,
+    "succeeded",
+  );
+});

@@ -550,11 +550,35 @@
     "modelBoundary": "Only the host-bound operation type and tool contract, no policy values or project discussion. Empty-args tool; current role/source/revision checked before effects.",
     "localEvidence": {
       "unit": 3,
-      "database": 12,
-      "ui": 5,
+      "database": 13,
+      "ui": 6,
       "nativeJoint": 1,
-      "nativeProtocolRequests": 5
+      "nativeProtocolRequests": 5,
+      "fullUnit": 39,
+      "fullDatabaseBeforeHistory": 226,
+      "fullUiBeforeHistory": 69,
+      "fullNative": 7,
+      "fullDatabase": 227
     },
-    "pending": "New real Nextcloud and container assertions await this code head CI. No supplier quality, company device delivery, complete E01-E10 or overall delivery claim."
+    "pending": "New real Nextcloud and container assertions await this code head CI. No supplier quality, company device delivery, complete E01-E10 or overall delivery claim.",
+    "recovery": "Own recent Runs and settings receipts expose only current authorized actor/project metadata and request keys; missing admission receipt can reconnect the exact original Run without another POST. History reads never silently rebase unsaved edits.",
+    "historyMigration": "040_notification_run_history.sql",
+    "realSupplierSmoke": {
+      "date": "2026-11-01",
+      "profile": "Existing locally authorized DeepSeek Flash product connection; API key not copied",
+      "runs": [
+        "a6b6c195-6b67-450f-a0cf-beaec02ea6b4",
+        "618a22d3-8bec-453b-94bc-b3ce49e59158"
+      ],
+      "requests": 2,
+      "scope": "DSH confirms exact synthetic project reminder rules; Hermes privately rereads. Synthetic loopback source, zero source writes, current product gateway/Policy/spending checks; no workspace/personal preference change.",
+      "result": "Both runtime/succeeded, one completed HTTP 200 and reported usage each; cost remains unpriced, no invoice or company acceptance claim."
+    },
+    "baseCi": {
+      "head": "a4857a34a5a7726ad5d79ab78a5cef86078a4c00",
+      "run": 41300542152,
+      "status": "all-three-jobs-success",
+      "scope": "Includes new real Nextcloud notification behavior and container persistence/restart assertions. Later private recovery/UI refinement requires its own CI."
+    }
   }
 }

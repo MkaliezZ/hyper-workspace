@@ -129,7 +129,13 @@ export class NotificationPolicyService {
     );
     const changes = (
       await this.db.pool.query(
-        `SELECT id,scope,scope_id AS "scopeId",revision,receipt,created_at AS "createdAt" FROM cw_notification_policy_changes WHERE workspace_id=$1 AND actor_id=$2 AND ((scope='workspace' AND scope_id=$1) OR (scope='project' AND scope_id=$3) OR (scope='personal' AND scope_id=$2)) ORDER BY created_at DESC,id DESC LIMIT 20`,
+        `SELECT id,scope,scope_id AS "scopeId",revision,receipt,idempotency_key AS "requestKey",created_at AS "createdAt" FROM cw_notification_policy_changes WHERE workspace_id=$1 AND actor_id=$2 AND ((scope='workspace' AND scope_id=$1) OR (scope='project' AND scope_id=$3) OR (scope='personal' AND scope_id=$2)) ORDER BY created_at DESC,id DESC LIMIT 20`,
+        [s.workspaceId, s.id, projectId],
+      )
+    ).rows;
+    const recentRuns = (
+      await this.db.pool.query(
+        `SELECT r.id,r.state,r.engine,r.notification_plan->>'operation' AS operation,r.idempotency_key AS "requestKey",r.created_at AS "createdAt" FROM cw_runs r JOIN cw_conversations v ON v.id=r.conversation_id AND v.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.actor_id=$2 AND v.project_id=$3 AND r.workflow='manage_notifications' ORDER BY r.created_at DESC,r.id DESC LIMIT 20`,
         [s.workspaceId, s.id, projectId],
       )
     ).rows;
@@ -140,6 +146,7 @@ export class NotificationPolicyService {
       effective: effectiveNotifications(layers),
       canManageShared: role === "admin" && roleNow === "admin",
       recentChanges: changes,
+      recentRuns,
     };
   }
   private scopeId(
