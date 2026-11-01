@@ -624,7 +624,7 @@
     "date": "2026-11-01",
     "contract": "docs/REAL-BUSINESS-ACCEPTANCE.md",
     "reproducer": "scripts/real-business-smoke.ts",
-    "status": "local-real-provider-synthetic-business-readback-passed-own-ci-pending",
+    "status": "local-real-provider-synthetic-business-readback-and-own-code-ci-verified",
     "provider": "DeepSeek / deepseek-flash via existing encrypted personal product connection",
     "source": "Synthetic loopback HTTP fixture; not actual Nextcloud or company originals",
     "mapping": "P02/P03/P04/P05/P07/P08 C01/C02/C03/C04/C05/C07 A01/A02/A03/A06/A08/A09/A10 E01/E03/E05/E07/E10 technical subsets; E08 human review pending",
@@ -663,6 +663,30 @@
       "publicReproducer": "No-call preflight and static checks only; real supplier evidence used its private predecessor, no repeated billable batch.",
       "cliSafetyTests": 2
     },
-    "pending": "Own code CI, company source/identity/device data, actual embedding quality, complete E01-E10 and human E08. Frozen evaluation snapshots unchanged."
+    "pending": "Company source/identity/device data, actual embedding quality, cross-connection budgets, more method sources, complete E01-E10 and human E08. Frozen evaluation snapshots unchanged.",
+    "ci": {
+      "head": "0a63287bdeaf9777089bf1219fba619f4b21b898",
+      "run": 41323891692,
+      "status": "all-three-jobs-success",
+      "checks": 386,
+      "unit": 48,
+      "downloader": 3,
+      "parser": 8,
+      "database": 230,
+      "native": 8,
+      "ui": 70,
+      "realSource": 14,
+      "container": 5,
+      "scope": "Separate job logs verified on 2026-11-01 UTC (2026-11-02 Asia/Shanghai). All protocol/native/source/container checks passed; real supplier quality and unknown accounting evidence are recorded separately, not company acceptance."
+    },
+    "postCleanupReadOnlyAudit": {
+      "supplierRequests": 23,
+      "unpriced": 23,
+      "incompleteUsage": 2,
+      "tasks": 4,
+      "explicitTestTaskDone": 1,
+      "syntheticCredentialsDisabledAndCleared": 3,
+      "scope": "Exact fixture Run/task/provider IDs; no upstream request, permission change or ledger reset."
+    }
   }
 }
