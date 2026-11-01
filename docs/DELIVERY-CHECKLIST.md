@@ -69,4 +69,9 @@
 
 ## 最新运行与恢复证据
 
-提醒最终收尾 `1c67e31` 的 [CI 41301871596](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41301871596) 三项全部成功，372 项通过；本人原请求找回、70 UI、14 真实来源和 4 容器均已验证。新增数据库备份/隔离恢复 CLI，本地 7 单元/3 真 PG 集成、完整 230 DB 与类型/构建通过；Compose 新用例等待本版 CI。隔离新库验证不表示公司生产切流验收，仍需来源/权限、运行角色和外部未知动作核对。见 [BACKUP-RESTORE.md](BACKUP-RESTORE.md)。
+提醒最终收尾 `1c67e31` 的 [CI 41301871596](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41301871596) 三项全部成功，372 项通过；本人原请求找回、70 UI、14 真实来源和 4 容器均已验证。新增数据库备份/隔离恢复 CLI，本地 7 单元/3 真 PG 集成、完整 230 DB 与类型/构建通过；备份实现 `9c062efa` 的 [CI 41321121462](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41321121462) 三项成功，383 项通过，含新增实际 Compose 备份/恢复场景。隔离新库验证不表示公司生产切流验收，仍需来源/权限、运行角色和外部未知动作核对。见 [BACKUP-RESTORE.md](BACKUP-RESTORE.md)。
+
+
+## 真实模型业务样例增量
+
+真实 DeepSeek Flash + 双原生执行器的两个合成项目，最后一轮 14 次请求完成实际字段/版本回读、明确员工 UUID 指派及静默变化合并；0 来源写入。首轮日期丢失已修复，第二轮用量完整性断言失败保留，三轮合计 23 次请求，最终仍有 1 条 partial 用量、费用 unpriced。结构化任务日期/标签/空 UUID/原请求重放新增回归，完整 8 原生本地通过，48 单元/类型构建通过；本次代码 CI 另行跟踪。输出原文供 E08 人工量规检查，尚无人类正式评分；合成来源不等于真实公司 Nextcloud，同样不能把完整 E01/E03/E05/E07/E10 标为通过。详见 [业务检查与复用脚本](REAL-BUSINESS-ACCEPTANCE.md)。

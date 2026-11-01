@@ -603,6 +603,66 @@
       "fullDatabaseBeforeFinalGuards": 230,
       "typeBuild": "passed"
     },
-    "pending": "New Compose restore case awaits this code head CI; no production cutover, company disaster recovery/RTO, external source backup or completed-product claim."
+    "pending": "Company production cutover, disaster recovery/RTO, retention/offsite and external source backups remain open; no completed-product claim.",
+    "ci": {
+      "head": "9c062efa7a9cc25e5de9b104b68de299759955bd",
+      "run": 41321121462,
+      "status": "all-three-jobs-success",
+      "checks": 383,
+      "unit": 46,
+      "downloader": 3,
+      "parser": 8,
+      "database": 230,
+      "native": 7,
+      "ui": 70,
+      "realSource": 14,
+      "container": 5,
+      "scope": "Individual job logs checked. Includes actual signed archive, isolated restore and quarantine in Compose; synthetic data, no company cutover."
+    }
+  },
+  "realBusinessVerification": {
+    "date": "2026-11-01",
+    "contract": "docs/REAL-BUSINESS-ACCEPTANCE.md",
+    "reproducer": "scripts/real-business-smoke.ts",
+    "status": "local-real-provider-synthetic-business-readback-passed-own-ci-pending",
+    "provider": "DeepSeek / deepseek-flash via existing encrypted personal product connection",
+    "source": "Synthetic loopback HTTP fixture; not actual Nextcloud or company originals",
+    "mapping": "P02/P03/P04/P05/P07/P08 C01/C02/C03/C04/C05/C07 A01/A02/A03/A06/A08/A09/A10 E01/E03/E05/E07/E10 technical subsets; E08 human review pending",
+    "scope": "Two native engines each create minutes and two structured tasks; four separately host-confirmed employee UUID assignments; cross-engine original artifact v1/v2; quiet and important merged follow-up with one actual product message, repeated check silent, zero source writes. No key copy, price/policy/budget change or external notification.",
+    "finalRunIds": [
+      "93b0ae95-0b74-4422-954a-0e1a9543f379",
+      "e01a07eb-f43d-4832-bf96-a9eaf78517b4",
+      "a5a85acb-3806-4c95-8026-a2cf42c2a997",
+      "92bbe0d0-598b-4bac-8538-fc994a8ef8b3",
+      "adea7523-d849-43fe-a87c-51094fb935cd",
+      "9bd45c77-6c11-4042-b40b-6f44e4986be7",
+      "11156fac-0eaf-4b59-819a-faf96c763126",
+      "275b3294-462c-4355-8779-ec9b773b8c7f",
+      "f9278e14-1555-4097-ad15-987c1a9ba45d",
+      "20c5d7b6-7fd7-45cf-81fe-3c8611668fbd",
+      "a08a7491-af08-4d04-b04e-b17d70b79139",
+      "ef648ee0-732c-4ef1-9a11-1106e68678a4",
+      "f39e1182-1d8b-4b3c-83ba-4dff04b30844",
+      "a8eb3d52-447f-4895-b3b9-75987358add3"
+    ],
+    "finalBusinessRuns": 14,
+    "finalSupplierRequests": 14,
+    "allThreeRoundsSupplierRequests": 23,
+    "incompleteUsageRuns": [
+      "9bd45c77-6c11-4042-b40b-6f44e4986be7"
+    ],
+    "costStatus": "unpriced; no invoice or zero-cost claim",
+    "firstFailures": [
+      "Hermes placed source deadlines in task titles while canonical dueDate was null; retained original assertions and clarified generic tool guidance.",
+      "A succeeded artifact revision returned partial/unknown usage; harness now distinguishes actual business receipts from incomplete accounting, without changing collector or business assertions."
+    ],
+    "localEvidence": {
+      "unit": 48,
+      "fullNative": 8,
+      "typeBuild": "passed",
+      "publicReproducer": "No-call preflight and static checks only; real supplier evidence used its private predecessor, no repeated billable batch.",
+      "cliSafetyTests": 2
+    },
+    "pending": "Own code CI, company source/identity/device data, actual embedding quality, complete E01-E10 and human E08. Frozen evaluation snapshots unchanged."
   }
 }

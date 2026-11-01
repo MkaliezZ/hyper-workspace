@@ -27,6 +27,7 @@ interface Employee {
 export function modelFixture(
   keys: string[],
   observeRequest?: (body: any, employee: number) => void | Promise<void>,
+  overrideResult?: (body: any, employee: number) => Record<string, unknown>,
 ) {
   const observed = new Set<number>(),
     violations: string[] = [];
@@ -189,7 +190,7 @@ export function modelFixture(
       )
     )
       violations.push("Method management dispatch included body");
-    const text = JSON.stringify({
+    const fixtureResult = {
       text: "已准备测试成果。",
       actions: [
         notificationManage
@@ -348,7 +349,8 @@ export function modelFixture(
                                                             },
                                                           },
       ],
-    });
+    };
+    const text = JSON.stringify(overrideResult?.(body, employee) ?? fixtureResult);
     if (body.stream) {
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       for (const choice of [
