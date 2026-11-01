@@ -540,5 +540,21 @@
       },
       "limits": "Synthetic source employees/data and protocol model in CI. Supplier smoke recorded separately; no company/device or full E01-E10 acceptance."
     }
+  },
+  "notificationPolicy": {
+    "contract": "docs/NOTIFICATION-POLICY.md",
+    "migration": "039_notification_policies.sql",
+    "workflow": "manage_notifications",
+    "tool": "notifications.manage",
+    "scope": "Workspace/project/personal versioned notification rules, strictest publication mode, importance trigger intersection, maximum merge interval; private manual and native DSH/Hermes settings receipts. Quiet/deferred actor checks retain the common pending comparison snapshot for eligible colleagues.",
+    "modelBoundary": "Only the host-bound operation type and tool contract, no policy values or project discussion. Empty-args tool; current role/source/revision checked before effects.",
+    "localEvidence": {
+      "unit": 3,
+      "database": 12,
+      "ui": 5,
+      "nativeJoint": 1,
+      "nativeProtocolRequests": 5
+    },
+    "pending": "New real Nextcloud and container assertions await this code head CI. No supplier quality, company device delivery, complete E01-E10 or overall delivery claim."
   }
 }

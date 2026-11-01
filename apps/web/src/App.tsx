@@ -32,6 +32,7 @@ import { FollowUpPanel } from "./components/FollowUpPanel";
 import { ArtifactReviewPanel } from "./components/ArtifactReviewPanel";
 import { artifactStatusLabel } from "@hyper/contracts";
 import { TaskEditor } from "./components/TaskEditor";
+import { NotificationPolicyPanel } from "./components/NotificationPolicyPanel";
 import { ExecutionPolicyPanel } from "./components/ExecutionPolicyPanel";
 import { ModelUsagePanel } from "./components/ModelUsagePanel";
 import { ModelSpendingPanel } from "./components/ModelSpendingPanel";
@@ -733,6 +734,14 @@ export function App() {
               </button>
               <button
                 role="tab"
+                aria-selected={settingsTab === "notifications"}
+                className={settingsTab === "notifications" ? "active" : ""}
+                onClick={() => setSettingsTab("notifications")}
+              >
+                跟进提醒
+              </button>
+              <button
+                role="tab"
                 aria-selected={settingsTab === "usage"}
                 className={settingsTab === "usage" ? "active" : ""}
                 onClick={() => setSettingsTab("usage")}
@@ -750,6 +759,15 @@ export function App() {
             </div>
             {settingsTab === "models" ? (
               <ModelSettings view={view} busy={busy} act={act} />
+            ) : settingsTab === "notifications" ? (
+              <NotificationPolicyPanel
+                key={view.user.id + view.project.id}
+                view={view}
+                run={run}
+                onRun={(r) => {
+                  if (loadedProject.current === view.project.id) setRun(r);
+                }}
+              />
             ) : settingsTab === "spending" ? (
               <ModelSpendingPanel
                 key={view.user.id + view.project.id}

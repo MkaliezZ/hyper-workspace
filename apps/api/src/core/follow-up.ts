@@ -1,3 +1,8 @@
+import {
+  NotificationPolicyService,
+  effectiveNotifications,
+  notificationDecision,
+} from "./notification-policy.js";
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { Subject, Task } from "@hyper/contracts";
@@ -30,6 +35,14 @@ export interface FollowUpReceipt {
   stateDigest: string;
   notificationMessageId: string | null;
   summary: string;
+  notification: {
+    mode: "all" | "important" | "quiet";
+    importantFields: string[];
+    minIntervalMinutes: number;
+    reason: string;
+    nextEligibleAt: string | null;
+    layers: { scope: string; scopeId: string; revision: number }[];
+  };
 }
 
 /** Only the host compares current product facts. No model-supplied state or recipients. */
@@ -58,6 +71,7 @@ export class FollowUpService {
     projectId: string,
     evidence: "fixture" | "runtime",
   ): Promise<FollowUpReceipt> {
+    await NotificationPolicyService.lock(c, s.workspaceId);
     // This short transaction serializes all engines/employees on the same project.
     // Source/engine calls stay outside this lock; task reads are one SQL snapshot.
     const project = await c.query(
@@ -69,7 +83,7 @@ export class FollowUpService {
     if (!project.rowCount) throw new Error("跟进项目范围已变化。");
     const previous = (
       await c.query(
-        "SELECT snapshot,last_run_id FROM cw_follow_up_baselines WHERE project_id=$1 AND workspace_id=$2",
+        "SELECT snapshot,last_run_id,last_notification_at FROM cw_follow_up_baselines WHERE project_id=$1 AND workspace_id=$2",
         [projectId, s.workspaceId],
       )
     ).rows[0];
@@ -114,33 +128,65 @@ export class FollowUpService {
       : changes.length
         ? "changed"
         : "unchanged";
+    const now = (await c.query("SELECT clock_timestamp() AS at")).rows[0]
+      .at as Date;
+    const effective = effectiveNotifications(
+      await NotificationPolicyService.layers(c, s, projectId),
+    );
+    const decision = notificationDecision(
+      effective,
+      changes,
+      previous?.last_notification_at ?? null,
+      now,
+    );
+    const publish = reason === "changed" && decision.notify;
+    const notification = {
+      ...effective,
+      reason: decision.reason,
+      nextEligibleAt: decision.nextEligibleAt,
+    };
     const summary =
       reason === "baseline"
         ? `已建立待办检查基线，当前 ${pending.length} 项待处理；本次未向项目发消息。`
         : reason === "unchanged"
           ? `待办无变化，当前 ${pending.length} 项待处理；本次未向项目发消息。`
-          : this.summary(changes, pending.length);
+          : publish
+            ? this.summary(changes, pending.length)
+            : `待办有 ${changes.length} 项变化，当前 ${pending.length} 项待处理；${decision.reason === "quiet" ? "当前提醒偏好要求静默" : decision.reason === "not_important" ? "本次只有非重要变化" : "提醒合并间隔尚未到期"}。变化会保留，后续获准检查可合并发布。`;
     const receipt: FollowUpReceipt = {
       tool: "follow_up.check",
       projectId,
       reason,
-      notify: changes.length > 0,
+      notify: publish,
       pending,
       changes,
       baselineRunId: previous?.last_run_id ?? null,
-      observedAt: (
-        await c.query("SELECT clock_timestamp() AS at")
-      ).rows[0].at.toISOString(),
+      observedAt: now.toISOString(),
       stateDigest: stableDigest(tasks),
-      notificationMessageId: changes.length ? randomUUID() : null,
+      notificationMessageId: publish ? randomUUID() : null,
       summary,
+      notification,
     };
-    await c.query(
-      `INSERT INTO cw_follow_up_baselines(project_id,workspace_id,snapshot,last_run_id)
-       VALUES($1,$2,$3,$4) ON CONFLICT(project_id,workspace_id)
-       DO UPDATE SET snapshot=EXCLUDED.snapshot,last_run_id=EXCLUDED.last_run_id,checked_at=clock_timestamp()`,
-      [projectId, s.workspaceId, JSON.stringify(tasks), run.id],
-    );
+    if (previous && changes.length && !publish) {
+      // A quiet actor or deferred check must not consume changes for another eligible actor.
+      await c.query(
+        "UPDATE cw_follow_up_baselines SET checked_at=clock_timestamp() WHERE project_id=$1 AND workspace_id=$2",
+        [projectId, s.workspaceId],
+      );
+    } else
+      await c.query(
+        `INSERT INTO cw_follow_up_baselines(project_id,workspace_id,snapshot,last_run_id,last_notification_at)
+       VALUES($1,$2,$3,$4,$5) ON CONFLICT(project_id,workspace_id)
+       DO UPDATE SET snapshot=EXCLUDED.snapshot,last_run_id=EXCLUDED.last_run_id,checked_at=clock_timestamp(),
+       last_notification_at=COALESCE(EXCLUDED.last_notification_at,cw_follow_up_baselines.last_notification_at)`,
+        [
+          projectId,
+          s.workspaceId,
+          JSON.stringify(tasks),
+          run.id,
+          publish ? now : null,
+        ],
+      );
     // The notification, baseline and caller's action receipt commit together.
     // A crash after this action cannot silently consume a change without its message.
     if (receipt.notificationMessageId)

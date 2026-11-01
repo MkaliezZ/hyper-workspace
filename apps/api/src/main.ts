@@ -1,3 +1,5 @@
+import { NotificationPolicyService } from "./core/notification-policy.js";
+import { NotificationInput } from "@hyper/contracts/notifications";
 import { RoomManagementService } from "./core/room-management.js";
 import {
   RoomManagementInput,
@@ -926,6 +928,25 @@ class ApiController {
       uuid(id),
       plan,
       idempotencyKey,
+    );
+  }
+  @Get("projects/:id/notification-policy") async notificationPolicy(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    return new NotificationPolicyService(db).view(await subject(req), uuid(id));
+  }
+  @Post("projects/:id/notification-policy") async saveNotificationPolicy(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() raw: unknown,
+  ) {
+    const input = NotificationInput.parse(raw);
+    return new NotificationPolicyService(db).save(
+      await subject(req),
+      uuid(id),
+      input.plan,
+      input.idempotencyKey,
     );
   }
   @Get("organization") async organization(

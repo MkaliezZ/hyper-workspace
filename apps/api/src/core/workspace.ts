@@ -1,3 +1,4 @@
+import { NotificationPolicyService } from "./notification-policy.js";
 import { RoomManagementService } from "./room-management.js";
 import type { RoomManagementRunInput } from "@hyper/contracts/room-management";
 import { OrganizationService } from "./organization.js";
@@ -646,6 +647,52 @@ export class WorkspaceService {
     if (isFileWorkflow(input.workflow))
       throw new BadRequestException("请从个人文件阅读入口发起。");
     const conversation = await this.conversation(s, input.conversationId);
+    if (input.notificationPlan || input.workflow === "manage_notifications") {
+      const allowed = new Set([
+        "conversationId",
+        "workflow",
+        "engine",
+        "instruction",
+        "modelProfileId",
+        "notificationPlan",
+        "taskRules",
+        "idempotencyKey",
+      ]);
+      if (
+        input.workflow !== "manage_notifications" ||
+        !input.notificationPlan ||
+        Object.keys(input).some((key) => !allowed.has(key))
+      )
+        throw new BadRequestException(
+          "提醒设置只接受一个明确的规则方案，不混入其他业务目标。",
+        );
+      const prior = (
+        await this.db.pool.query(
+          "SELECT id,state,input_hash FROM cw_runs WHERE workspace_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+          [s.workspaceId, s.id, input.idempotencyKey],
+        )
+      ).rows[0];
+      if (prior) {
+        if (
+          prior.input_hash !==
+          stableDigest({ ...input, idempotencyKey: undefined })
+        )
+          throw new ConflictException("相同幂等键不能用于不同任务。");
+        return { id: prior.id, state: prior.state, created: false };
+      }
+      if (
+        !this.engines
+          .get(input.engine)
+          ?.describeCapabilities()
+          .operations.includes("manage_notifications")
+      )
+        throw new BadRequestException("执行器尚未声明提醒设置能力。");
+      await new NotificationPolicyService(this.db).prepare(
+        s,
+        conversation.project_id,
+        input.notificationPlan,
+      );
+    }
     if (input.organizationPlan || input.workflow === "manage_organization") {
       const allowed = new Set([
         "conversationId",
@@ -1172,7 +1219,7 @@ export class WorkspaceService {
     const id = randomUUID();
     const insertRun = (c: PoolClient | Database["pool"]) =>
       c.query(
-        "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref,task_assignment_plan,attachment_plan,decision_plan,knowledge_plan,organization_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
+        "INSERT INTO cw_runs(id,workspace_id,actor_id,conversation_id,engine,workflow,instruction,artifact_id,idempotency_key,input_hash,demo,model_profile_id,expected_artifact_version,identity_credential_id,follow_up_plan,artifact_review_plan,task_id,expected_task_version,method_plan,method_refs,policy_plan,task_rules,spending_plan,brief_plan,brief_ref,task_assignment_plan,attachment_plan,decision_plan,knowledge_plan,organization_plan,notification_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31) ON CONFLICT(workspace_id,actor_id,idempotency_key) DO NOTHING RETURNING id,state",
         [
           id,
           s.workspaceId,
@@ -1204,6 +1251,7 @@ export class WorkspaceService {
           input.decisionPlan ?? null,
           input.knowledgePlan ?? null,
           input.organizationPlan ?? null,
+          input.notificationPlan ?? null,
         ],
       );
     const r = knowledgeScope

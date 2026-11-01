@@ -560,6 +560,31 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     );
     expect(departmentResponse.status()).toBe(201);
     const department = await departmentResponse.json();
+    const reminderPath =
+      origin + "/api/projects/" + workspace.project.id + "/notification-policy";
+    const reminderInput = {
+      plan: {
+        operation: "configure",
+        scope: "project",
+        expectedRevision: 0,
+        rules: {
+          mode: "important",
+          importantFields: ["status"],
+          minIntervalMinutes: 45,
+        },
+        confirmed: true,
+      },
+      idempotencyKey: randomUUID(),
+    };
+    const reminderSaved = await context.request.post(reminderPath, {
+      headers: { Origin: origin },
+      data: reminderInput,
+    });
+    expect(reminderSaved.status()).toBe(201);
+    const reminderReceipt = await reminderSaved.json();
+    const reminderBefore = await (
+      await context.request.get(reminderPath)
+    ).json();
     // Synthetic dispatch evidence only: no source server, credentials or communication write is claimed.
     const roomCommandId = randomUUID();
     const seedCommand = `
@@ -624,6 +649,32 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
         step: "unknown",
       },
     ]);
+    const reminderAfterResponse = await context.request.get(reminderPath);
+    expect(reminderAfterResponse.status()).toBe(200);
+    const reminderAfter = await reminderAfterResponse.json();
+    expect(reminderAfter.layers).toEqual(reminderBefore.layers);
+    expect(reminderAfter.effective).toEqual(reminderBefore.effective);
+    const reminderReplay = await context.request.post(reminderPath, {
+      headers: { Origin: origin },
+      data: reminderInput,
+    });
+    expect(reminderReplay.status()).toBe(201);
+    expect(await reminderReplay.json()).toEqual(reminderReceipt);
+    // Restore inherited rules before the pre-existing scheduled-delivery assertions.
+    const restoredReminderRules = await context.request.post(reminderPath, {
+      headers: { Origin: origin },
+      data: {
+        plan: {
+          operation: "configure",
+          scope: "project",
+          expectedRevision: reminderReceipt.revision,
+          rules: {},
+          confirmed: true,
+        },
+        idempotencyKey: randomUUID(),
+      },
+    });
+    expect(restoredReminderRules.status()).toBe(201);
     const organizationRestored = await (
       await context.request.get(origin + "/api/organization")
     ).json();
@@ -886,6 +937,24 @@ test("Built containers serve only the compiled web app and preserve native DSH/H
     // Five new native requests; confirming the persisted work plan runs host services only.
     expect(stats.calls).toBe(14);
     expect(stats.violations).toBe(0);
+    const noticeBaseline = () =>
+      JSON.parse(
+        compose(
+          "exec",
+          "-T",
+          "api",
+          "node",
+          "--input-type=module",
+          "-e",
+          `import{Database}from'./dist/db/database.js';const d=new Database();try{const r=await d.pool.query('SELECT snapshot,last_run_id,last_notification_at FROM cw_follow_up_baselines WHERE project_id=$1',[${JSON.stringify(workspace.project.id)}]);process.stdout.write(JSON.stringify(r.rows[0]));}finally{await d.close();}`,
+        ),
+      );
+    const deliveredBaseline = noticeBaseline();
+    expect(deliveredBaseline.last_notification_at).toBeTruthy();
+    expect(deliveredBaseline.last_run_id).toBe(final.lastRunId);
+    compose("stop", "api", "worker", "db");
+    compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "120");
+    expect(noticeBaseline()).toEqual(deliveredBaseline);
   } finally {
     await context.close();
   }

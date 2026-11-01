@@ -36,6 +36,7 @@ const labels: Record<string, string> = {
   follow_up: "检查进展",
   configure_follow_up: "配置定时跟进",
   configure_policy: "配置执行规则",
+  manage_notifications: "管理跟进提醒规则与偏好",
   usage_report: "查询本人用量",
   manage_spending: "管理连接费用",
   manage_brief: "任务说明与澄清",

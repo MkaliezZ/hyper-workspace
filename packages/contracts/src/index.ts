@@ -1,3 +1,9 @@
+import { NotificationPlan } from "./notifications.js";
+export {
+  NotificationPlan,
+  NotificationRules,
+  NotificationField,
+} from "./notifications.js";
 import { z } from "zod";
 
 export const EngineId = z.enum(["dsh", "hermes", "fixture"]);
@@ -42,6 +48,7 @@ export const Workflow = z.enum([
   "follow_up",
   "configure_follow_up",
   "configure_policy",
+  "manage_notifications",
   "usage_report",
   "manage_spending",
   "manage_brief",
@@ -523,6 +530,7 @@ export const RunInput = z
     methodPlan: MethodPlan.optional(),
     methodRefs: z.array(MethodReference).max(3).optional(),
     policyPlan: ExecutionPolicyPlan.optional(),
+    notificationPlan: NotificationPlan.optional(),
     spendingPlan: ModelSpendingPlan.optional(),
     briefPlan: WorkBriefPlan.optional(),
     briefRef: BriefReference.optional(),
@@ -660,6 +668,7 @@ export interface PlannedAction {
     | "method.write"
     | "method.manage"
     | "policy.configure"
+    | "notifications.manage"
     | "usage.report"
     | "spending.manage"
     | "brief.write"
@@ -721,6 +730,8 @@ export function toolsForWorkflow(
       return ["follow_up.check"];
     case "configure_follow_up":
       return ["follow_up.configure"];
+    case "manage_notifications":
+      return ["notifications.manage"];
     case "configure_policy":
       return ["policy.configure"];
     case "usage_report":
