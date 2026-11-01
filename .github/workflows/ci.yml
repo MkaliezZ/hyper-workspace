@@ -55,6 +55,8 @@ jobs:
       - run: .runtime/documents/bin/python -m pip install --require-hashes -r runtime/documents/requirements.lock --index-url https://pypi.org/simple
       - run: .runtime/documents/bin/python -m unittest discover -s runtime/documents -p test_extract.py -v
       - run: npm run test:integration
+        env:
+          BACKUP_TEST_CONTAINER: ${{ job.services.postgres.id }}
       - run: npm ci --prefix runtime/dsh
       - run: npm audit --prefix runtime/dsh --audit-level=high --registry=https://registry.npmjs.org
       - run: python3 runtime/hermes/download.py

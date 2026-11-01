@@ -68,3 +68,5 @@
 ![跟进提醒桌面（合成项目）](images/notification-policy-desktop.png)
 
 [手机界面](images/notification-policy-mobile.png)。
+
+最终收尾 `1c67e314108247646c35ff0fd9ef3f5d12ce0000` 的 [CI 41301871596](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41301871596) 三项全部成功，共 372 项，含 227 数据库、7 原生、70 UI、14 真实来源和 4 容器。原任务找回与界面补丁已由该 head 的 CI 验证。

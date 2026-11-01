@@ -11,3 +11,5 @@ test-results/
 .runtime/
 .data/
 __pycache__/
+# Database archives contain private enterprise data.
+*.dump

@@ -560,7 +560,7 @@
       "fullNative": 7,
       "fullDatabase": 227
     },
-    "pending": "New real Nextcloud and container assertions await this code head CI. No supplier quality, company device delivery, complete E01-E10 or overall delivery claim.",
+    "pending": "Company notification quality/device acceptance and complete E01-E10 remain open; final recovery/UI code CI passed.",
     "recovery": "Own recent Runs and settings receipts expose only current authorized actor/project metadata and request keys; missing admission receipt can reconnect the exact original Run without another POST. History reads never silently rebase unsaved edits.",
     "historyMigration": "040_notification_run_history.sql",
     "realSupplierSmoke": {
@@ -579,6 +579,30 @@
       "run": 41300542152,
       "status": "all-three-jobs-success",
       "scope": "Includes new real Nextcloud notification behavior and container persistence/restart assertions. Later private recovery/UI refinement requires its own CI."
+    },
+    "finalCi": {
+      "head": "1c67e314108247646c35ff0fd9ef3f5d12ce0000",
+      "run": 41301871596,
+      "status": "all-three-jobs-success",
+      "checks": 372,
+      "database": 227,
+      "native": 7,
+      "ui": 70,
+      "realSource": 14,
+      "container": 4
     }
+  },
+  "databaseBackup": {
+    "contract": "docs/BACKUP-RESTORE.md",
+    "tool": "scripts/workspace-backup.mjs",
+    "baseline": "PostgreSQL 17 / pgvector, Node built-ins; no dependency, schema or technology baseline change",
+    "scope": "Product database custom archive excluding derived hyper_jobs; HKDF/HMAC signed metadata and SHA256 bytes; private staged archive restores only into a newly generated isolated database. Current code migration set, constraints/indexes and active credentials checked. Pending work quarantined, schedules paused, sessions cleared; source database and existing receipts preserved.",
+    "localEvidence": {
+      "moduleUnit": 7,
+      "realPgIntegration": 3,
+      "fullDatabaseBeforeFinalGuards": 230,
+      "typeBuild": "passed"
+    },
+    "pending": "New Compose restore case awaits this code head CI; no production cutover, company disaster recovery/RTO, external source backup or completed-product claim."
   }
 }
