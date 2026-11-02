@@ -16,7 +16,7 @@
 
 真实方法质量反馈已收到：用户确认候选与复用草稿符合该项质量要求；相关修正和结算竞态的 [CI 41422563963](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41422563963) 三项全部成功。本机开源 embedding 已安装为登录服务，并保存、实际验证“本机中文向量”连接，无外部按次费用；文档按 400 字符容量完整分块。固定检索题 Top1 7/8、Recall@3 8/8，另通过 2574 字符长文末尾检索。容量/常驻实现 cbbf8b6 的 [CI 41426430075](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41426430075) 三项全部成功，共 418 检查；来源项首次拉镜像 502，重试后 15 个真实来源用例通过。不代表整体验收。[本机部署与限制](docs/LOCAL-EMBEDDING.md) · [方法输出](docs/REAL-METHODS-ACCEPTANCE.md) · [检索证据](docs/SEMANTIC-QUALITY.md)。
 
-历史消息搜索新增：企业消息可直接查询来源历史并分页、回到原消息，也可交给 DSH/Hermes 以相同范围执行；编辑/删除/过期、来源变更和员工失权会过滤或拒绝旧内容。当前本地整库 252 DB、74 UI、双原生通信联合用例及类型/构建通过；新增真实 Nextcloud 场景按本代码的 CI 另核对。[搜索契约与范围](docs/MESSAGE-SEARCH.md)。
+历史消息搜索新增：企业消息可直接查询来源历史并分页、回到原消息，也可交给 DSH/Hermes 以相同范围执行；编辑/删除/过期、来源变更和员工失权会过滤或拒绝旧内容。实现 527c985 的 [CI 41430371512](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41430371512) 三项全部成功，共 425 检查（含 252 DB、74 UI、9 原生、16 真实来源、6 容器）；使用合成账号/资料与协议模型，仍非公司正式验收。[搜索契约与范围](docs/MESSAGE-SEARCH.md)。
 
 ## 实际界面
 

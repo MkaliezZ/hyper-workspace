@@ -648,7 +648,9 @@
     "finalBusinessRuns": 14,
     "finalSupplierRequests": 14,
     "allThreeRoundsSupplierRequests": 23,
-    "incompleteUsageRuns": ["9bd45c77-6c11-4042-b40b-6f44e4986be7"],
+    "incompleteUsageRuns": [
+      "9bd45c77-6c11-4042-b40b-6f44e4986be7"
+    ],
     "costStatus": "unpriced; no invoice or zero-cost claim",
     "firstFailures": [
       "Hermes placed source deadlines in task titles while canonical dueDate was null; retained original assertions and clarified generic tool guidance.",
@@ -795,7 +797,12 @@
     "limits": "Eight fixed short Chinese questions plus one independent synthetic long-tail check; 400 chars/512 tokens explicit reject, no query prefix, no general long-document/RAG/company claim",
     "optionalOnly": true,
     "dependencies": "Separate optional lock; transformers 3.8.1, ONNX node 1.23.2, sharp 0.35.5 and adm-zip 0.6.1; official audit zero; root dependencies unchanged",
-    "modelRequestsByRound": [16, 16, 18, 18],
+    "modelRequestsByRound": [
+      16,
+      16,
+      18,
+      18
+    ],
     "longDocument": {
       "characters": 2574,
       "chunks": 8,
@@ -864,7 +871,7 @@
     }
   },
   "communicationSearch": {
-    "status": "local-core-native-and-ui-verified-current-ci-pending",
+    "status": "real-source-native-ui-and-container-ci-verified",
     "contract": "docs/MESSAGE-SEARCH.md",
     "protocol": "Pinned Nextcloud 33.0.10 Core Unified Search / Talk 23.0.12 talk-message with explicit conversation filter; current exact native message reread",
     "scope": "Current employee, exact selected room, current source binding. No message import or cached shared search store.",
@@ -883,9 +890,26 @@
       "fullUI": 74,
       "relatedUI": 6,
       "native": "Existing joint DSH/Hermes scenario enhanced with one history search per engine. Six actual protocol-model requests, original five source writes unchanged.",
-      "typeBuildUnit": "Type/build and 57 unit passed; final source-container combination requires its own CI."
+      "typeBuildUnit": "Type/build and 57 unit passed; complete same-code source/container CI also passed, recorded separately."
     },
-    "sourceCase": "Independent synthetic source employees, old target followed by 102 newer messages, both native engines, read/notification state unchanged and source member removal denial; not yet claimed passed.",
-    "baseline": "C00/C02/C05, A01/A03/A10, P02/P04/P07/P08, E02/E04/E07/E09/E10 subset; no full company acceptance"
+    "sourceCase": "Real pinned Nextcloud, independent synthetic source employees, old target followed by 102 newer messages, both native engines, read/notification state unchanged and source member removal denial passed. Protocol model, not real supplier or company acceptance.",
+    "baseline": "C00/C02/C05, A01/A03/A10, P02/P04/P07/P08, E02/E04/E07/E09/E10 subset; no full company acceptance",
+    "ci": {
+      "commit": "527c9850ff8272b59ece8d5f3812efa1b4ab1e25",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41430371512",
+      "allJobs": "success",
+      "checks": 425,
+      "counts": {
+        "unit": 57,
+        "downloader": 3,
+        "extraction": 8,
+        "database": 252,
+        "native": 9,
+        "ui": 74,
+        "nextcloud": 16,
+        "deployment": 6
+      },
+      "verification": "Each completed job log inspected 2026-11-02; source 16 passed/11.4m, deployment 6 passed/3.5m. Synthetic source employees and protocol models, not company or supplier quality acceptance."
+    }
   }
 }
