@@ -31,6 +31,7 @@ test(
           "合成来源私群",
           "同名员工",
           "synthetic-password",
+          "private-history-search-target",
         ])
           assert.ok(!text.includes(privateValue));
       });
@@ -103,6 +104,22 @@ test(
       });
       assert.equal(read.roomCount, 2);
       assert.equal(read.rows, undefined);
+      f.source.message(f.room, "peer", "private-history-search-target only");
+      const searchState = await f.service.read(f.actor, f.room.token);
+      for (const engine of ["dsh", "hermes"] as const) {
+        const result = await run(engine, {
+          operation: "read",
+          bindingRef: searchState.bindingRef,
+          roomId: f.room.token,
+          search: { query: "private-history-search-target" },
+        });
+        assert.equal(result.search, true);
+        assert.equal(result.resultCount, 1);
+        assert.ok(
+          !JSON.stringify(result).includes("private-history-search-target"),
+        );
+      }
+      assert.equal(f.source.searches.length, 2);
       const current = await f.service.read(f.actor, group.roomId),
         deleted = await run("hermes", {
           operation: "delete",
@@ -114,7 +131,7 @@ test(
       assert.equal(deleted.scopeAvailable, false);
       assert.equal(f.source.rooms.has(room.id), false);
       assert.equal(f.source.writes.length, 5);
-      assert.equal(fixture.calls(), 4);
+      assert.equal(fixture.calls(), 6);
       assert.equal(
         (
           await db.pool.query(

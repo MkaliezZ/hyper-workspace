@@ -5,7 +5,13 @@ export interface FixtureRoom {
   name: string;
   people: Map<string, { type: number; id: number }>;
   preferences: Map<string, { level: number; favorite: boolean; read: number }>;
-  messages: { id: number; author: string; content: string }[];
+  messages: {
+    id: number;
+    author: string;
+    content: string;
+    kind?: string;
+    expirationTimestamp?: number;
+  }[];
 }
 /** An HTTP protocol source, never a real Nextcloud or company acceptance fixture. */
 export class TalkManagementFixture {
@@ -34,6 +40,15 @@ export class TalkManagementFixture {
   rejectNext = false;
   rejectInvitationFor: string | undefined;
   failReadback = false;
+  readonly searches: {
+    actor: string;
+    roomId: string;
+    term: string;
+    cursor: string;
+    limit: string;
+  }[] = [];
+  afterSearch: (() => void | Promise<void>) | undefined;
+  transformSearch: ((value: any) => unknown) | undefined;
   beforeWrite:
     | ((path: string, actor: string) => void | Promise<void>)
     | undefined;
@@ -87,6 +102,34 @@ export class TalkManagementFixture {
           .map(([id, label]) => ({ id, label, source: "users" })),
       );
     }
+    if (
+      method === "GET" &&
+      path === "/ocs/v2.php/search/providers/talk-message/search"
+    ) {
+      const room = this.rooms.get(url.searchParams.get("conversation") ?? "");
+      if (!room || !room.people.has(actor)) return send({}, 404);
+      const term = url.searchParams.get("term") ?? "",
+        cursor = url.searchParams.get("cursor") ?? "0",
+        limit = url.searchParams.get("limit") ?? "20";
+      this.searches.push({ actor, roomId: room.token, term, cursor, limit });
+      const entries = room.messages
+        .filter((m) => m.content.toLowerCase().includes(term.toLowerCase()))
+        .sort((a, b) => b.id - a.id)
+        .slice(Number(cursor), Number(cursor) + Number(limit))
+        .map((m) => ({
+          title: "untrusted source author snippet",
+          subline: "untrusted stale snippet",
+          resourceUrl: "https://untrusted.invalid/never-follow",
+          attributes: { conversation: room.token, messageId: String(m.id) },
+        }));
+      const result = {
+        isPaginated: true,
+        cursor: Number(cursor) + Number(limit),
+        entries,
+      };
+      await this.afterSearch?.();
+      return send(this.transformSearch ? this.transformSearch(result) : result);
+    }
     const route =
       /^\/ocs\/v2.php\/apps\/spreed\/api\/(v[14])\/(room|chat)(?:\/([a-z0-9]+))?(.*)$/.exec(
         path,
@@ -117,6 +160,15 @@ export class TalkManagementFixture {
       if (kind === "chat") {
         const rows = [...room.messages]
           .reverse()
+          .filter(
+            (message) =>
+              !url.searchParams.has("lastKnownMessageId") ||
+              message.id < Number(url.searchParams.get("lastKnownMessageId")) ||
+              (url.searchParams.get("includeLastKnown") === "1" &&
+                message.id ===
+                  Number(url.searchParams.get("lastKnownMessageId"))),
+          )
+          .slice(0, Number(url.searchParams.get("limit") ?? "100"))
           .map((message) => ({
             id: message.id,
             token: room.token,
@@ -125,7 +177,10 @@ export class TalkManagementFixture {
             actorDisplayName: this.users.get(message.author) ?? message.author,
             timestamp: 1793538000,
             message: message.content,
-            messageType: "comment",
+            messageType: message.kind ?? "comment",
+            ...(message.expirationTimestamp
+              ? { expirationTimestamp: message.expirationTimestamp }
+              : {}),
             systemMessage: "",
             referenceId: "",
           }));

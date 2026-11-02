@@ -1,6 +1,7 @@
 import { NotificationPolicyService } from "./core/notification-policy.js";
 import { NotificationInput } from "@hyper/contracts/notifications";
 import { RoomManagementService } from "./core/room-management.js";
+import { CommunicationSearchService } from "./core/communication-search.js";
 import {
   RoomManagementInput,
   RoomManagementRunInput,
@@ -467,6 +468,20 @@ class ApiController {
   }
   @Get("talk/management/commands") async roomCommands(@Req() req: Request) {
     return new RoomManagementService(db).activity(await subject(req));
+  }
+  @Get("talk/rooms/:id/search") async searchTalk(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Query("q") query: string,
+    @Query("bindingRef") bindingRef: string,
+    @Query("cursor") cursor?: string,
+  ) {
+    return new CommunicationSearchService(db).search(
+      await subject(req),
+      id,
+      { query, ...(cursor === undefined ? {} : { cursor }) },
+      bindingRef,
+    );
   }
   @Post("talk/management/commands") async roomCommand(
     @Req() req: Request,

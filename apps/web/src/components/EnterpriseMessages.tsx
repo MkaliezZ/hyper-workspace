@@ -39,6 +39,7 @@ export function EnterpriseMessages({
   view?: WorkspaceView;
 }) {
   const [managementOpen, setManagementOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState(false);
   const [rooms, setRooms] = useState<CommunicationRoom[]>([]),
     [selected, setSelected] = useState("");
   const [messages, setMessages] = useState<CommunicationMessage[]>([]),
@@ -291,6 +292,8 @@ export function EnterpriseMessages({
           view={view}
           roomId={selected || undefined}
           messages={messages}
+          initialOperation={historySearch ? "read" : undefined}
+          initialQuery={historySearch ? query : ""}
           onClose={() => setManagementOpen(false)}
           onChanged={(roomId) => {
             if (roomId && roomId !== current.current) {
@@ -321,9 +324,23 @@ export function EnterpriseMessages({
         {view ? (
           <button
             className="room-management-open"
-            onClick={() => setManagementOpen(true)}
+            onClick={() => {
+              setHistorySearch(false);
+              setManagementOpen(true);
+            }}
           >
             会话与通知管理
+          </button>
+        ) : null}
+        {view && selected ? (
+          <button
+            className="room-management-open"
+            onClick={() => {
+              setHistorySearch(true);
+              setManagementOpen(true);
+            }}
+          >
+            搜索历史消息
           </button>
         ) : null}
         <div role="list" aria-label="企业会话列表">

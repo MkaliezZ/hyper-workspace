@@ -20,6 +20,10 @@ import {
 import { NextcloudTalkProvider } from "../providers/nextcloud-talk.js";
 import { SourceRejected } from "../providers/nextcloud-talk.js";
 import { ExecutionPolicyService } from "./execution-policy.js";
+import {
+  CommunicationSearchService,
+  communicationBinding,
+} from "./communication-search.js";
 type RunExecution = {
   row: any;
   lease: string;
@@ -99,7 +103,7 @@ export class RoomManagementService {
     return {
       ...source,
       directoryBinding,
-      bindingRef: stableDigest({ directoryBinding, uid: source.remoteUid }),
+      bindingRef: communicationBinding(source),
       provider: new NextcloudRoomManagementProvider(
         source.config,
         source.credentials,
@@ -229,7 +233,8 @@ export class RoomManagementService {
       source = await this.connection(s);
     if (plan.bindingRef !== source.bindingRef)
       throw new ConflictException("通信来源已变化，请重新读取后确认。");
-    if (plan.operation === "read")
+    if (plan.operation === "read") {
+      if (plan.roomId) await source.provider.room(plan.roomId);
       return {
         plan,
         source,
@@ -238,6 +243,7 @@ export class RoomManagementService {
         noOp: false,
         actions: 1,
       };
+    }
     if (
       plan.operation === "create_direct" ||
       plan.operation === "create_group"
@@ -554,6 +560,28 @@ export class RoomManagementService {
       const read = await this.read(s, plan.roomId);
       if (read.bindingRef !== plan.bindingRef)
         throw new ConflictException("通信查询来源已变化。");
+      if (plan.search && plan.roomId) {
+        const result = await new CommunicationSearchService(this.db).search(
+          s,
+          plan.roomId,
+          plan.search,
+          plan.bindingRef,
+        );
+        const fresh = await this.connection(s);
+        if (fresh.bindingRef !== plan.bindingRef)
+          throw new ConflictException("搜索来源已变化。");
+        return {
+          tool: "communication.manage",
+          operation: "read",
+          search: true,
+          state: "succeeded",
+          roomId: plan.roomId,
+          checkedAt: new Date().toISOString(),
+          resultCount: result.messages.length,
+          hasMore: result.cursor !== null,
+          scope: result.scope,
+        };
+      }
       return {
         tool: "communication.manage",
         operation: "read",

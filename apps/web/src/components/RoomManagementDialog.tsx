@@ -4,6 +4,7 @@ import type { RoomManagementPlan } from "@hyper/contracts/room-management";
 import { api, mutation, ApiError } from "../api";
 import { Dialog } from "./Dialog";
 import type { ModelSummary } from "./ModelSettings";
+import { MessageHistorySearch } from "./MessageHistorySearch";
 
 type Room = {
   id: string;
@@ -77,19 +78,23 @@ export function RoomManagementDialog({
   messages,
   onClose,
   onChanged,
+  initialOperation,
+  initialQuery = "",
 }: {
   view: WorkspaceView;
   roomId?: string;
   messages: CommunicationMessage[];
   onClose: () => void;
   onChanged: (roomId?: string) => void;
+  initialOperation?: RoomManagementPlan["operation"];
+  initialQuery?: string;
 }) {
   const [data, setData] = useState<Data>(),
     [commands, setCommands] = useState<Command[]>([]),
     [models, setModels] = useState<ModelSummary[]>([]),
     [project, setProject] = useState<{ name: string } | null>(null);
   const [operation, setOperation] = useState<RoomManagementPlan["operation"]>(
-      roomId ? "notify" : "create_group",
+      initialOperation ?? (roomId ? "notify" : "create_group"),
     ),
     [name, setName] = useState(""),
     [level, setLevel] = useState(2),
@@ -103,6 +108,7 @@ export function RoomManagementDialog({
     [mode, setMode] = useState("direct"),
     [engine, setEngine] = useState("dsh"),
     [model, setModel] = useState("");
+  const [historyQuery, setHistoryQuery] = useState(initialQuery);
   const [busy, setBusy] = useState(false),
     [manualInFlight, setManualInFlight] = useState(false),
     [controlBusy, setControlBusy] = useState(false),
@@ -126,6 +132,7 @@ export function RoomManagementDialog({
     generation.current++;
     reader.current?.abort();
     setData(undefined);
+    setHistoryQuery("");
     setContacts([]);
     setCommands([]);
     setModels([]);
@@ -266,7 +273,14 @@ export function RoomManagementDialog({
     if (!data) throw Error("请先读取当前通信范围。");
     const bindingRef = data.bindingRef;
     if (operation === "read")
-      return { operation, bindingRef, ...(roomId ? { roomId } : {}) };
+      return {
+        operation,
+        bindingRef,
+        ...(roomId ? { roomId } : {}),
+        ...(historyQuery.trim() && roomId
+          ? { search: { query: historyQuery.trim() } }
+          : {}),
+      };
     if (operation === "create_direct")
       return { operation, bindingRef, uid: selected[0] ?? "", confirmed: true };
     if (operation === "create_group")
@@ -626,6 +640,25 @@ export function RoomManagementDialog({
             </label>
           ) : null}
         </div>
+        {operation === "read" && roomId && data ? (
+          <MessageHistorySearch
+            key={view.user.id + ":" + data.bindingRef + ":" + roomId}
+            roomId={roomId}
+            bindingRef={data.bindingRef}
+            query={historyQuery}
+            onQuery={setHistoryQuery}
+            disabled={frozen}
+            completedRun={
+              run?.state === "succeeded" && run.result?.receipts?.[0]?.search
+                ? run.id
+                : undefined
+            }
+            onDenied={(message) => {
+              clearPrivate();
+              setError(message);
+            }}
+          />
+        ) : null}
         {invite ? (
           <fieldset disabled={frozen}>
             <legend>按企业 UID 明确选择员工（最多 20 人）</legend>
@@ -687,7 +720,7 @@ export function RoomManagementDialog({
           <label>
             通信执行方式
             <select
-              value={mode}
+              value={operation === "read" ? "ai" : mode}
               disabled={frozen || operation === "read"}
               onChange={(e) => {
                 setMode(e.target.value);
@@ -767,7 +800,9 @@ export function RoomManagementDialog({
             onClick={() => void submit()}
           >
             {operation === "read"
-              ? "AI 查询会话"
+              ? historyQuery.trim() && roomId
+                ? "AI 搜索历史消息"
+                : "AI 查询会话"
               : mode === "ai"
                 ? "AI 执行通信操作"
                 : "执行通信操作"}

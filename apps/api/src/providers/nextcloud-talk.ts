@@ -15,6 +15,7 @@ import {
 import type { NextcloudConfig, SourceCredentials } from "./nextcloud.js";
 import type { CommunicationMessage, CommunicationRoom } from "@hyper/contracts";
 import type { CommunicationProvider } from "./communication.js";
+import { MessageSearchInput } from "@hyper/contracts/room-management";
 export const TalkToken = z.string().regex(/^[a-z0-9]{4,30}$/);
 export const TalkCursor = z
   .string()
@@ -33,7 +34,12 @@ const Room = z.object({
   actorId: z.string(),
   participantType: z.number().int(),
   readOnly: z.number().int().default(0),
-  unreadMessages: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  unreadMessages: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
   unreadMention: z.boolean().optional(),
 });
 const Message = z.object({
@@ -153,11 +159,19 @@ export class NextcloudTalkProvider implements CommunicationProvider {
     private credentials: Pick<SourceCredentials, "loginName" | "appPassword">,
     private remoteUid: string,
   ) {}
-  private async ocs(path: string, init: RequestInit = {}) {
+  private async ocs(
+    path: string,
+    init: RequestInit = {},
+    namespace: "talk" | "search" = "talk",
+  ) {
     let response: Response;
     try {
       response = await fetch(
-        this.config.transportUrl + "/ocs/v2.php/apps/spreed/api/" + path,
+        this.config.transportUrl +
+          (namespace === "talk"
+            ? "/ocs/v2.php/apps/spreed/api/"
+            : "/ocs/v2.php/search/") +
+          path,
         {
           ...init,
           redirect: "error",
@@ -187,7 +201,17 @@ export class NextcloudTalkProvider implements CommunicationProvider {
       throw new ServiceUnavailableException("企业通信服务暂时不可用。");
     let body;
     try {
-      body = await response.json();
+      if (namespace === "search") {
+        const parts: Uint8Array[] = [];
+        let size = 0;
+        if (!response.body) throw Error("Empty search response");
+        for await (const part of response.body) {
+          size += part.byteLength;
+          if (size > 1048576) throw Error("Oversized search response");
+          parts.push(part);
+        }
+        body = JSON.parse(Buffer.concat(parts).toString("utf8"));
+      } else body = await response.json();
     } catch {
       throw new ServiceUnavailableException("企业通信服务返回无效响应。");
     }
@@ -315,6 +339,101 @@ export class NextcloudTalkProvider implements CommunicationProvider {
   }
   async assertReadable(id: string) {
     await this.read(id, undefined, 1);
+  }
+  async search(id: string, raw: MessageSearchInput) {
+    TalkToken.parse(id);
+    const input = MessageSearchInput.parse(raw);
+    await this.room(id);
+    const query = new URLSearchParams({
+      format: "json",
+      term: input.query,
+      conversation: id,
+      limit: "20",
+      cursor: input.cursor ?? "0",
+    });
+    const { data } = await this.ocs(
+      "providers/talk-message/search?" + query,
+      {},
+      "search",
+    );
+    const parsed = z
+      .object({
+        isPaginated: z.boolean(),
+        cursor: z
+          .union([
+            z.number().int().nonnegative().max(99999999),
+            z.string().regex(/^(0|[1-9][0-9]{0,7})$/),
+          ])
+          .nullable(),
+        entries: z
+          .array(
+            z.object({
+              attributes: z.object({
+                conversation: TalkToken,
+                messageId: TalkCursor,
+              }),
+            }),
+          )
+          .max(20),
+      })
+      .safeParse(data);
+    if (
+      !parsed.success ||
+      parsed.data.entries.some((e) => e.attributes.conversation !== id) ||
+      new Set(parsed.data.entries.map((e) => e.attributes.messageId)).size !==
+        parsed.data.entries.length
+    )
+      throw new ServiceUnavailableException(
+        "来源搜索格式或会话范围不匹配，未返回搜索内容。",
+      );
+    const page = parsed.data;
+    const complete = !page.isPaginated || page.entries.length === 0;
+    const cursor = complete
+      ? null
+      : page.cursor === null
+        ? null
+        : String(page.cursor);
+    if (
+      !complete &&
+      (cursor === null || Number(cursor) <= Number(input.cursor ?? "0"))
+    )
+      throw new ServiceUnavailableException("来源搜索未提供有效的后续位置。");
+    // Search snippets are not authoritative message content or attachment grants.
+    // Reread exact IDs in bounded batches; discard deletion/expiry/version races.
+    const messages: CommunicationMessage[] = [];
+    for (let offset = 0; offset < page.entries.length; offset += 4) {
+      const fresh = await Promise.all(
+        page.entries.slice(offset, offset + 4).map(async (entry) => {
+          const messageId = entry.attributes.messageId;
+          const current = (
+            await this.read(id, messageId, 1, true)
+          ).messages.find((m) => m.id === messageId);
+          return current?.kind === "comment" &&
+            current.content
+              .toLocaleLowerCase()
+              .includes(input.query.toLocaleLowerCase())
+            ? current
+            : undefined;
+        }),
+      );
+      messages.push(...fresh.filter((m): m is CommunicationMessage => !!m));
+    }
+    await this.room(id);
+    return {
+      roomId: id,
+      messages: messages.map((message) => ({
+        ...message,
+        sourceUrl:
+          this.config.publicUrl +
+          "/index.php/call/" +
+          id +
+          "#message_" +
+          message.id,
+      })),
+      cursor,
+      complete,
+      scope: "source-history" as const,
+    };
   }
   async messages(id: string, before?: string) {
     await this.room(id);

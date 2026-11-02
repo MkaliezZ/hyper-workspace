@@ -14,7 +14,9 @@
 
 企业预算已接入当前开发批次：管理员企业计价与个人账目分开，工作区/项目额度跨连接统一准入，模型不能用个人零单价或私有声明绕过公司额度；向量、验证和原生任务共用闸门。实现 `a0a5c52` 的 [CI 41353513303](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41353513303) 三项全部成功，406 项通过（245 数据库、9 原生、72 UI、15 真实来源、6 容器及其余 59 项）；不代表真实账单或完整公司交付。[权限、金额、恢复和验证边界](docs/ORGANIZATION-BUDGETS.md)。[桌面](docs/images/organization-budget-desktop.png) · [手机](docs/images/organization-budget-mobile.png)。
 
-真实方法质量反馈已收到：用户确认候选与复用草稿符合该项质量要求；相关修正和结算竞态的 [CI 41422563963](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41422563963) 三项全部成功。本机开源 embedding 已安装为登录服务，并保存、实际验证“本机中文向量”连接，无外部按次费用；文档按 400 字符容量完整分块。固定检索题 Top1 7/8、Recall@3 8/8，另通过 2574 字符长文末尾检索。新增容量/常驻功能的本地 57 单元、247 DB、类型/构建及 1 UI 通过，当前代码 CI 待核对；不代表整体验收。[本机部署与限制](docs/LOCAL-EMBEDDING.md) · [方法输出](docs/REAL-METHODS-ACCEPTANCE.md) · [检索证据](docs/SEMANTIC-QUALITY.md)。
+真实方法质量反馈已收到：用户确认候选与复用草稿符合该项质量要求；相关修正和结算竞态的 [CI 41422563963](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41422563963) 三项全部成功。本机开源 embedding 已安装为登录服务，并保存、实际验证“本机中文向量”连接，无外部按次费用；文档按 400 字符容量完整分块。固定检索题 Top1 7/8、Recall@3 8/8，另通过 2574 字符长文末尾检索。容量/常驻实现 cbbf8b6 的 [CI 41426430075](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41426430075) 三项全部成功，共 418 检查；来源项首次拉镜像 502，重试后 15 个真实来源用例通过。不代表整体验收。[本机部署与限制](docs/LOCAL-EMBEDDING.md) · [方法输出](docs/REAL-METHODS-ACCEPTANCE.md) · [检索证据](docs/SEMANTIC-QUALITY.md)。
+
+历史消息搜索新增：企业消息可直接查询来源历史并分页、回到原消息，也可交给 DSH/Hermes 以相同范围执行；编辑/删除/过期、来源变更和员工失权会过滤或拒绝旧内容。当前本地整库 252 DB、74 UI、双原生通信联合用例及类型/构建通过；新增真实 Nextcloud 场景按本代码的 CI 另核对。[搜索契约与范围](docs/MESSAGE-SEARCH.md)。
 
 ## 实际界面
 

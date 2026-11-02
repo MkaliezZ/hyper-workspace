@@ -161,6 +161,112 @@ async function start(page: Page) {
   await expect(dialog).toContainText("未读 3");
   return { dialog, data };
 }
+test("History search pages beyond loaded messages and shares a private host-bound AI read; denied refresh clears results", async ({
+  page,
+}, testInfo) => {
+  const { dialog } = await start(page);
+  let denied = false,
+    searches = 0,
+    captured: any;
+  const message = (id: string, content: string) => ({
+    id,
+    content,
+    author: "合成员工",
+    authorId: "users:peer",
+    createdAt: "2026-10-30T10:00:00Z",
+    kind: "comment",
+    version: "1",
+    expiresAt: null,
+    referenceId: "",
+  });
+  await page.route("**/api/talk/rooms/*/search?*", (r) => {
+    searches++;
+    const query = new URL(r.request().url()).searchParams;
+    expect(query.get("bindingRef")).toBe(binding);
+    expect(query.get("q")).toBe("历史交付");
+    return denied
+      ? r.fulfill({ status: 403, json: { message: "合成来源权限已撤销" } })
+      : r.fulfill({
+          json: {
+            roomId: token,
+            scope: "source-history",
+            messages: query.has("cursor")
+              ? [message("8", "历史交付：补充说明")]
+              : [message("7", "历史交付：旧讨论中的决定")],
+            cursor: query.has("cursor") ? null : "20",
+            complete: query.has("cursor"),
+          },
+        });
+  });
+  await dialog
+    .getByRole("combobox", { name: "通信操作", exact: true })
+    .selectOption("read");
+  await expect(
+    dialog.getByRole("combobox", { name: "通信执行方式", exact: true }),
+  ).toHaveValue("ai");
+  await dialog.getByLabel("历史消息关键词", { exact: true }).fill("历史交付");
+  await dialog
+    .getByRole("button", { name: "直接搜索历史", exact: true })
+    .click();
+  await expect(
+    dialog.getByText("历史交付：旧讨论中的决定", { exact: true }),
+  ).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "继续读取搜索结果", exact: true })
+    .click();
+  await expect(
+    dialog.getByText("历史交付：补充说明", { exact: true }),
+  ).toBeVisible();
+  await page.route("**/api/talk/management/runs", (r) => {
+    captured = r.request().postDataJSON();
+    return r.fulfill({ json: { id, state: "queued" } });
+  });
+  await page.route("**/api/runs/" + id, (r) =>
+    r.fulfill({
+      json: {
+        id,
+        state: "succeeded",
+        result: { receipts: [{ search: true, resultCount: 1, roomId: token }] },
+      },
+    }),
+  );
+  await dialog
+    .getByRole("combobox", { name: "通信执行服务", exact: true })
+    .selectOption("hermes");
+  await dialog
+    .getByRole("button", { name: "AI 搜索历史消息", exact: true })
+    .click();
+  await expect.poll(() => searches).toBe(3);
+  expect(captured.plan).toEqual({
+    operation: "read",
+    roomId: token,
+    bindingRef: binding,
+    search: { query: "历史交付" },
+  });
+  expect(captured.engine).toBe("hermes");
+  await expect(
+    dialog.getByText("历史交付：旧讨论中的决定", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("message-history-search.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await dialog.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+    false,
+  );
+  await expect(
+    dialog.getByRole("textbox", { name: "历史消息关键词", exact: true }),
+  ).toBeVisible();
+  denied = true;
+  await dialog
+    .getByRole("button", { name: "直接搜索历史", exact: true })
+    .click();
+  await expect(dialog).toContainText("通信范围未就绪");
+  await expect(
+    dialog.getByText("历史交付：旧讨论中的决定", { exact: true }),
+  ).toHaveCount(0);
+});
 test("Communication UI binds manual notifications to the exact source version and remains readable on desktop and mobile", async ({
   page,
 }) => {

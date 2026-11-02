@@ -779,7 +779,7 @@
     }
   },
   "semanticQuality": {
-    "status": "local-real-model-short-chinese-and-independent-long-tail-passed-ci-pending",
+    "status": "local-real-model-short-chinese-and-independent-long-tail-with-complete-ci-verified",
     "report": "docs/SEMANTIC-QUALITY.md",
     "modelLock": "runtime/evaluations/embedding-model.lock.json",
     "dimensions": 512,
@@ -820,7 +820,7 @@
     "scope": "Each job log inspected. Includes deterministic settlement-before-HTTP-finish regression and optional embedding lock audit; synthetic source/model data, not company acceptance."
   },
   "localEmbedding": {
-    "status": "local-persistent-product-connection-verified-ci-pending",
+    "status": "local-persistent-product-connection-and-complete-ci-verified",
     "report": "docs/LOCAL-EMBEDDING.md",
     "migration": "042_embedding_input_limits.sql",
     "model": "local-bge-small-zh-v1.5-q8",
@@ -843,6 +843,49 @@
       "typeBuild": "passed",
       "npmAudit": "official registry zero known vulnerabilities"
     },
-    "limits": "Current synthetic Chinese evidence, no company/RAG/production-throughput acceptance. Optional model dependencies remain outside core/Compose."
+    "limits": "Current synthetic Chinese evidence, no company/RAG/production-throughput acceptance. Optional model dependencies remain outside core/Compose.",
+    "ci": {
+      "commit": "cbbf8b6e2d66af4361fc0b4419f10275afdc2898",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41426430075",
+      "attempt": 2,
+      "allJobs": "success",
+      "checks": 418,
+      "counts": {
+        "unit": 57,
+        "downloader": 3,
+        "extraction": 8,
+        "database": 247,
+        "native": 9,
+        "ui": 73,
+        "source": 15,
+        "deployment": 6
+      },
+      "initialFailure": "Docker Hub returned HTTP 502 for the pinned Nextcloud manifest before product tests. After verify/deployment finished successfully, retried the failed source job. Its 15 tests passed in 11.2m. Assertions unchanged."
+    }
+  },
+  "communicationSearch": {
+    "status": "local-core-native-and-ui-verified-current-ci-pending",
+    "contract": "docs/MESSAGE-SEARCH.md",
+    "protocol": "Pinned Nextcloud 33.0.10 Core Unified Search / Talk 23.0.12 talk-message with explicit conversation filter; current exact native message reread",
+    "scope": "Current employee, exact selected room, current source binding. No message import or cached shared search store.",
+    "limits": {
+      "queryCharacters": 200,
+      "sourceCandidatesPerPage": 20,
+      "hydrationConcurrency": 4,
+      "searchEnvelopeBytes": 1048576,
+      "uiRetainedMessages": 200
+    },
+    "ai": "Existing manage_communication read plan with fixed room/search; empty communication.manage args, no query or source text in model context; count-only result receipt",
+    "localEvidence": {
+      "newDatabase": 5,
+      "relatedDatabase": 27,
+      "fullDatabase": 252,
+      "fullUI": 74,
+      "relatedUI": 6,
+      "native": "Existing joint DSH/Hermes scenario enhanced with one history search per engine. Six actual protocol-model requests, original five source writes unchanged.",
+      "typeBuildUnit": "Type/build and 57 unit passed; final source-container combination requires its own CI."
+    },
+    "sourceCase": "Independent synthetic source employees, old target followed by 102 newer messages, both native engines, read/notification state unchanged and source member removal denial; not yet claimed passed.",
+    "baseline": "C00/C02/C05, A01/A03/A10, P02/P04/P07/P08, E02/E04/E07/E09/E10 subset; no full company acceptance"
   }
 }

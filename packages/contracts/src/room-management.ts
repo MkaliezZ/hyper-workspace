@@ -6,6 +6,21 @@ const Uid = z
   .max(255)
   .regex(/^[^\u0000-\u001f\u007f]+$/);
 const Binding = { bindingRef: z.string().regex(/^[a-f0-9]{64}$/) };
+export const MessageSearchInput = z
+  .object({
+    query: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .regex(/^[^\u0000-\u001f\u007f]+$/),
+    cursor: z
+      .string()
+      .regex(/^(0|[1-9][0-9]{0,7})$/)
+      .optional(),
+  })
+  .strict();
+export type MessageSearchInput = z.infer<typeof MessageSearchInput>;
 const Target = {
   ...Binding,
   roomId: z.string().regex(/^[a-z0-9]{4,30}$/),
@@ -25,8 +40,10 @@ export const RoomManagementPlan = z.discriminatedUnion("operation", [
         .string()
         .regex(/^[a-z0-9]{4,30}$/)
         .optional(),
+      search: MessageSearchInput.optional(),
     })
-    .strict(),
+    .strict()
+    .refine((v) => !v.search || !!v.roomId, "历史消息搜索必须选择一个会话。"),
   z
     .object({
       ...Binding,
