@@ -339,13 +339,23 @@ export class WorkspaceService {
     await assertMember(this.db, s);
     return (
       await this.db.pool.query(
-        "SELECT id,name,provider,endpoint,model,purpose,CASE WHEN owner_id IS NULL THEN 'workspace' ELSE 'personal' END AS scope,key_hint AS \"keyHint\",verified_at AS \"verifiedAt\" FROM cw_model_profiles WHERE workspace_id=$1 AND (owner_id IS NULL OR owner_id=$2) ORDER BY created_at",
+        'SELECT id,name,provider,endpoint,model,purpose,embedding_input_chars AS "embeddingInputChars",CASE WHEN owner_id IS NULL THEN \'workspace\' ELSE \'personal\' END AS scope,key_hint AS "keyHint",verified_at AS "verifiedAt" FROM cw_model_profiles WHERE workspace_id=$1 AND (owner_id IS NULL OR owner_id=$2) ORDER BY created_at',
         [s.workspaceId, s.id],
       )
     ).rows;
   }
   async saveModel(s: Subject, input: any) {
     const role = await assertMember(this.db, s);
+    const embeddingInputChars = input.embeddingInputChars ?? 4000;
+    if (
+      !Number.isInteger(embeddingInputChars) ||
+      embeddingInputChars < 200 ||
+      embeddingInputChars > 4000 ||
+      (input.purpose !== "embedding" && input.embeddingInputChars !== undefined)
+    )
+      throw new BadRequestException(
+        "向量模型输入长度须为 200 至 4000 字符，且仅适用于向量用途。",
+      );
     if (input.scope === "workspace" && role !== "admin")
       throw new ForbiddenException("工作区模型由管理员配置。");
     const endpoint = new URL(input.endpoint);
@@ -361,7 +371,7 @@ export class WorkspaceService {
     const id = randomUUID();
     const encrypted = input.apiKey ? new Vault().encrypt(input.apiKey) : null;
     await this.db.pool.query(
-      "INSERT INTO cw_model_profiles(id,workspace_id,owner_id,name,provider,endpoint,model,purpose,credential_enc,key_hint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+      "INSERT INTO cw_model_profiles(id,workspace_id,owner_id,name,provider,endpoint,model,purpose,credential_enc,key_hint,embedding_input_chars) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
       [
         id,
         s.workspaceId,
@@ -373,6 +383,7 @@ export class WorkspaceService {
         input.purpose,
         encrypted,
         input.apiKey ? maskKey(input.apiKey) : null,
+        embeddingInputChars,
       ],
     );
     return { id, name: input.name, verifiedAt: null };

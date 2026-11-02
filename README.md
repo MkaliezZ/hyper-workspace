@@ -14,7 +14,7 @@
 
 企业预算已接入当前开发批次：管理员企业计价与个人账目分开，工作区/项目额度跨连接统一准入，模型不能用个人零单价或私有声明绕过公司额度；向量、验证和原生任务共用闸门。实现 `a0a5c52` 的 [CI 41353513303](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41353513303) 三项全部成功，406 项通过（245 数据库、9 原生、72 UI、15 真实来源、6 容器及其余 59 项）；不代表真实账单或完整公司交付。[权限、金额、恢复和验证边界](docs/ORGANIZATION-BUDGETS.md)。[桌面](docs/images/organization-budget-desktop.png) · [手机](docs/images/organization-budget-mobile.png)。
 
-真实方法与语义检索验收新增：双原生实际 DeepSeek 跑通候选、项目内发布、往返复用和撤回，修复报告沿用方法旧稿发布状态的问题；最终 8 次请求通过，三轮合计 19 次均保留。独立本机开源 embedding 通过固定短中文语料，Top1 7/8、Recall@3 8/8，私人/失权/旧版本/删除过滤通过。本批 CI 尚待验证，不表示完整公司或人类验收。[实际方法输出](docs/REAL-METHODS-ACCEPTANCE.md) · [语义检索证据与限制](docs/SEMANTIC-QUALITY.md)。
+真实方法质量反馈已收到：用户确认候选与复用草稿符合该项质量要求；相关修正和结算竞态的 [CI 41422563963](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41422563963) 三项全部成功。本机开源 embedding 已安装为登录服务，并保存、实际验证“本机中文向量”连接，无外部按次费用；文档按 400 字符容量完整分块。固定检索题 Top1 7/8、Recall@3 8/8，另通过 2574 字符长文末尾检索。新增容量/常驻功能的本地 57 单元、247 DB、类型/构建及 1 UI 通过，当前代码 CI 待核对；不代表整体验收。[本机部署与限制](docs/LOCAL-EMBEDDING.md) · [方法输出](docs/REAL-METHODS-ACCEPTANCE.md) · [检索证据](docs/SEMANTIC-QUALITY.md)。
 
 ## 实际界面
 

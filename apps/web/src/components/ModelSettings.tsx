@@ -11,6 +11,7 @@ export interface ModelSummary {
   scope: string;
   keyHint: string | null;
   verifiedAt: string | null;
+  embeddingInputChars?: number;
 }
 export function ModelSettings({
   view,
@@ -29,6 +30,7 @@ export function ModelSettings({
   const [provider, setProvider] = useState("openai-compatible"),
     [purpose, setPurpose] = useState("chat");
   const [scope, setScope] = useState("personal");
+  const [embeddingInputChars, setEmbeddingInputChars] = useState(4000);
   useEffect(() => {
     void act(async () => setModels(await api("/models")));
   }, [view.user.id]);
@@ -47,6 +49,9 @@ export function ModelSettings({
           <strong>{m.name}</strong>
           <span>
             {m.model} · {m.purpose === "embedding" ? "向量" : "对话"}
+            {m.purpose === "embedding"
+              ? ` · 输入上限 ${m.embeddingInputChars ?? 4000} 字符`
+              : ""}
           </span>
           <small>
             {m.keyHint ?? "未设置 Key"} ·{" "}
@@ -78,6 +83,7 @@ export function ModelSettings({
               apiKey: apiKey || undefined,
               purpose,
               scope,
+              ...(purpose === "embedding" ? { embeddingInputChars } : {}),
             });
             setApiKey("");
             await refresh();
@@ -140,6 +146,25 @@ export function ModelSettings({
             <option value="embedding">向量检索</option>
           </select>
         </label>
+        {purpose === "embedding" && (
+          <label>
+            向量模型单次输入上限（字符）
+            <input
+              type="number"
+              aria-label="向量模型单次输入上限（字符）"
+              required
+              min={200}
+              max={4000}
+              step={1}
+              value={embeddingInputChars}
+              onChange={(e) => setEmbeddingInputChars(Number(e.target.value))}
+            />
+            <small>
+              按提供方实际容量填写。资料会分块并保留原文；较长问题会在调用前提示缩短。本机小模型使用
+              400。
+            </small>
+          </label>
+        )}
         <label>
           使用范围
           <select value={scope} onChange={(e) => setScope(e.target.value)}>

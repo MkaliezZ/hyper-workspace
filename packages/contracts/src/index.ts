@@ -660,8 +660,20 @@ export const ModelInput = z
     apiKey: z.string().min(1).max(4096).optional(),
     purpose: z.enum(["chat", "embedding"]).default("chat"),
     scope: z.enum(["personal", "workspace"]).default("personal"),
+    embeddingInputChars: z.number().int().min(200).max(4000).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.purpose !== "embedding" &&
+      value.embeddingInputChars !== undefined
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["embeddingInputChars"],
+        message: "向量输入长度仅适用于向量模型。",
+      });
+  });
 export const DecisionInput = z
   .object({ requestId: z.uuid(), approved: z.boolean() })
   .strict();

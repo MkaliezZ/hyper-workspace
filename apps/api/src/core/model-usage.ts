@@ -103,6 +103,7 @@ export class ModelAccounting {
       provider: string;
       endpoint: string;
       purpose: "chat" | "embedding";
+      embeddingInputChars?: number;
     },
     readonly projectContext?: { id: string; bindingHash: string },
   ) {}
@@ -125,7 +126,7 @@ export class ModelAccounting {
       if (
         !(
           await c.query(
-            "SELECT id FROM cw_model_profiles WHERE id=$1 AND workspace_id=$2 AND (owner_id IS NULL OR owner_id=$3) AND model=$4 AND provider=$5 AND endpoint=$6 AND purpose=$7 FOR SHARE",
+            "SELECT id FROM cw_model_profiles WHERE id=$1 AND workspace_id=$2 AND (owner_id IS NULL OR owner_id=$3) AND model=$4 AND provider=$5 AND endpoint=$6 AND purpose=$7 AND embedding_input_chars=$8 FOR SHARE",
             [
               this.profile.id,
               s.workspaceId,
@@ -134,6 +135,7 @@ export class ModelAccounting {
               this.profile.provider,
               this.profile.endpoint,
               this.profile.purpose,
+              this.profile.embeddingInputChars ?? 4000,
             ],
           )
         ).rowCount

@@ -648,9 +648,7 @@
     "finalBusinessRuns": 14,
     "finalSupplierRequests": 14,
     "allThreeRoundsSupplierRequests": 23,
-    "incompleteUsageRuns": [
-      "9bd45c77-6c11-4042-b40b-6f44e4986be7"
-    ],
+    "incompleteUsageRuns": ["9bd45c77-6c11-4042-b40b-6f44e4986be7"],
     "costStatus": "unpriced; no invoice or zero-cost claim",
     "firstFailures": [
       "Hermes placed source deadlines in task titles while canonical dueDate was null; retained original assertions and clarified generic tool guidance.",
@@ -781,7 +779,7 @@
     }
   },
   "semanticQuality": {
-    "status": "local-real-model-short-chinese-product-chain-passed-current-ci-open",
+    "status": "local-real-model-short-chinese-and-independent-long-tail-passed-ci-pending",
     "report": "docs/SEMANTIC-QUALITY.md",
     "modelLock": "runtime/evaluations/embedding-model.lock.json",
     "dimensions": 512,
@@ -791,12 +789,60 @@
       "recallAt3": 1,
       "mrr": 0.9375
     },
-    "runs": 2,
-    "modelRequestsPerRun": 16,
+    "runs": 4,
     "remoteSupplierRequests": 0,
     "permissions": "Private/revoked assets were actually indexed; denied reindex before provider, stale versions excluded, refreshed v2 returned, deletion and source revocation filtered",
-    "limits": "Short synthetic Chinese documents only; 400 chars/512 tokens explicit reject, no query prefix, no long-document/RAG/company quality claim",
+    "limits": "Eight fixed short Chinese questions plus one independent synthetic long-tail check; 400 chars/512 tokens explicit reject, no query prefix, no general long-document/RAG/company claim",
     "optionalOnly": true,
-    "dependencies": "Separate evaluation lock; transformers 3.8.1, sharp override 0.35.5, official registry audit zero; root product dependencies unchanged"
+    "dependencies": "Separate optional lock; transformers 3.8.1, ONNX node 1.23.2, sharp 0.35.5 and adm-zip 0.6.1; official audit zero; root dependencies unchanged",
+    "modelRequestsByRound": [16, 16, 18, 18],
+    "longDocument": {
+      "characters": 2574,
+      "chunks": 8,
+      "capacity": 400,
+      "fullCoverage": true,
+      "tailInTop3": true,
+      "additionalRounds": 2
+    }
+  },
+  "methodAndGatewayCI": {
+    "status": "all-three-jobs-success",
+    "commit": "4f758297254bd1665dcd9f4faccb86e97fb52461",
+    "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41422563963",
+    "counts": {
+      "unit": 54,
+      "database": 246,
+      "native": 9,
+      "ui": 72,
+      "nextcloud": 15,
+      "deployment": 6
+    },
+    "scope": "Each job log inspected. Includes deterministic settlement-before-HTTP-finish regression and optional embedding lock audit; synthetic source/model data, not company acceptance."
+  },
+  "localEmbedding": {
+    "status": "local-persistent-product-connection-verified-ci-pending",
+    "report": "docs/LOCAL-EMBEDDING.md",
+    "migration": "042_embedding_input_limits.sql",
+    "model": "local-bge-small-zh-v1.5-q8",
+    "dimensions": 512,
+    "inputCharacters": 400,
+    "listen": "127.0.0.1:3116",
+    "platform": "macOS Intel, 4 CPU cores, 16 GB RAM, Node 24.14.1",
+    "runtime": {
+      "transformers": "3.8.1",
+      "onnxruntimeNode": "1.23.2",
+      "sharp": "0.35.5",
+      "admZip": "0.6.1"
+    },
+    "lifecycle": "LaunchAgent installed from private Application Support copy. Actual start, clean stop with no new stderr, reinstall and existing product connection reverification passed; no real computer reboot claim.",
+    "scope": "User-authorized local workspace embedding profile only; random private capability, Vault encryption, actual provider response. Existing chat profiles/prices/budgets unchanged; no invented zero invoice.",
+    "verification": {
+      "unit": 57,
+      "database": 247,
+      "newUI": 1,
+      "typeBuild": "passed",
+      "npmAudit": "official registry zero known vulnerabilities"
+    },
+    "limits": "Current synthetic Chinese evidence, no company/RAG/production-throughput acceptance. Optional model dependencies remain outside core/Compose."
   }
 }

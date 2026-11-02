@@ -14,6 +14,8 @@ export interface ModelConnection {
   model: string;
   purpose: "chat" | "embedding";
   apiKey?: string;
+  /** Provider capacity in characters, including the complete query/document chunk. */
+  embeddingInputChars?: number;
   /** Host-only accounting; never pass this or the provider credential to a child. */
   accounting?: ModelAccounting;
 }
@@ -31,7 +33,7 @@ export class ModelService {
     await assertMember(this.db, s);
     const row = (
       await this.db.pool.query(
-        "SELECT id,provider,endpoint,model,purpose,credential_enc FROM cw_model_profiles WHERE workspace_id=$1 AND (owner_id IS NULL OR owner_id=$2) AND purpose=$3 AND ($4::uuid IS NULL OR id=$4) ORDER BY (owner_id IS NOT NULL) DESC,created_at DESC,id LIMIT 1",
+        'SELECT id,provider,endpoint,model,purpose,credential_enc,embedding_input_chars AS "embeddingInputChars" FROM cw_model_profiles WHERE workspace_id=$1 AND (owner_id IS NULL OR owner_id=$2) AND purpose=$3 AND ($4::uuid IS NULL OR id=$4) ORDER BY (owner_id IS NOT NULL) DESC,created_at DESC,id LIMIT 1',
         [s.workspaceId, s.id, purpose, id ?? null],
       )
     ).rows[0];
@@ -197,6 +199,11 @@ export async function embed(
 ): Promise<number[][]> {
   if (connection.purpose !== "embedding" || connection.provider === "anthropic")
     throw new BadRequestException("请选择支持 embeddings API 的向量模型连接。");
+  const limit = connection.embeddingInputChars ?? 4000;
+  if (inputs.some((text) => text.length > limit))
+    throw new BadRequestException(
+      `向量输入超过此连接的 ${limit} 字符容量；请缩短问题或按连接限制分块索引，未发出请求。`,
+    );
   const result = await request(
     connection,
     "/embeddings",

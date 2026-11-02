@@ -101,6 +101,7 @@ async function main() {
       purpose: "embedding",
       scope: "workspace",
       apiKey: "synthetic-local-embedding-evaluation",
+      embeddingInputChars: 400,
     });
     const project = await work.createTalkProject(
       actor,
@@ -206,13 +207,11 @@ async function main() {
       report.results.push({
         ...sample,
         rank,
-        top3: hits
-          .slice(0, 3)
-          .map((h: any) => ({
-            key: [...ids].find(([, id]) => id === h.id)?.[0],
-            similarity: Number(h.similarity),
-            reference: h.chunks[0]?.reference,
-          })),
+        top3: hits.slice(0, 3).map((h: any) => ({
+          key: [...ids].find(([, id]) => id === h.id)?.[0],
+          similarity: Number(h.similarity),
+          reference: h.chunks[0]?.reference,
+        })),
       });
       await save();
     }
@@ -220,6 +219,57 @@ async function main() {
       top1: top1 / corpus.queries.length,
       recallAt3: top3 / corpus.queries.length,
       meanReciprocalRank: reciprocal / corpus.queries.length,
+    };
+    // This independent tail-retrieval check does not alter the eight fixed
+    // quality questions or their denominator. Original text must remain whole.
+    const longText =
+      "新员工入职后领取办公电脑，阅读培训资料并办理访客登记。\n".repeat(90) +
+      "夜间服务器机房出现漏水时，由设施组值班员关闭北侧总阀门，工单编号 WX-END-042，随后通知运维负责人。";
+    const longId = await asset(
+      "long-tail",
+      "合成长文：培训与机房设施处置",
+      longText,
+    );
+    await knowledge.index(actor, [longId], profile.id);
+    const longChunks = (
+      await db.pool.query(
+        "SELECT char_start,char_end,content FROM cw_asset_chunks WHERE asset_id=$1 ORDER BY ordinal",
+        [longId],
+      )
+    ).rows;
+    assert.equal(longChunks[0].char_start, 0);
+    assert.equal(longChunks.at(-1).char_end, longText.length);
+    longChunks.forEach((chunk, i) => {
+      assert.equal(
+        chunk.content,
+        longText.slice(chunk.char_start, chunk.char_end),
+      );
+      if (i) assert.ok(chunk.char_start <= longChunks[i - 1].char_end);
+    });
+    const longHits = await knowledge.semantic(
+      actor,
+      "机房夜里漏水应该先关闭哪一侧的阀门？",
+      profile.id,
+    );
+    const tailHit = longHits
+      .slice(0, 3)
+      .find(
+        (hit: any) => hit.id === longId && hit.content.includes("WX-END-042"),
+      );
+    assert.ok(
+      tailHit,
+      "Long document tail must be retrievable through product chunking, without truncation",
+    );
+    report.longDocument = {
+      characters: longText.length,
+      chunks: longChunks.length,
+      capacity: 400,
+      fullTextCoverage: true,
+      tailInTop3: true,
+      reference:
+        tailHit.chunks.find((chunk: any) =>
+          chunk.content?.includes("WX-END-042"),
+        )?.reference ?? tailHit.chunks[0]?.reference,
     };
     // Stale vectors remain physically present; current versions and deletion must filter them.
     const leave = ids.get("leave")!;

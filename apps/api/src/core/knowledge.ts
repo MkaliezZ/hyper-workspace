@@ -24,6 +24,9 @@ const space = (model: ModelConnection) =>
     provider: model.provider,
     endpoint: model.endpoint,
     model: model.model,
+    ...((model.embeddingInputChars ?? 4000) !== 4000
+      ? { inputCharacters: model.embeddingInputChars }
+      : {}),
   });
 const bindingKey = (row: any) =>
   row ? row.provider_key + "\n" + row.conversation_ref : "";
@@ -69,14 +72,34 @@ export class KnowledgeService {
         "embedding",
         modelProfileId,
       ),
-      plans = rows.map((row) => ({ row, chunks: textChunks(row.content) })),
+      plans = rows.map((row) => {
+        const capacity = connection.embeddingInputChars ?? 4000;
+        // A title is an optional retrieval hint; the complete title remains
+        // metadata. Never consume the minimum content capacity or truncate it.
+        const prefix =
+          row.title.length + 1 <= capacity - 200 ? row.title + "\n" : "";
+        const chunkLimit = Math.min(2000, capacity - prefix.length);
+        return {
+          row,
+          prefix,
+          chunks: textChunks(
+            row.content,
+            chunkLimit,
+            Math.min(200, Math.floor(chunkLimit / 10)),
+          ),
+        };
+      }),
       bindings = new Map<string, string>();
     for (const projectId of new Set(
       rows.map((row) => row.project_id).filter(Boolean),
     ))
       bindings.set(projectId, bindingKey(await access.binding(s, projectId)));
     const items = plans.flatMap((plan) =>
-        plan.chunks.map((chunk) => ({ row: plan.row, chunk })),
+        plan.chunks.map((chunk) => ({
+          row: plan.row,
+          prefix: plan.prefix,
+          chunk,
+        })),
       ),
       vectors = new Map<string, number[]>();
     let completedModelBatches = 0;
@@ -153,14 +176,16 @@ export class KnowledgeService {
           if (
             scopedConnection.model !== connection.model ||
             scopedConnection.endpoint !== connection.endpoint ||
-            scopedConnection.provider !== connection.provider
+            scopedConnection.provider !== connection.provider ||
+            scopedConnection.embeddingInputChars !==
+              connection.embeddingInputChars
           )
             throw new ConflictException(
               "模型连接已变化，本轮索引不混用不同模型。",
             );
           const result = await embed(
             scopedConnection,
-            group.map(({ row, chunk }) => row.title + "\n" + chunk.content),
+            group.map(({ prefix, chunk }) => prefix + chunk.content),
           );
           completedModelBatches++;
           group.forEach((item, i) =>
@@ -343,8 +368,8 @@ export class KnowledgeService {
         [...args, connection.model, space(connection)],
       ),
       this.db.pool.query(
-        `SELECT ${fields},a.content,0 AS ordinal,0 AS "charStart",char_length(a.content) AS "charEnd",1-(a.embedding <=> $1::vector) AS similarity FROM cw_assets a WHERE ${common} AND a.embedding_profile_id=$4 AND a.embedding_dimensions=$5 AND a.embedding_model=$9 AND a.embedding_source_version=a.source_version AND a.embedding_version='text-v1' AND a.embedding IS NOT NULL ORDER BY a.embedding <=> $1::vector,a.id LIMIT 30`,
-        [...args, connection.model],
+        `SELECT ${fields},a.content,0 AS ordinal,0 AS "charStart",char_length(a.content) AS "charEnd",1-(a.embedding <=> $1::vector) AS similarity FROM cw_assets a WHERE ${common} AND a.embedding_profile_id=$4 AND a.embedding_dimensions=$5 AND a.embedding_model=$9 AND a.embedding_source_version=a.source_version AND a.embedding_version='text-v1' AND a.embedding IS NOT NULL AND $10::int=4000 ORDER BY a.embedding <=> $1::vector,a.id LIMIT 30`,
+        [...args, connection.model, connection.embeddingInputChars ?? 4000],
       ),
     ]);
     const rows = await this.finalize(s, [

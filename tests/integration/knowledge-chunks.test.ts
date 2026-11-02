@@ -7,7 +7,8 @@ import { KnowledgeService } from "../../apps/api/src/core/knowledge.js";
 import { WorkspaceService } from "../../apps/api/src/core/workspace.js";
 import { RunProcessor } from "../../apps/api/src/core/processor.js";
 import { KnowledgeContextService } from "../../apps/api/src/core/knowledge-context.js";
-import { KnowledgePlan, RunInput } from "@hyper/contracts";
+import { KnowledgePlan, RunInput, ModelInput } from "@hyper/contracts";
+import { ModelService, embed } from "../../apps/api/src/core/models.js";
 import {
   engineRegistry,
   FixtureAdapter,
@@ -166,6 +167,127 @@ test("Long documents index in bounded batches, retrieve exact chunk citations ac
   assert.equal(
     (await knowledge.semantic(peer, "唯一目标", otherProfile)).length,
     0,
+  );
+});
+test("Provider character capacity bounds every long-document chunk, keeps complete citations and rejects overlong queries before HTTP", async () => {
+  const input = {
+    name: "Synthetic short embedding",
+    provider: "openai-compatible",
+    endpoint: "http://127.0.0.1:" + (server.address() as any).port + "/v1",
+    model: "synthetic-chunk-2d",
+    purpose: "embedding",
+    scope: "workspace",
+    embeddingInputChars: 400,
+  };
+  assert.ok(ModelInput.safeParse(input).success);
+  assert.equal(
+    ModelInput.safeParse({ ...input, embeddingInputChars: 199 }).success,
+    false,
+  );
+  assert.equal(
+    ModelInput.safeParse({ ...input, purpose: "chat" }).success,
+    false,
+  );
+  await assert.rejects(
+    workspace.saveModel(actor, { ...input, embeddingInputChars: 4001 }),
+    /输入长度/,
+  );
+  const limited = await workspace.saveModel(actor, input),
+    text =
+      "合成背景资料，原文与定位必须完整保留。".repeat(170) +
+      "\n唯一目标：末尾内容没有被小模型输入限制丢弃。",
+    id = await asset(text),
+    before = calls.length;
+  await knowledge.index(actor, [id], limited.id);
+  assert.ok(
+    calls
+      .slice(before)
+      .every((batch) => batch.every((value) => value.length <= 400)),
+  );
+  const chunks = (
+    await db.pool.query(
+      "SELECT char_start,char_end,content FROM cw_asset_chunks WHERE asset_id=$1 ORDER BY ordinal",
+      [id],
+    )
+  ).rows;
+  assert.equal(chunks[0].char_start, 0);
+  assert.equal(chunks.at(-1).char_end, text.length);
+  for (let i = 0; i < chunks.length; i++) {
+    assert.equal(
+      chunks[i].content,
+      text.slice(chunks[i].char_start, chunks[i].char_end),
+    );
+    if (i) assert.ok(chunks[i].char_start <= chunks[i - 1].char_end);
+  }
+  const result = await knowledge.semantic(actor, "唯一目标", limited.id);
+  assert.ok(
+    result.some((row) => row.id === id && row.content.includes("没有被小模型")),
+  );
+  const requestCount = calls.length;
+  await assert.rejects(
+    knowledge.semantic(actor, "长".repeat(401), limited.id),
+    /400 字符容量/,
+  );
+  assert.equal(calls.length, requestCount);
+  const resolved = await new ModelService(db).resolve(
+    actor,
+    "embedding",
+    limited.id,
+  );
+  await db.pool.query(
+    "UPDATE cw_model_profiles SET embedding_input_chars=300 WHERE id=$1",
+    [limited.id],
+  );
+  await assert.rejects(
+    embed(resolved, ["A short stale snapshot"]),
+    /模型连接已不可访问/,
+  );
+  assert.equal(calls.length, requestCount);
+  assert.ok(
+    !(await knowledge.semantic(actor, "唯一目标", limited.id)).some(
+      (row) => row.id === id,
+    ),
+  );
+  await knowledge.index(actor, [id], limited.id);
+  assert.ok(
+    (await knowledge.semantic(actor, "唯一目标", limited.id)).some(
+      (row) => row.id === id,
+    ),
+  );
+  // At the minimum supported capacity, even a long title must not steal body
+  // capacity or cause truncation. It remains intact in the asset metadata.
+  const longTitle = "完整资料标题".repeat(100);
+  await db.pool.query("UPDATE cw_assets SET title=$1 WHERE id=$2", [
+    longTitle,
+    id,
+  ]);
+  await db.pool.query(
+    "UPDATE cw_model_profiles SET embedding_input_chars=200 WHERE id=$1",
+    [limited.id],
+  );
+  const minimumBefore = calls.length;
+  await knowledge.index(actor, [id], limited.id);
+  assert.ok(
+    calls
+      .slice(minimumBefore)
+      .every((batch) => batch.every((value) => value.length <= 200)),
+  );
+  const minimumChunks = (
+    await db.pool.query(
+      "SELECT char_start,char_end,content FROM cw_asset_chunks WHERE asset_id=$1 ORDER BY ordinal",
+      [id],
+    )
+  ).rows;
+  assert.equal(minimumChunks[0].char_start, 0);
+  assert.equal(minimumChunks.at(-1).char_end, text.length);
+  minimumChunks.forEach((chunk, i) => {
+    assert.equal(chunk.content, text.slice(chunk.char_start, chunk.char_end));
+    if (i) assert.ok(chunk.char_start <= minimumChunks[i - 1].char_end);
+  });
+  assert.equal(
+    (await db.pool.query("SELECT title FROM cw_assets WHERE id=$1", [id]))
+      .rows[0].title,
+    longTitle,
   );
 });
 test("Private data is rejected before embedding dispatch and current changes physically clear derived chunk text/vectors", async () => {
