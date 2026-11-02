@@ -210,6 +210,10 @@ export class RunModelGateway {
       if (!response.ok) {
         await response.body?.cancel();
         transport = "rejected";
+        // The child must see the same durable rejection that immediate ledger
+        // readback sees, including when the upstream did not provide usage.
+        await accounting.settle(id, usage, transport, status);
+        settled = true;
         res.writeHead(response.status, { "Content-Type": "application/json" });
         res.end('{"error":"Configured model service rejected the request"}');
         return;

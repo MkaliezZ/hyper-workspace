@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { channel } from "node:diagnostics_channel";
 import { Database } from "../../apps/api/src/db/database.js";
 import { WorkspaceService } from "../../apps/api/src/core/workspace.js";
 import {
@@ -301,6 +302,52 @@ test("Streaming, missing terminal frames and HTTP rejection preserve distinct ac
         x.inputTokens === null,
     ),
   );
+});
+test("An upstream rejection cannot finish its HTTP response before the actual usage transaction commits", async (t) => {
+  const f = await setup(t, "error");
+  const accounting = f.connection.accounting!,
+    original = accounting.settle.bind(accounting);
+  let committed = false;
+  accounting.settle = async (...args: Parameters<typeof original>) => {
+    // A real asynchronous settlement is deliberately held across one event-loop
+    // turn; HTTP completion is observed independently using Node's diagnostics.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await original(...args);
+    committed = true;
+  };
+  const gateway = new RunModelGateway(
+    f.connection,
+    f.runId,
+    new AbortController().signal,
+    async () => ({ maxOutputTokens: 128 }),
+  );
+  const model = await gateway.start(),
+    atResponseFinish: boolean[] = [];
+  const diagnostic = channel("http.server.response.finish");
+  const observe = (message: any) => {
+    if (
+      message.request.headers.authorization === "Bearer " + model.apiKey &&
+      message.response.statusCode === 429
+    )
+      atResponseFinish.push(committed);
+  };
+  diagnostic.subscribe(observe);
+  t.after(async () => {
+    diagnostic.unsubscribe(observe);
+    await gateway.close();
+  });
+  const response = await send(model);
+  assert.equal(response.status, 429);
+  assert.ok(!(await response.text()).includes("upstream-private-error-key"));
+  await gateway.close();
+  assert.deepEqual(
+    atResponseFinish,
+    [true],
+    "The client-visible response must finish after committed accounting",
+  );
+  const view = await f.usage.view(f.actor);
+  assert.equal(view.rows[0].transport, "rejected");
+  assert.equal(view.rows[0].usageStatus, "unknown");
 });
 test("Cancellation and live scope loss close model access while retaining the already attempted request", async (t) => {
   const f = await setup(t, "hang"),
