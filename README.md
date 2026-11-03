@@ -32,7 +32,7 @@
 
 ## 技术架构
 
-新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，API/Worker 不持有来源管理员密码，公开模型按摘要白名单构建；小内存配置将单 Worker 并发限制为 1。2026-11-03 本地 63 单元、类型检查通过，新增来源隔离容器用例待 CI；云端已准备 Docker，应用健康和容量尚未验证，整体交付仍在推进。
+新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `8803f0f` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41557078464) 三项全部成功，共 432 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。完整云端应用仍在构建，产品联合链路及整机容量尚未验收，整体交付继续推进。
 
 - React + TypeScript + Vite：聊天、项目上下文、任务、成果和设置。
 - NestJS 模块化业务核心 + 独立执行 Worker。

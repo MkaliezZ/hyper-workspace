@@ -934,7 +934,21 @@
       "publicModelBuildContext": "explicit-six-file-whitelist",
       "hostPortPublished": false,
       "listenerCredentialBits": 256,
-      "linuxInferenceVerified": false
+      "linuxInferenceVerified": true,
+      "linuxInferenceEvidence": {
+        "imageRevision": "8803f0f",
+        "inputs": "synthetic",
+        "vectors": 512,
+        "batchTexts": 8,
+        "charactersPerText": 400,
+        "relatedDocumentRankedFirst": true,
+        "unauthorizedRejected": true,
+        "oversizedRejected": true,
+        "cgroupMemoryPeakBytes": 397680640,
+        "initialMemoryLimitMiB": 384,
+        "recommendedPilotMemoryLimitMiB": 512,
+        "scope": "Standalone Linux CPU container only; not product semantic-quality acceptance"
+      }
     },
     "worker": {
       "defaultConcurrency": 2,
@@ -947,9 +961,34 @@
     "evidence": {
       "localUnitPassed": 63,
       "typecheck": "passed",
-      "newContainerTests": "pending",
+      "newContainerTests": "7 passed in CI 41557078464 including the source database isolation and unchanged-password case",
       "cloudApplicationDeployment": "not-yet-verified",
-      "formalCompanyAcceptance": false
+      "formalCompanyAcceptance": false,
+      "localBuild": "passed"
+    },
+    "ci": {
+      "commit": "8803f0f36c6fa6e91fe76a4f084b91c4fa7d6d1f",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41557078464",
+      "allJobs": "success",
+      "checks": 432,
+      "counts": {
+        "unit": 63,
+        "downloader": 3,
+        "extraction": 8,
+        "database": 252,
+        "native": 9,
+        "ui": 74,
+        "nextcloud": 16,
+        "deployment": 7
+      },
+      "verification": "All three completed job logs inspected 2026-11-03. Source/model protocol fixtures; Linux standalone CPU inference recorded separately. Cloud application and formal company acceptance remain unverified."
+    },
+    "buildTransport": {
+      "debianDefault": "https://deb.debian.org",
+      "optionalMirror": "https://mirrors.tuna.tsinghua.edu.cn",
+      "signatureAndPackageHashChecks": "retained",
+      "scope": "container build only; not host repository or network changes",
+      "validation": "Mirror full 8790396-byte Packages.xz downloaded in 6486ms on selected pilot; updated application build pending"
     }
   }
 }

@@ -33,5 +33,5 @@ services:
     volumes:
       - ./deploy/nextcloud-small.conf:/etc/apache2/mods-enabled/mpm_prefork.conf:ro
   embedding:
-    mem_limit: 384m
+    mem_limit: 512m
     cpus: 1.0

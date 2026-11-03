@@ -1,5 +1,6 @@
 ARG NODE_IMAGE=node:24.14.1-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c
 ARG PYTHON_IMAGE=python:3.14.6-slim-bookworm@sha256:4c92ffcde4dd6f1ff72a24518f49fd4990b27134987dfa31a733badde66df9f8
+ARG DEBIAN_MIRROR=https://deb.debian.org
 FROM ${NODE_IMAGE} AS node-runtime
 RUN npm install --global npm@11.11.0 --registry=https://registry.npmjs.org
 FROM node-runtime AS manifests
@@ -19,7 +20,12 @@ COPY packages/contracts packages/contracts
 RUN npm run build
 
 FROM ${PYTHON_IMAGE} AS engines
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential git ca-certificates libatomic1 && rm -rf /var/lib/apt/lists/*
+ARG DEBIAN_MIRROR
+RUN case "$DEBIAN_MIRROR" in https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn) ;; *) exit 64 ;; esac \
+    && sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends build-essential git ca-certificates libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
@@ -33,7 +39,12 @@ RUN --mount=type=bind,from=hermes_source,target=/source-cache,ro \
     if [ -f /source-cache/hermes-source.tar.gz ]; then HERMES_SOURCE_ARCHIVE=/source-cache/hermes-source.tar.gz python3 runtime/hermes/install.py; else python3 runtime/hermes/install.py; fi && rm -f .runtime/hermes-*.tar.gz
 
 FROM ${PYTHON_IMAGE} AS application
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libstdc++6 libatomic1 && rm -rf /var/lib/apt/lists/* && groupadd --gid 10001 hyper && useradd --uid 10001 --gid 10001 --no-create-home hyper
+ARG DEBIAN_MIRROR
+RUN case "$DEBIAN_MIRROR" in https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn) ;; *) exit 64 ;; esac \
+    && sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends ca-certificates libstdc++6 libatomic1 \
+    && rm -rf /var/lib/apt/lists/* && groupadd --gid 10001 hyper && useradd --uid 10001 --gid 10001 --no-create-home hyper
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
