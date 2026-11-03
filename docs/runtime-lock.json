@@ -952,15 +952,15 @@
       "localUnitPassed": 63,
       "typecheck": "passed",
       "newContainerTests": "7 passed in CI 41557078464 including the source database isolation and unchanged-password case",
-      "cloudApplicationDeployment": "not-yet-verified",
+      "cloudApplicationDeployment": "Five actual cloud services healthy; image 9be68e5 with source concurrency configuration 2219311. Owned real admin/peer login, four formats and private visibility passed in first composite; stopped before first business Run; later WAN login timeout retained.",
       "formalCompanyAcceptance": false,
       "localBuild": "passed"
     },
     "ci": {
-      "commit": "9be68e5ecc7a9c35c5224a313e2be6a070d351c9",
-      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322",
+      "commit": "221931129c5bc431c7770f3d36314c3bdde49f3f",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41572928983",
       "allJobs": "success",
-      "checks": 438,
+      "checks": 439,
       "counts": {
         "unit": 63,
         "downloaderAndCache": 9,
@@ -968,26 +968,33 @@
         "database": 252,
         "native": 9,
         "ui": 74,
-        "nextcloud": 16,
+        "nextcloud": 17,
         "deployment": 7
       },
-      "verification": "All three completed job logs inspected 2026-11-03. Source/model protocol fixtures; standalone Linux CPU inference separate. Cloud business and company acceptance pending."
+      "verification": "All three completed job logs inspected 2026-11-03. 17 source tests include slow cold-login regression with the 640 MiB / 8 slot source profile; protocol models, not supplier or company acceptance."
     },
     "buildTransport": {
       "debianDefault": "https://deb.debian.org",
       "optionalMirror": "https://mirrors.tuna.tsinghua.edu.cn",
       "signatureAndPackageHashChecks": "retained",
       "scope": "container build only; not host repository or network changes",
-      "validation": "Mirror full 8790396-byte Packages.xz downloaded in 6486ms on selected pilot; updated application build pending"
+      "validation": "Final cloud application image built and VCS label verified; public dependency hashes and native PM checks retained."
     },
     "hermesPublicBootstrapCache": {
-      "status": "linux-container-ci-verified-cloud-release-build-pending",
+      "status": "linux-container-ci-and-cloud-release-build-verified",
       "source": "immutable Hermes pm/lock.json",
       "cli": "python3 runtime/hermes/bootstrap_cache.py --prepare-build",
       "archives": ["Hermes source", "Linux amd64 uv", "Linux amd64 PM Python"],
       "validation": "Native PM continues to hash, probe and install; no installed receipts copied or fabricated",
       "localTests": "9 Python tests passed (3 existing downloader and 6 cache protections)",
       "upstreamPinsChanged": false
+    },
+    "intranetTarget": {
+      "userConfirmed": "2026-11-03: company LAN IP without external domain; Hangzhou for temporary technical validation only",
+      "contract": "docs/DEPLOYMENT-INTRANET.md",
+      "overlay": "deploy/compose.intranet.yaml",
+      "proxy": "deploy/nginx.intranet.conf.example",
+      "tlsValidation": "New isolated CI proxy proof pending; company LAN IP/CA and business acceptance not executed"
     }
   }
 }

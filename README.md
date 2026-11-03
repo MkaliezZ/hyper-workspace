@@ -32,7 +32,9 @@
 
 ## 技术架构
 
-新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `9be68e5` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322) 三项全部成功，共 438 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。阿里杭州的数据库、API、Worker、Nextcloud 和 CPU 向量服务均已启动并健康；真实授权冷加载暴露 Apache 处理槽不足，正在修复并复验。产品联合链路及整机容量尚未验收，整体交付继续推进。
+正式交付采用[公司内网 IP + 内部 CA](docs/DEPLOYMENT-INTRANET.md)，无需购买域名或开放公网；阿里杭州仅作临时技术验收。提供 Nginx 与来源地址叠加模板，公司环境尚待实证。
+
+新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `9be68e5` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322) 三项全部成功，共 438 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。阿里杭州的数据库、API、Worker、Nextcloud 和 CPU 向量服务均已启动并健康；冷登录并发修正 `2219311` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41572928983) 三项成功，共 439 项；实际云端已通过两员工登录、四种文档解析与私人隔离，联合业务及 WAN 冷加载仍在排障。产品联合链路及整机容量尚未验收，整体交付继续推进。
 
 云端 Hermes 安装工具下载超时已保留诊断；新增固定来源及其 PM 工具归档的可验证构建缓存，9 项 Python 下载/缓存保护测试通过。仍由上游 PM 复核并安装，缓存路径已通过 Linux 容器 CI，云端最终镜像已构建并核对 VCS 标签，真实业务联合验收继续推进。[准备命令与边界](runtime/hermes/build-context/README.md)。
 

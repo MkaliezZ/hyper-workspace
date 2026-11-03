@@ -1,0 +1,8 @@
+# Apply after compose.source.yaml. HYPER_LAN_IP must be the reserved company LAN IPv4.
+# Nginx terminates TLS on that IP:443 (product) and IP:8443 (source).
+services:
+  nextcloud:
+    environment:
+      NEXTCLOUD_TRUSTED_DOMAINS: "${HYPER_LAN_IP:?Set the reserved company LAN IP} nextcloud"
+      OVERWRITEHOST: "${HYPER_LAN_IP:?Set the reserved company LAN IP}:8443"
+      OVERWRITEPROTOCOL: https
