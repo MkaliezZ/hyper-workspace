@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { source, password, origin, login, group, view } from "./helpers";
 import { Database } from "../../apps/api/src/db/database.js";
 import { Vault } from "../../apps/api/src/core/credentials.js";
+import { execFileSync } from "node:child_process";
 const db = new Database(process.env.TEST_DATABASE_URL);
 if (!source || !password || !process.env.TEST_DATABASE_URL?.endsWith("_test"))
   throw new Error(
@@ -41,10 +42,14 @@ test("Cold source login assets on a slow connection leave capacity for device-fl
     });
     await page.goto(origin);
     const opened = page.waitForEvent("popup");
+    const started = page.waitForResponse((response) =>
+      response.url().endsWith("/api/auth/nextcloud/start"),
+    );
     await page
       .getByRole("button", { name: "使用企业账号登录", exact: true })
       .click();
     const popup = await opened;
+    const loginUrl = (await (await started).json()).loginUrl;
     await throttle;
     await popup
       .getByRole("link", { name: "Log in", exact: true })
@@ -61,6 +66,21 @@ test("Cold source login assets on a slow connection leave capacity for device-fl
     ).toBeVisible({ timeout: 30000 });
     expect(pollFailures).toEqual([]);
     expect((await (await view(context)).json()).user.demo).toBe(false);
+    const flowToken = new URL(loginUrl).pathname.split("/").at(-1)!;
+    const sourceLogs = execFileSync(
+      "docker",
+      ["logs", "hyper-nextcloud-test"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    );
+    if (sourceLogs.includes(flowToken))
+      throw new Error(
+        "Source access logs exposed a one-shot authorization token.",
+      );
+    expect(sourceLogs).toMatch(/hyper_source status=\d{3} duration_us=\d+/);
   } finally {
     await context.close();
   }

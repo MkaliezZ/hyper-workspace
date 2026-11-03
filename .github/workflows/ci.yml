@@ -46,6 +46,7 @@ jobs:
           path: .runtime/hermes-source.tar.gz
           key: hermes-source-${{ hashFiles('runtime/hermes/lock.json') }}
       - run: npm ci
+      - run: node scripts/dependency-inventory.mjs --check
       - run: npm audit --audit-level=high --registry=https://registry.npmjs.org
       - name: Verify the intranet IP TLS proxy in an isolated loopback environment
         run: |
@@ -75,7 +76,7 @@ jobs:
       - run: npm run test:e2e
   nextcloud-identity:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     services:
       postgres:
         image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
@@ -125,7 +126,11 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:nextcloud
       - if: failure()
-        run: if docker inspect hyper-nextcloud-test >/dev/null 2>&1; then docker logs --tail 80 hyper-nextcloud-test; fi
+        run: |
+          if docker inspect hyper-nextcloud-test >/dev/null 2>&1; then
+            docker inspect --format '{{.State.Status}} OOM={{.State.OOMKilled}}' hyper-nextcloud-test
+            docker logs --tail 80 hyper-nextcloud-test 2>&1 | python3 -c 'import sys,re; print("\n".join(line.strip() for line in sys.stdin if re.fullmatch(r"hyper_source status=\d{3} duration_us=\d+\n?",line)))'
+          fi
 
   deployment:
     runs-on: ubuntu-latest

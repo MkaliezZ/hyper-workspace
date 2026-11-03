@@ -385,6 +385,28 @@ test("Configured deadlines abort an active model turn and prevent publication", 
   assert.equal(result.state, "failed");
   assert.match(result.error, /有效时限/);
 });
+test("A runtime transport closing after a host deadline preserves the actionable host reason", async () => {
+  const f = await setup(
+    async (r: any) =>
+      new Promise((_resolve, reject) => {
+        // The real RPC adapter closes its child on host abort; the pending RPC
+        // then rejects with this transport symptom instead of the host reason.
+        r.signal.addEventListener(
+          "abort",
+          () => reject(new Error("Runtime connection closed.")),
+          { once: true },
+        );
+      }),
+  );
+  await f.save("project", { maxDurationSeconds: 5 });
+  const run = await f.service.startRun(f.member, f.input());
+  await f.processor.process(run.id);
+  const result = await f.service.getRun(f.member, run.id);
+  assert.equal(result.state, "failed");
+  assert.match(result.error, /有效时限/);
+  assert.doesNotMatch(result.error, /connection closed/);
+  assert.equal(result.result, null);
+});
 test("Cancellation retains only actual admissions, and audit failure rolls back the complete policy change", async () => {
   let f: any;
   f = await setup(async (r: any) => {

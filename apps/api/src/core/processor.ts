@@ -6,7 +6,10 @@ import {
 } from "./notification-policy.js";
 import { RoomManagementService } from "./room-management.js";
 import { OrganizationService } from "./organization.js";
-import { BadRequestException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { KnowledgeContextService } from "./knowledge-context.js";
 import { WorkPlanService } from "./work-plans.js";
 import { DecisionService } from "./decisions.js";
@@ -252,7 +255,11 @@ export class RunProcessor {
               abort.abort(
                 error instanceof ExecutionLimitError
                   ? error
-                  : new Error("来源权限、版本或有效执行规则已变化。"),
+                  : new Error(
+                      error instanceof ServiceUnavailableException
+                        ? "企业来源暂时不可用，无法继续确认权限与资料版本。请核对已完成操作后重试。"
+                        : "来源权限、版本或有效执行规则已变化。",
+                    ),
               ),
             )
             .finally(() => {
@@ -671,7 +678,13 @@ export class RunProcessor {
           actions.rowCount || external.rowCount
             ? "recovery_required"
             : "failed";
-        const failure = modelGateway?.denial ?? error;
+        // Closing the RPC child is a consequence of a host abort. Keep the
+        // controlled host reason instead of replacing it with a closed-pipe error.
+        const failure =
+          modelGateway?.denial ??
+          (abort.signal.aborted && abort.signal.reason instanceof Error
+            ? abort.signal.reason
+            : error);
         const message = [
           "query_knowledge",
           "plan_work",

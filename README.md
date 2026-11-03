@@ -32,6 +32,8 @@
 
 ## 技术架构
 
+[云端联合验收记录](docs/CLOUD-TRIAL-ACCEPTANCE.md)：真实两员工登录与四种文档已通过；DSH 纪要/两待办及第一项员工分配成功，第二项失败且未写入，正在修复诊断并续验。云端产品库的签名备份和新库恢复已通过 7 条活动密文检查。整批及公司验收仍未完成。
+
 正式交付采用[公司内网 IP + 内部 CA](docs/DEPLOYMENT-INTRANET.md)，无需购买域名或开放公网；阿里杭州仅作临时技术验收。提供 Nginx 与来源地址叠加模板，公司环境尚待实证。
 
 新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `9be68e5` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322) 三项全部成功，共 438 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。阿里杭州的数据库、API、Worker、Nextcloud 和 CPU 向量服务均已启动并健康；冷登录并发修正 `2219311` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41572928983) 三项成功，共 439 项；实际云端已通过两员工登录、四种文档解析与私人隔离，联合业务及 WAN 冷加载仍在排障。产品联合链路及整机容量尚未验收，整体交付继续推进。
@@ -293,3 +295,5 @@ npm run test:e2e
 ## 许可证
 
 自有代码采用 [MIT](LICENSE)。Nextcloud、DSH、Hermes 与其他依赖分别保留自身许可证；本仓库许可证不改变第三方组件的授权要求。
+
+[锁定依赖与许可声明清单](docs/DEPENDENCIES.md)提供离线可复核记录，其他运行层按固定版本继续核对。

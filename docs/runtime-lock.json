@@ -957,10 +957,10 @@
       "localBuild": "passed"
     },
     "ci": {
-      "commit": "221931129c5bc431c7770f3d36314c3bdde49f3f",
-      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41572928983",
+      "commit": "4eadcd535a2a8ccd2b40b5ea761bf65b39ff0e79",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41614010759",
       "allJobs": "success",
-      "checks": 439,
+      "checks": 443,
       "counts": {
         "unit": 63,
         "downloaderAndCache": 9,
@@ -969,9 +969,10 @@
         "native": 9,
         "ui": 74,
         "nextcloud": 17,
-        "deployment": 7
+        "deployment": 7,
+        "tlsProxy": 4
       },
-      "verification": "All three completed job logs inspected 2026-11-03. 17 source tests include slow cold-login regression with the 640 MiB / 8 slot source profile; protocol models, not supplier or company acceptance."
+      "verification": "All three job logs inspected: 439 prior layer checks and 4 new isolated IP TLS/proxy checks; source 17 passed in 21.5m. Real cloud supplier attempt separately recorded, not full acceptance."
     },
     "buildTransport": {
       "debianDefault": "https://deb.debian.org",
@@ -994,7 +995,48 @@
       "contract": "docs/DEPLOYMENT-INTRANET.md",
       "overlay": "deploy/compose.intranet.yaml",
       "proxy": "deploy/nginx.intranet.conf.example",
-      "tlsValidation": "New isolated CI proxy proof pending; company LAN IP/CA and business acceptance not executed"
+      "tlsValidation": "Four isolated IP SAN/CA, source port, Origin/body and immediate SSE checks passed in 41614010759. Company LAN installation/CA trust not executed."
+    },
+    "cloudBusiness": {
+      "report": "docs/CLOUD-TRIAL-ACCEPTANCE.md",
+      "attemptedRuns": 3,
+      "succeeded": 2,
+      "failed": 1,
+      "failedRun": "0012a26f-3e96-4a7b-8d77-66e5cf8bcee6",
+      "failedRunActions": 0,
+      "failedTaskVersion": 1,
+      "failedModelUsage": "HTTP 200 / transport unknown / usage unknown; not assumed free",
+      "staticDelivery": "Three hash-verified original public JavaScript files cached; HTML, authorization and all business APIs live",
+      "fullCompositeAcceptance": "pending"
+    },
+    "hostAbortDiagnostic": {
+      "status": "local-regression-fixed-cloud-retest-pending",
+      "beforeFix": "Focused test reproduced a host deadline being masked by Runtime connection closed",
+      "afterFix": "10 policy tests; 250/253 full integration first pass, missing local PG binary config caused 3 backup failures; those 3 rerun passed with existing PG17 client. 63 units, type/build passed.",
+      "sourceAccessLog": "Fixed-image Apache syntax passed; actual Login Flow access-log token assertion added, CI pending",
+      "workerObservedMemoryPeakBytes": 236294144,
+      "workerOomKills": 0
+    },
+    "cloudBackup": {
+      "backupId": "859ffbee-5d14-4f20-afb8-d23fbb2738bb",
+      "restoreId": "9afb58c2-8d3f-4cc9-a115-ec8326d04c78",
+      "bytes": 289166,
+      "sha256": "c2c70ad5e7a9c8934ed581c4394c20dc4434e5821ffde410b06a673d853f17f4",
+      "status": "verified_isolated",
+      "credentialChecks": 7,
+      "activeRunsAtSnapshot": 0,
+      "externalBusinessSystemsCalled": false,
+      "servicesStarted": false,
+      "productionPromoted": false
     }
+  },
+  "npmLicenseInventory": {
+    "command": "node scripts/dependency-inventory.mjs --check",
+    "artifact": "docs/dependencies/npm-licenses.tsv",
+    "installationRecords": 1002,
+    "missingSpdxMetadata": 2,
+    "missingMetadataLicenseTexts": "Original busboy/streamsearch permission texts preserved with hashes; no SPDX invented",
+    "networkUsed": false,
+    "wholeImageLicenseReview": false
   }
 }

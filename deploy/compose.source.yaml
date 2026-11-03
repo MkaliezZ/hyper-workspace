@@ -28,7 +28,9 @@ services:
       PHP_MEMORY_LIMIT: 256M
       PHP_UPLOAD_LIMIT: 16M
     ports: ["127.0.0.1:${HYPER_NEXTCLOUD_PORT:-8090}:80"]
-    volumes: [nextcloud_data:/var/www/html]
+    volumes:
+      - nextcloud_data:/var/www/html
+      - ./deploy/nextcloud-vhost.conf:/etc/apache2/sites-enabled/000-default.conf:ro
     depends_on:
       source-initialize: { condition: service_completed_successfully }
     healthcheck:
