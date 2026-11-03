@@ -29,3 +29,5 @@ TEST_DATABASE_URL=postgres://用户:密码@127.0.0.1:5432/hyper_test npm run tes
 新 Run 从产品上下文启动；进行中的 Run 继续归原引擎，不迁移私有检查点。源代码和上游依赖锁应保持不变；升级须更新锁定清单并重新验证这组契约。
 
 依赖保留各自许可。Hermes 源码采用 [MIT](THIRD_PARTY_HERMES_LICENSE.txt)。参考：[固定提交的程序接口说明](https://github.com/NousResearch/hermes-agent/blob/780d5a3313d7e1f64c0a0f3ec6b644d50f156e90/website/docs/developer-guide/programmatic-integration.md)。
+
+容器网络无法稳定下载上游安装工具时，可先执行 `python3 runtime/hermes/bootstrap_cache.py --prepare-build`，再将只含三份公开归档的 `.runtime/hermes-build-source` 用作命名构建上下文。来源 SHA-256 先通过，再从来源的 `pm/lock.json` 取得 Linux amd64 uv 和内部 Python 工具的版本/摘要；不更改上游锁。项目运行解释器仍为本仓库锁定的 Python 3.14.6，内部 PM 工具版本由上游管理。安装只预置下载缓存，PM 继续完成摘要、架构/版本探测和实际安装回执。默认无参数不下载；坏摘要、符号链接、无关文件或现存异常缓存拒绝处理，不能通过重写回执跳过安装。

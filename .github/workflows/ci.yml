@@ -51,7 +51,7 @@ jobs:
       - run: python3 docs/handoff-v1/verify_package.py
       - run: npm run typecheck
       - run: npm test
-      - run: python3 -m unittest discover -s runtime/hermes -p test_download.py
+      - run: python3 -m unittest discover -s runtime/hermes -p 'test_*.py'
       - run: python3 -m venv .runtime/documents
       - run: .runtime/documents/bin/python -m pip install --require-hashes -r runtime/documents/requirements.lock --index-url https://pypi.org/simple
       - run: .runtime/documents/bin/python -m unittest discover -s runtime/documents -p test_extract.py -v
@@ -141,8 +141,7 @@ jobs:
       - run: npm ci
       - run: python3 runtime/hermes/download.py
       - run: |
-          mkdir -p .runtime/hermes-build-source
-          cp .runtime/hermes-source.tar.gz .runtime/hermes-build-source/hermes-source.tar.gz
+          python3 runtime/hermes/bootstrap_cache.py --prepare-build
           node scripts/deploy-init.mjs .runtime/compose-ci.env
           docker compose version
           docker compose --project-name hyper-deployment-ci --env-file .runtime/compose-ci.env -f compose.yaml -f deploy/compose.ci.yaml config --quiet

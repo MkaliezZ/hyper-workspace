@@ -99,7 +99,9 @@ API 与 Worker/数据库重启后，业务对象与历史保存在 PostgreSQL。
 
 首次容器 [CI 40903087059](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40903087059) 的三个 job 均停在固定 Hermes 源码下载 HTTP 429，当时未运行容器业务断言。下载器增加有界重试、缓存摘要复核，CI 仅缓存公开源码归档并通过只读独立构建上下文复用；不上传 `.runtime` 内的其他数据，也不改变原提交、源码 SHA-256 或上游依赖锁。缓存损坏直接失败，3 项下载回归已在本地与后续 CI 通过。
 
-第二轮 [CI 40904981867](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40904981867) 下载已成功，容器构建在启动前因 BuildKit secret 的 500 KiB 上限拒绝 89 MB 公开归档。构建输入现改为只包含这份归档的命名上下文，经只读 bind mount 读取并重新校验；主构建上下文继续排除 `.runtime` 和 `.env`。默认 Compose 的该上下文只有说明文件，未准备归档时仍从固定 URL 下载。直接 `docker build` 时须提供 `--build-context hermes_source=runtime/hermes/build-context`，日常部署使用上方 Compose 命令即可。
+第二轮 [CI 40904981867](https://github.com/MkaliezZ/hyper-workspace/actions/runs/40904981867) 下载已成功，容器构建在启动前因 BuildKit secret 的 500 KiB 上限拒绝 89 MB 公开归档。构建输入改为明确的公开归档命名上下文，经只读 bind mount 读取并重新校验；主构建上下文继续排除 `.runtime` 和 `.env`。默认 Compose 的该上下文只有说明文件，未准备归档时仍从固定 URL 下载。直接 `docker build` 时须提供 `--build-context hermes_source=runtime/hermes/build-context`，日常部署使用上方 Compose 命令即可。
+
+Linux amd64 离线工具缓存可用 `python3 runtime/hermes/bootstrap_cache.py --prepare-build` 准备 `.runtime/hermes-build-source`，只允许固定来源及其 PM 锁指定的 uv/Python 三份归档。将部署覆盖文件中 initialize/api/worker 的 `build.additional_contexts.hermes_source` 指向此目录。安装器通过 `HERMES_BOOTSTRAP_DIR` 预置哈希下载缓存，PM 继续复核并实际安装，不复制其他主机的运行目录、不修改锁或伪造安装回执。网络阻断的首次失败记录保留，不能把缓存准备成功当作引擎或应用验收成功。
 
 本地通过类型/构建、15 单元/Provider/部署配置、49 数据库、18 UI 回归；编译后的 API 在独立本地端口直接提供网页，验证正常登录、HttpOnly cookie、私有路径拒绝、桌面/手机无溢出。首次复用测试库时，其最后一项撤权测试让演示成员失效，静态登录验证失败；仅对隔离测试库重新 seed 后复测，未放宽鉴权。
 

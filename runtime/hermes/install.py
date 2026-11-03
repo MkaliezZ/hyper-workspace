@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tarfile
 from download import ensure_archive
+from bootstrap_cache import seed_pinned_archive
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = json.loads(Path(__file__).with_name("lock.json").read_text())
@@ -41,6 +42,24 @@ def main():
             package.extractall(source.parent, filter="data")
     if destination.exists():
         raise RuntimeError("An unregistered runtime directory exists; inspect it before proceeding.")
+    bootstrap = os.environ.get("HERMES_BOOTSTRAP_DIR")
+    if bootstrap:
+        # Seed only the download cache. Upstream PM rehashes the archive, probes
+        # its native tool and owns every installed-state receipt as before.
+        sys.path.insert(0, str(source))
+        from pm.store import current_target
+        packages = json.loads((source / "pm/lock.json").read_text())["packages"]
+        from urllib.parse import urlparse
+        directory = Path(bootstrap)
+        specs = [packages[name]["artifacts"][current_target()] for name in ("uv", "python")]
+        allowed = {"README.md", "hermes-source.tar.gz", *(Path(urlparse(spec["url"]).path).name for spec in specs)}
+        if (directory.is_symlink() or not directory.is_dir()
+                or any(p.name not in allowed or p.is_symlink() or not p.is_file() for p in directory.iterdir())):
+            raise RuntimeError("Bootstrap context must contain only the declared public archives")
+        for spec in specs:
+            archive = directory / Path(urlparse(spec["url"]).path).name
+            if archive.exists() or archive.is_symlink():
+                seed_pinned_archive(archive, RUNTIME / "hermes-tools", spec)
     environment = {
         **os.environ,
         "HERMES_HOME": str(RUNTIME / "hermes-build-home"),

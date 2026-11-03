@@ -36,6 +36,7 @@ COPY runtime/documents/requirements.lock runtime/documents/requirements.lock
 RUN python3 -m venv .runtime/documents && .runtime/documents/bin/python -m pip install --no-cache-dir --require-hashes -r runtime/documents/requirements.lock --index-url https://pypi.org/simple
 COPY runtime/hermes runtime/hermes
 RUN --mount=type=bind,from=hermes_source,target=/source-cache,ro \
+    export HERMES_BOOTSTRAP_DIR=/source-cache; \
     if [ -f /source-cache/hermes-source.tar.gz ]; then HERMES_SOURCE_ARCHIVE=/source-cache/hermes-source.tar.gz python3 runtime/hermes/install.py; else python3 runtime/hermes/install.py; fi && rm -f .runtime/hermes-*.tar.gz
 
 FROM ${PYTHON_IMAGE} AS application
