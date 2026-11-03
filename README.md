@@ -4,7 +4,9 @@
 
 面向企业内部的 AI 协作 IM：讨论有沉淀，行动有回执，成果能修改，经验能复用。蓝、白、黑配色；拥有自己的业务核心与企业资产服务。
 
-**开发进行中，尚未达到生产可用状态。** 当前提供真实 PostgreSQL 持久化的协作链路、模型配置与 pgvector 检索。DSH/Hermes 两个原生运行时及往返切换已通过本地测试模型链路；Nextcloud 企业身份、Talk 通信、来源关联项目、AI 个人回复草稿、Files 个人文本导入与个人 AI 解读已通过固定版本真实服务 CI（使用独立测试账号、本地模型协议服务）。已用真实 DeepSeek Flash 在本机完成 DSH 纪要/两条待办和 Hermes 同一成果续改的小样例，[结果与边界](docs/REAL-MODEL-SMOKE.md)。组织通讯录/部门/产品角色、通信管理和按重要程度/个人偏好合并的跟进提醒已接入当前开发批次；更多真实模型质量、通知/管理剩余项及公司部署验收仍待完成；Calendar 与复杂办公/媒体按基线后续阶段补齐。
+**首阶段软件交付收尾中，公司局域网服务器待准备。** 当前已实现聊天/项目、任务/成果、来源文档、模型配置、向量检索、方法复用、权限与执行恢复。阿里杭州私有试用中，真实 Nextcloud + DeepSeek + 双原生执行器已完成 22 次成功 Run，3 次失败保留并核对；仅使用合成资料。公司服务器尚未安装，不据此声称生产上线。Calendar、复杂办公/媒体按冻结基线后续阶段补齐。
+
+最新完整代码 `f77e7b7` 的 [Actions 41631467691](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41631467691) 三项全部成功，449 项检查，76 项 UI 无重试，18 项真实来源通过；新补[同名项目辨认与目标隔离](docs/PROJECT-IDENTITY.md)的完整 CI 另行核对。[当前交付状态](docs/DELIVERY-CHECKLIST.md#当前交付状态) · [真实云端联合记录](docs/CLOUD-TRIAL-ACCEPTANCE.md) · [公司内网安装](docs/DEPLOYMENT-INTRANET.md) · [软件交付入口](docs/DELIVERY.md)。
 
 跟进提醒新增工作区/项目/本人三层规则：全部变化、仅重要变化、静默和最短合并间隔；静默检查保留公共待通知变化，其他符合条件的同事仍可合并发布。人工、DSH/Hermes 共用版本与权限服务；个人配置不广播到项目。提醒模块 `1c67e314108247646c35ff0fd9ef3f5d12ce0000` 的 [CI 41301871596](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41301871596) 三项全部成功，共 372 项通过，含本人原任务找回、70 UI、14 真实来源及 4 容器场景。真实 DeepSeek 的 DSH 配置/Hermes 私有回读各一次成功，来源为合成服务、0 次来源写入；整体尚未交付。[功能、API、恢复与验证边界](docs/NOTIFICATION-POLICY.md)。 [桌面](docs/images/notification-policy-desktop.png) · [手机](docs/images/notification-policy-mobile.png)。
 
@@ -18,11 +20,11 @@
 
 历史消息搜索新增：企业消息可直接查询来源历史并分页、回到原消息，也可交给 DSH/Hermes 以相同范围执行；编辑/删除/过期、来源变更和员工失权会过滤或拒绝旧内容。实现 527c985 的 [CI 41430371512](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41430371512) 三项全部成功，共 425 检查（含 252 DB、74 UI、9 原生、16 真实来源、6 容器）；使用合成账号/资料与协议模型，仍非公司正式验收。[搜索契约与范围](docs/MESSAGE-SEARCH.md)。
 
-正式部署采用公司内网固定 IP，无需外部域名，通过内部 CA / IP SAN 提供 HTTPS；[内网安装说明](docs/DEPLOYMENT-INTRANET.md)包含产品与来源入口、证书和代理配置。阿里杭州临时环境的五个服务已运行，仅经私有 SSH 隧道验收：已完成两员工真实登录、四种文件解析和 DSH 纪要/首项分配，双执行器其余真实业务仍在续跑。[云端成功、失败及证据边界](docs/CLOUD-TRIAL-ACCEPTANCE.md) · [最新交付核对](docs/DELIVERY-CHECKLIST.md#当前交付状态)。当前临时环境和本机演示均不表示公司已经部署。
+正式部署采用公司局域网 Linux 服务器和固定内网 IP，无需外部域名，通过内部 CA / IP SAN 提供 HTTPS。用户已确认目标机“待准备”；阿里杭州仅经私有 SSH 隧道做技术验收。配套[来源/产品备份与独立恢复](docs/SOURCE-BACKUP-RESTORE.md)已完成，实际公司安装、证书信任和切流仍须在目标机核验。
 
 ## 实际界面
 
-执行详情新增实际回执和默认折叠的过程记录，退出或失权后清除旧内容；慢来源刷新防止请求重叠。[功能、验证与人工评阅材料](docs/RUN-DETAILS.md) · [桌面截图](docs/images/run-details-desktop.png) · [手机展开截图](docs/images/run-details-mobile.png)。该批已做本地行为验证，完整 CI 以对应提交为准。
+执行详情新增实际回执和默认折叠的过程记录，退出或失权后清除旧内容；慢来源刷新防止请求重叠。[功能、验证与人工评阅材料](docs/RUN-DETAILS.md) · [桌面截图](docs/images/run-details-desktop.png) · [手机展开截图](docs/images/run-details-mobile.png)。该批完整 CI 449 项通过；用户确认清晰度、日志按需展开和失败说明三项要求，反馈仅覆盖这些材料。
 
 下图为本地运行截图，使用明确标记的演示资料和真实 PostgreSQL 持久化。演示执行不调用真实模型。
 
@@ -34,11 +36,11 @@
 
 ## 技术架构
 
-[云端联合验收记录](docs/CLOUD-TRIAL-ACCEPTANCE.md)：真实两员工登录与四种文档已通过；DSH 纪要/两待办及第一项员工分配成功，第二项失败且未写入，正在修复诊断并续验。云端产品库的签名备份和新库恢复已通过 7 条活动密文检查。整批及公司验收仍未完成。
+[云端联合验收记录](docs/CLOUD-TRIAL-ACCEPTANCE.md)：两员工真实登录、四种办公文件解析、双引擎纪要/真实员工分配/往返修订/周报、静默与合并提醒、语义检索/私人解读、方法提炼/跨引擎复用/撤回均有实际回执。25 次 Run 中 22 成功、3 失败；28 条请求中 1 条用量未知，其余有报告，费用未定价。产品在途恢复与来源完整恢复分别保留证据，不代表公司采用。
 
 正式交付采用[公司内网 IP + 内部 CA](docs/DEPLOYMENT-INTRANET.md)，无需购买域名或开放公网；阿里杭州仅作临时技术验收。提供 Nginx 与来源地址叠加模板，公司环境尚待实证。
 
-新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `9be68e5` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322) 三项全部成功，共 438 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。阿里杭州的数据库、API、Worker、Nextcloud 和 CPU 向量服务均已启动并健康；冷登录并发修正 `2219311` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41572928983) 三项成功，共 439 项；实际云端已通过两员工登录、四种文档解析与私人隔离，联合业务及 WAN 冷加载仍在排障。产品联合链路及整机容量尚未验收，整体交付继续推进。
+新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `9be68e5` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322) 三项全部成功，共 438 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。阿里杭州的数据库、API、Worker、Nextcloud 和 CPU 向量服务均已启动并健康；冷登录并发修正 `2219311` 的 [CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41572928983) 三项成功，共 439 项；云端联合业务已续验通过，初次 WAN 冷加载性能与公司整机容量不能由这些业务样例推断；详见当前联合记录。
 
 云端 Hermes 安装工具下载超时已保留诊断；新增固定来源及其 PM 工具归档的可验证构建缓存，9 项 Python 下载/缓存保护测试通过。仍由上游 PM 复核并安装，缓存路径已通过 Linux 容器 CI，云端最终镜像已构建并核对 VCS 标签，真实业务联合验收继续推进。[准备命令与边界](runtime/hermes/build-context/README.md)。
 
@@ -71,7 +73,7 @@
 
 实际 DeepSeek Flash 的 DSH/Hermes 两次合成回读已成功，均记录到供应商用量；金额估算和员工声明与供应商账单分开。[用量口径、权限与迁移](docs/MODEL-USAGE.md) · [桌面界面](docs/images/model-usage-desktop.png) · [手机界面](docs/images/model-usage-mobile.png)。
 
-“设置 → 价格与预算”支持人工价格版本、按连接的 UTC 每日预算、请求预留和明确金额核对，人工/AI 共用服务。预算不足、未知费用或超预留会阻止后续请求；已发请求仍可能超额，不承诺供应商账单硬封顶。组织/项目跨连接预算和自动账单对账仍待实现。[契约与回退](docs/MODEL-SPENDING.md) · [桌面](docs/images/model-spending-desktop.png) · [手机](docs/images/model-spending-mobile.png)。
+“设置 → 价格与预算”支持人工价格版本、按连接的 UTC 每日预算、请求预留和明确金额核对，人工/AI 共用服务。预算不足、未知费用或超预留会阻止后续请求；已发请求仍可能超额，不承诺供应商账单硬封顶。组织/项目跨连接预算已实现并通过完整 CI，见 [企业预算](docs/ORGANIZATION-BUDGETS.md)；自动供应商账单对账不在本次已实现能力中。[契约与回退](docs/MODEL-SPENDING.md) · [桌面](docs/images/model-spending-desktop.png) · [手机](docs/images/model-spending-mobile.png)。
 
 最终代码 `22757e44b30dd4ca480e4f458f74e8dfd44f1bec` 的 [CI 41040063081](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41040063081) 三个 job 全部成功，210 项首轮通过：25 单元/配置、3 下载器、8 解析、118 数据库、3 原生执行器、40 UI、9 真实来源、4 容器；另含类型、构建、两个 npm 审计与冻结包。模型、单价、金额声明和企业资料均为明确合成样例，不代表供应商账单或公司上线验收。
 

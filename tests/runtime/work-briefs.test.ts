@@ -55,6 +55,11 @@ test(
         "Native work brief",
         "Maintain understanding independently of the engine",
       );
+      const sameNameProject = await service.createProject(
+        subject,
+        project.name,
+        "A separate destination sharing only the visible name",
+      );
       const address = fixture.server.address() as { port: number };
       const model = await service.saveModel(subject, {
         name: "Native brief model fixture",
@@ -137,10 +142,30 @@ test(
         briefRef: { id: b.briefId, version: b.version },
         idempotencyKey: randomUUID(),
       });
+      const beforeWrongProject = fixture.calls();
+      for (const engine of ["dsh", "hermes"] as const)
+        await assert.rejects(
+          service.startRun(subject, {
+            ...input,
+            conversationId: sameNameProject.conversationId,
+            engine,
+            idempotencyKey: randomUUID(),
+          }),
+        );
+      assert.equal(fixture.calls(), beforeWrongProject);
       const execution = await service.startRun(subject, input);
       await processor.process(execution.id);
       const result = await service.getRun(subject, execution.id);
       assert.equal(result.state, "succeeded", result.error);
+      assert.equal(
+        (
+          await db.pool.query(
+            "SELECT count(*)::int AS n FROM cw_artifacts WHERE project_id=$1",
+            [sameNameProject.id],
+          )
+        ).rows[0].n,
+        0,
+      );
       assert.ok(
         result.contextRefs.includes(
           "work-brief:" + b.briefId + "@" + b.version,

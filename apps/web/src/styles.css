@@ -215,6 +215,21 @@ p {
   display: grid;
   gap: 4px;
 }
+.project-list .ambiguous-project {
+  align-items: flex-start;
+}
+.project-disambiguation {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.project-identifier {
+  display: block;
+  color: #63718b;
+}
 .main-pane {
   display: flex;
   flex-direction: column;

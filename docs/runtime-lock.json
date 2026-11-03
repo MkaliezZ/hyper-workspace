@@ -648,7 +648,9 @@
     "finalBusinessRuns": 14,
     "finalSupplierRequests": 14,
     "allThreeRoundsSupplierRequests": 23,
-    "incompleteUsageRuns": ["9bd45c77-6c11-4042-b40b-6f44e4986be7"],
+    "incompleteUsageRuns": [
+      "9bd45c77-6c11-4042-b40b-6f44e4986be7"
+    ],
     "costStatus": "unpriced; no invoice or zero-cost claim",
     "firstFailures": [
       "Hermes placed source deadlines in task titles while canonical dueDate was null; retained original assertions and clarified generic tool guidance.",
@@ -795,7 +797,12 @@
     "limits": "Eight fixed short Chinese questions plus one independent synthetic long-tail check; 400 chars/512 tokens explicit reject, no query prefix, no general long-document/RAG/company claim",
     "optionalOnly": true,
     "dependencies": "Separate optional lock; transformers 3.8.1, ONNX node 1.23.2, sharp 0.35.5 and adm-zip 0.6.1; official audit zero; root dependencies unchanged",
-    "modelRequestsByRound": [16, 16, 18, 18],
+    "modelRequestsByRound": [
+      16,
+      16,
+      18,
+      18
+    ],
     "longDocument": {
       "characters": 2574,
       "chunks": 8,
@@ -946,7 +953,10 @@
     "worker": {
       "defaultConcurrency": 2,
       "pilotConcurrency": 1,
-      "allowedConcurrency": [1, 8]
+      "allowedConcurrency": [
+        1,
+        8
+      ]
     },
     "evidence": {
       "localUnitPassed": 63,
@@ -985,7 +995,11 @@
       "status": "linux-container-ci-and-cloud-release-build-verified",
       "source": "immutable Hermes pm/lock.json",
       "cli": "python3 runtime/hermes/bootstrap_cache.py --prepare-build",
-      "archives": ["Hermes source", "Linux amd64 uv", "Linux amd64 PM Python"],
+      "archives": [
+        "Hermes source",
+        "Linux amd64 uv",
+        "Linux amd64 PM Python"
+      ],
       "validation": "Native PM continues to hash, probe and install; no installed receipts copied or fabricated",
       "localTests": "9 Python tests passed (3 existing downloader and 6 cache protections)",
       "upstreamPinsChanged": false
@@ -1092,7 +1106,17 @@
   },
   "runDetails": {
     "date": "2026-11-03",
-    "mapping": ["P04", "P07", "P08", "C05", "A09", "A10", "E04", "E08", "E10"],
+    "mapping": [
+      "P04",
+      "P07",
+      "P08",
+      "C05",
+      "A09",
+      "A10",
+      "E04",
+      "E08",
+      "E10"
+    ],
     "contract": "docs/RUN-DETAILS.md",
     "historyEndpoint": "GET /api/runs/:id/history?after=0",
     "pageSize": 100,
@@ -1107,7 +1131,55 @@
       "typecheck": "passed",
       "build": "passed"
     },
-    "fullCI": "pending for new implementation commit",
-    "humanLogAndFailureReview": "pending; existing minutes clarity feedback retains its original scope"
+    "fullCI": {
+      "commit": "f77e7b72a7e269b9605be9f0d108ab372138b1c1",
+      "runId": 41631467691,
+      "jobs": "all success",
+      "checks": 449,
+      "ui": 76,
+      "uiRetries": 0,
+      "source": 18
+    },
+    "humanLogAndFailureReview": "User answered both satisfied on 2026-11-03; together with prior minutes clarity all three E08 criteria have scoped human feedback, not company adoption."
+  },
+  "projectIdentity": {
+    "mapping": [
+      "P02",
+      "P04",
+      "P07",
+      "C01",
+      "C02",
+      "C05",
+      "A02",
+      "A06",
+      "A10",
+      "E02",
+      "E04",
+      "E09",
+      "E10"
+    ],
+    "contract": "docs/PROJECT-IDENTITY.md",
+    "local": {
+      "browser": "1 passed, 9.0s, no retries; failed before fix",
+      "native": "1 extended test passed, 42.3s, real SDKs with protocol model",
+      "typecheck": "passed",
+      "build": "passed"
+    },
+    "newCommitCI": "pending"
+  },
+  "cloudJointAcceptance": {
+    "date": "2026-11-03",
+    "source": "real pinned Nextcloud with synthetic employees/content",
+    "models": "authorized personal DeepSeek Flash and local CPU embedding",
+    "runs": 25,
+    "succeeded": 22,
+    "failed": 3,
+    "requests": 28,
+    "reported": 27,
+    "unknown": 1,
+    "priced": 0,
+    "companyDeployment": "company LAN Linux host/IP pending; cloud private validation only",
+    "contract": "docs/CLOUD-TRIAL-ACCEPTANCE.md",
+    "sourceRecovery": "docs/SOURCE-BACKUP-RESTORE.md"
   }
 }

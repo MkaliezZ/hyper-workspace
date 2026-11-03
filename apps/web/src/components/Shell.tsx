@@ -45,6 +45,9 @@ export function Navigation({
   onLogout: () => void;
   open: boolean;
 }) {
+  const projectNames = new Map<string, number>();
+  for (const project of view.projects)
+    projectNames.set(project.name, (projectNames.get(project.name) ?? 0) + 1);
   return (
     <>
       <aside className="app-rail" aria-label="应用导航">
@@ -113,18 +116,39 @@ export function Navigation({
           </button>
         </div>
         <div className="project-list">
-          {view.projects.map((p) => (
-            <button
-              key={p.id}
-              className={
-                "nav-item " + (p.id === view.project.id ? "selected" : "")
-              }
-              onClick={() => onProject(p)}
-            >
-              <Folder size={20} />
-              <span>{p.name}</span>
-            </button>
-          ))}
+          {view.projects.map((p) => {
+            const ambiguous = (projectNames.get(p.name) ?? 0) > 1;
+            return (
+              <button
+                key={p.id}
+                aria-label={
+                  ambiguous
+                    ? `${p.name} · ${p.goal} · 项目编号 ${p.id}`
+                    : undefined
+                }
+                title={ambiguous ? `${p.goal}\n项目编号 ${p.id}` : undefined}
+                className={
+                  "nav-item " +
+                  (p.id === view.project.id ? "selected " : "") +
+                  (ambiguous ? "ambiguous-project" : "")
+                }
+                onClick={() => onProject(p)}
+              >
+                <Folder size={20} />
+                <span>
+                  {p.name}
+                  {ambiguous ? (
+                    <small className="project-disambiguation">
+                      {p.goal}
+                      <span className="project-identifier">
+                        编号 {p.id.slice(0, 8)}
+                      </span>
+                    </small>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </aside>
     </>
