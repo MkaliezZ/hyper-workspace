@@ -10,6 +10,61 @@ if (!source || !password || !process.env.TEST_DATABASE_URL?.endsWith("_test"))
 test.afterAll(async () => {
   await db.close();
 });
+test("Cold source login assets on a slow connection leave capacity for device-flow polling", async ({
+  browser,
+}) => {
+  test.setTimeout(180000);
+  const context = await browser.newContext({ locale: "en-US" });
+  try {
+    const page = await context.newPage(),
+      pollFailures: number[] = [];
+    page.on("response", (response) => {
+      if (
+        response.url().endsWith("/api/auth/nextcloud/poll") &&
+        response.status() >= 400
+      )
+        pollFailures.push(response.status());
+    });
+    // Real source assets and HTTP connections; no fulfilled requests or synthetic login response.
+    let throttle: Promise<void> | undefined;
+    context.on("page", (popup) => {
+      throttle = (async () => {
+        const cdp = await context.newCDPSession(popup);
+        await cdp.send("Network.enable");
+        await cdp.send("Network.emulateNetworkConditions", {
+          offline: false,
+          latency: 100,
+          downloadThroughput: 64 * 1024,
+          uploadThroughput: 64 * 1024,
+        });
+      })();
+    });
+    await page.goto(origin);
+    const opened = page.waitForEvent("popup");
+    await page
+      .getByRole("button", { name: "使用企业账号登录", exact: true })
+      .click();
+    const popup = await opened;
+    await throttle;
+    await popup
+      .getByRole("link", { name: "Log in", exact: true })
+      .or(popup.getByRole("button", { name: "Log in", exact: true }))
+      .click({ timeout: 120000 });
+    await popup.locator('input[name="user"]').fill("employee-one");
+    await popup.locator('input[name="password"]').fill(password);
+    await popup.locator('form[name="login"] button[type="submit"]').click();
+    await popup
+      .getByRole("button", { name: "Grant access", exact: true })
+      .click();
+    await expect(
+      page.getByRole("navigation", { name: "工作区导航" }),
+    ).toBeVisible({ timeout: 30000 });
+    expect(pollFailures).toEqual([]);
+    expect((await (await view(context)).json()).user.demo).toBe(false);
+  } finally {
+    await context.close();
+  }
+});
 test("Real Nextcloud Login Flow v2 returns a source-backed product session and persists a discussion", async ({
   browser,
 }) => {

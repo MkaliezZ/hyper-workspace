@@ -3,6 +3,8 @@ set -euo pipefail
 # Isolated synthetic source only. Product state still uses PostgreSQL + pgvector.
 : "${NC_TEST_PASSWORD:?Synthetic CI password required}"
 docker run --detach --name hyper-nextcloud-test --publish 127.0.0.1:8090:80 \
+  --memory 640m --cpus 1 \
+  --mount "type=bind,src=$PWD/deploy/nextcloud-small.conf,dst=/etc/apache2/mods-enabled/mpm_prefork.conf,readonly" \
   --env NEXTCLOUD_ADMIN_USER=nc-admin --env NEXTCLOUD_ADMIN_PASSWORD="$NC_TEST_PASSWORD" \
   --env SQLITE_DATABASE=nextcloud-ci --env NEXTCLOUD_TRUSTED_DOMAINS=127.0.0.1 \
   --env OVERWRITEHOST=127.0.0.1:8090 --env OVERWRITEPROTOCOL=http \
