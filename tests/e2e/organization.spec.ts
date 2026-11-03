@@ -57,7 +57,9 @@ test("Organization UI saves departments with the shared manual/AI service, exact
   await dialog
     .getByRole("button", { name: "AI 保存组织操作", exact: true })
     .click();
-  await expect(panel.getByRole("status")).toContainText("AI 操作已有实际回执");
+  await expect(
+    panel.getByRole("status").filter({ hasText: "AI 操作已有实际回执" }),
+  ).toContainText("AI 操作已有实际回执");
   await expect(row).toContainText(name);
   await page.screenshot({
     path: "/tmp/hyper-organization-desktop.png",

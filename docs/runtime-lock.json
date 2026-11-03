@@ -952,34 +952,34 @@
       "localUnitPassed": 63,
       "typecheck": "passed",
       "newContainerTests": "7 passed in CI 41557078464 including the source database isolation and unchanged-password case",
-      "cloudApplicationDeployment": "Five actual cloud services healthy; image 9be68e5 with source concurrency configuration 2219311. Owned real admin/peer login, four formats and private visibility passed in first composite; stopped before first business Run; later WAN login timeout retained.",
+      "cloudApplicationDeployment": "Five actual cloud services healthy after 77a8bcb-app incremental application update, with verified 9be68e5 runtime layers and compiled processor hashes; host source configuration 99f327d KeepAlive Off. Two actual identities, four formats/private visibility and two DSH business Runs passed; remaining live composite pending.",
       "formalCompanyAcceptance": false,
       "localBuild": "passed"
     },
     "ci": {
-      "commit": "4eadcd535a2a8ccd2b40b5ea761bf65b39ff0e79",
-      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41614010759",
+      "commit": "99f327d90b318cd065672a8e5043b00d998d9299",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41624169417",
       "allJobs": "success",
-      "checks": 443,
+      "checks": 445,
       "counts": {
         "unit": 63,
         "downloaderAndCache": 9,
         "extraction": 8,
-        "database": 252,
+        "database": 253,
         "native": 9,
         "ui": 74,
-        "nextcloud": 17,
+        "nextcloud": 18,
         "deployment": 7,
         "tlsProxy": 4
       },
-      "verification": "All three job logs inspected: 439 prior layer checks and 4 new isolated IP TLS/proxy checks; source 17 passed in 21.5m. Real cloud supplier attempt separately recorded, not full acceptance."
+      "verification": "All three completed job logs inspected. 74 UI passed without retries; 18 real source cases passed in 20.0m, including idle connection exhaustion regression. Not full real-supplier or company acceptance."
     },
     "buildTransport": {
       "debianDefault": "https://deb.debian.org",
       "optionalMirror": "https://mirrors.tuna.tsinghua.edu.cn",
       "signatureAndPackageHashChecks": "retained",
       "scope": "container build only; not host repository or network changes",
-      "validation": "Final cloud application image built and VCS label verified; public dependency hashes and native PM checks retained."
+      "validation": "Initial complete 9be68e5 cloud image built and verified. Later canonical full 77a8bcb build failed: upstream native PM uv sync dependency download exceeded 1800 seconds. Incremental 77a8bcb-app retains verified runtime layers; CI 77a8bcb full build passed. No dependency pins or integrity checks relaxed."
     },
     "hermesPublicBootstrapCache": {
       "status": "linux-container-ci-and-cloud-release-build-verified",
@@ -999,9 +999,9 @@
     },
     "cloudBusiness": {
       "report": "docs/CLOUD-TRIAL-ACCEPTANCE.md",
-      "attemptedRuns": 3,
-      "succeeded": 2,
-      "failed": 1,
+      "attemptedRuns": 5,
+      "succeeded": 3,
+      "failed": 2,
       "failedRun": "0012a26f-3e96-4a7b-8d77-66e5cf8bcee6",
       "failedRunActions": 0,
       "failedTaskVersion": 1,
@@ -1009,13 +1009,20 @@
       "staticDelivery": "Three hash-verified original public JavaScript files cached; HTML, authorization and all business APIs live",
       "fullCompositeAcceptance": "pending",
       "subsequentFailedRun": "19d03d6b-e4cb-4a91-a57f-90a7be0cac8d",
-      "subsequentFailure": "Temporary source unavailability; model requests 0 and actions 0; current task unchanged"
+      "subsequentFailure": "Temporary source unavailability; model requests 0 and actions 0; current task unchanged",
+      "latestSuccessfulRun": "efaa5188-2cd8-4786-8702-1697da6a7b4b",
+      "latestSuccessfulWorkflow": "dsh / assign_task",
+      "latestSuccessfulUsage": {
+        "inputTokens": 2843,
+        "outputTokens": 109,
+        "status": "reported"
+      }
     },
     "hostAbortDiagnostic": {
       "status": "deployed-incrementally-base-layers-and-compiled-bytes-verified",
       "beforeFix": "Focused test reproduced a host deadline being masked by Runtime connection closed",
-      "afterFix": "10 policy tests; 250/253 full integration first pass, missing local PG binary config caused 3 backup failures; those 3 rerun passed with existing PG17 client. 63 units, type/build passed.",
-      "sourceAccessLog": "Fixed-image Apache syntax passed; actual Login Flow access-log token assertion added, CI pending",
+      "afterFix": "10 policy tests; 250/253 full integration first pass, missing local PG binary config caused 3 backup failures; those 3 rerun passed with existing PG17 client. 63 units, type/build passed. Complete 253 database checks subsequently passed in CI.",
+      "sourceAccessLog": "Real Login Flow privacy assertion passed in CI 41619644518 and 41624169417; fixed status/duration format omits authorization URLs and headers.",
       "workerObservedMemoryPeakBytes": 236294144,
       "workerOomKills": 0
     },
@@ -1050,7 +1057,13 @@
         "worker": 40,
         "failed": 0
       },
-      "newRegression": "fresh source request deadline 3 seconds; CI pending"
+      "newRegression": "Actual fixed-image regression passed in 41624169417; all 18 source tests passed in 20.0m."
+    },
+    "uiReceiptLocator": {
+      "observed": "77a8bcb CI: one organization UI case retried because two legitimate role=status elements existed",
+      "repair": "Filter the status by exact receipt text; preserves the independent directory-refresh status",
+      "localVerification": "One focused Playwright test passed in 11.3 seconds without retries",
+      "laterOriginalLocatorCI": "99f327d CI: all 74 UI passed without retries; locator repair prevents the observed timing ambiguity"
     }
   },
   "npmLicenseInventory": {
