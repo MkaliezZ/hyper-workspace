@@ -906,7 +906,7 @@
     }
   },
   "privateTrialDeployment": {
-    "status": "implemented-awaiting-container-verification",
+    "status": "runtime-packaging-ci-verified-cloud-business-acceptance-pending",
     "date": "2026-11-03",
     "contract": "docs/DEPLOYMENT-PRIVATE-TRIAL.md",
     "overlays": [
@@ -957,13 +957,13 @@
       "localBuild": "passed"
     },
     "ci": {
-      "commit": "8803f0f36c6fa6e91fe76a4f084b91c4fa7d6d1f",
-      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41557078464",
+      "commit": "9be68e5ecc7a9c35c5224a313e2be6a070d351c9",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322",
       "allJobs": "success",
-      "checks": 432,
+      "checks": 438,
       "counts": {
         "unit": 63,
-        "downloader": 3,
+        "downloaderAndCache": 9,
         "extraction": 8,
         "database": 252,
         "native": 9,
@@ -971,7 +971,7 @@
         "nextcloud": 16,
         "deployment": 7
       },
-      "verification": "All three completed job logs inspected 2026-11-03. Source/model protocol fixtures; Linux standalone CPU inference recorded separately. Cloud application and formal company acceptance remain unverified."
+      "verification": "All three completed job logs inspected 2026-11-03. Source/model protocol fixtures; standalone Linux CPU inference separate. Cloud business and company acceptance pending."
     },
     "buildTransport": {
       "debianDefault": "https://deb.debian.org",
@@ -981,7 +981,7 @@
       "validation": "Mirror full 8790396-byte Packages.xz downloaded in 6486ms on selected pilot; updated application build pending"
     },
     "hermesPublicBootstrapCache": {
-      "status": "implemented-awaiting-Linux-build-verification",
+      "status": "linux-container-ci-verified-cloud-release-build-pending",
       "source": "immutable Hermes pm/lock.json",
       "cli": "python3 runtime/hermes/bootstrap_cache.py --prepare-build",
       "archives": ["Hermes source", "Linux amd64 uv", "Linux amd64 PM Python"],

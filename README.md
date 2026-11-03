@@ -32,9 +32,9 @@
 
 ## 技术架构
 
-新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `8803f0f` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41557078464) 三项全部成功，共 432 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。完整云端应用仍在构建，产品联合链路及整机容量尚未验收，整体交付继续推进。
+新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，公开模型按摘要白名单构建，受限 Worker 并发为 1。实现 `9be68e5` 的 [完整 CI](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41562711322) 三项全部成功，共 438 项，包含新增来源隔离、重复初始化与拒绝改密。Linux 向量容器另实测 512 维及 8×400 字符批处理通过；观察峰值约 379 MiB，试用上限调为 512 MiB。完整云端应用仍在构建，产品联合链路及整机容量尚未验收，整体交付继续推进。
 
-云端 Hermes 安装工具下载超时已保留诊断；新增固定来源及其 PM 工具归档的可验证构建缓存，9 项 Python 下载/缓存保护测试通过。仍由上游 PM 复核并安装，Linux 缓存构建与本批完整 CI 分别验证。[准备命令与边界](runtime/hermes/build-context/README.md)。
+云端 Hermes 安装工具下载超时已保留诊断；新增固定来源及其 PM 工具归档的可验证构建缓存，9 项 Python 下载/缓存保护测试通过。仍由上游 PM 复核并安装，缓存路径已通过 Linux 容器 CI，云端最终镜像和真实业务联合验收继续推进。[准备命令与边界](runtime/hermes/build-context/README.md)。
 
 - React + TypeScript + Vite：聊天、项目上下文、任务、成果和设置。
 - NestJS 模块化业务核心 + 独立执行 Worker。
