@@ -3,6 +3,7 @@ import { source, password, origin, login, group, view } from "./helpers";
 import { Database } from "../../apps/api/src/db/database.js";
 import { Vault } from "../../apps/api/src/core/credentials.js";
 import { execFileSync } from "node:child_process";
+import { Agent, get } from "node:http";
 const db = new Database(process.env.TEST_DATABASE_URL);
 if (!source || !password || !process.env.TEST_DATABASE_URL?.endsWith("_test"))
   throw new Error(
@@ -10,6 +11,53 @@ if (!source || !password || !process.env.TEST_DATABASE_URL?.endsWith("_test"))
   );
 test.afterAll(async () => {
   await db.close();
+});
+test("Idle HTTP clients leave a bounded source worker pool available for fresh identity traffic", async () => {
+  const endpoint = source + "/status.php",
+    agent = new Agent({ keepAlive: true, maxSockets: 24, maxFreeSockets: 24 });
+  let completed = 0,
+    release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const clients = Array.from(
+    { length: 24 },
+    () =>
+      new Promise<void>((resolve) => {
+        const request = get(endpoint, { agent }, (response) => {
+          response.resume();
+          response.once("end", () => {
+            if (++completed === 8) release();
+            resolve();
+          });
+        });
+        request.setTimeout(12000, () => request.destroy());
+        request.once("error", () => resolve());
+        request.once("close", () => resolve());
+      }),
+  );
+  let gateTimeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      gate,
+      new Promise<never>((_resolve, reject) => {
+        gateTimeout = setTimeout(
+          () =>
+            reject(new Error("Source clients did not reach the bounded gate.")),
+          12000,
+        );
+      }),
+    ]);
+    const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(3000),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).installed).toBe(true);
+  } finally {
+    clearTimeout(gateTimeout);
+    agent.destroy();
+    await Promise.allSettled(clients);
+  }
 });
 test("Cold source login assets on a slow connection leave capacity for device-flow polling", async ({
   browser,

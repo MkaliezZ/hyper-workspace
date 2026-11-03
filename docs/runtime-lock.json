@@ -1007,10 +1007,12 @@
       "failedTaskVersion": 1,
       "failedModelUsage": "HTTP 200 / transport unknown / usage unknown; not assumed free",
       "staticDelivery": "Three hash-verified original public JavaScript files cached; HTML, authorization and all business APIs live",
-      "fullCompositeAcceptance": "pending"
+      "fullCompositeAcceptance": "pending",
+      "subsequentFailedRun": "19d03d6b-e4cb-4a91-a57f-90a7be0cac8d",
+      "subsequentFailure": "Temporary source unavailability; model requests 0 and actions 0; current task unchanged"
     },
     "hostAbortDiagnostic": {
-      "status": "local-regression-fixed-cloud-retest-pending",
+      "status": "deployed-incrementally-base-layers-and-compiled-bytes-verified",
       "beforeFix": "Focused test reproduced a host deadline being masked by Runtime connection closed",
       "afterFix": "10 policy tests; 250/253 full integration first pass, missing local PG binary config caused 3 backup failures; those 3 rerun passed with existing PG17 client. 63 units, type/build passed.",
       "sourceAccessLog": "Fixed-image Apache syntax passed; actual Login Flow access-log token assertion added, CI pending",
@@ -1028,6 +1030,27 @@
       "externalBusinessSystemsCalled": false,
       "servicesStarted": false,
       "productionPromoted": false
+    },
+    "sourceIdleConnections": {
+      "source": "https://httpd.apache.org/docs/2.4/misc/perf-tuning.html",
+      "clients": 24,
+      "before": {
+        "timeoutMs": 10009,
+        "timedOut": true
+      },
+      "after": {
+        "status": 200,
+        "milliseconds": 804
+      },
+      "change": "KeepAlive Off on dedicated internal source HTTP backend; employee TLS proxy independent",
+      "modelCalls": 0,
+      "businessWrites": 0,
+      "liveScopeChecks": {
+        "api": 40,
+        "worker": 40,
+        "failed": 0
+      },
+      "newRegression": "fresh source request deadline 3 seconds; CI pending"
     }
   },
   "npmLicenseInventory": {
