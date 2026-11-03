@@ -8,7 +8,7 @@
 
 跟进提醒新增工作区/项目/本人三层规则：全部变化、仅重要变化、静默和最短合并间隔；静默检查保留公共待通知变化，其他符合条件的同事仍可合并发布。人工、DSH/Hermes 共用版本与权限服务；个人配置不广播到项目。提醒模块 `1c67e314108247646c35ff0fd9ef3f5d12ce0000` 的 [CI 41301871596](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41301871596) 三项全部成功，共 372 项通过，含本人原任务找回、70 UI、14 真实来源及 4 容器场景。真实 DeepSeek 的 DSH 配置/Hermes 私有回读各一次成功，来源为合成服务、0 次来源写入；整体尚未交付。[功能、API、恢复与验证边界](docs/NOTIFICATION-POLICY.md)。 [桌面](docs/images/notification-policy-desktop.png) · [手机](docs/images/notification-policy-mobile.png)。
 
-新增可运行的数据库备份、签名校验与随机新库恢复检查：保留产品资产/向量/密文/回执，隔离未完成 Run、暂停定时任务并清理旧登录。原库不覆盖，恢复库不自动投入生产。提交 `9c062efa` 的 [CI 41321121462](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41321121462) 三项全部成功，383 项通过，包含真实 Compose 备份/新库恢复验证。[命令、范围与验收边界](docs/BACKUP-RESTORE.md)。
+新增可运行的数据库备份、签名校验与随机新库恢复检查：保留产品资产/向量/密文/回执，隔离未完成 Run、暂停定时任务并清理旧登录。原库不覆盖，恢复库不自动投入生产。提交 `9c062efa` 的 [CI 41321121462](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41321121462) 三项全部成功，383 项通过，包含真实 Compose 备份/新库恢复验证。[命令、范围与验收边界](docs/BACKUP-RESTORE.md)。2026-11-02 又对现用 042 开发库实做新库恢复：归档校验及 58 条活动密文检查通过，原库未切换。
 
 2026-11-01 真实 DeepSeek 双执行器业务小样例：14 次实际请求完成纪要、结构化日期、4 次明确员工 ID 指派、同成果往返续改，以及静默解除后仅一条合并提醒；来源为合成 HTTP 服务，0 来源写入。首轮日期字段丢失已修复，首轮失败和 1 条不完整用量保留，费用仍未定价。实现 `0a63287` 的 [CI 41323891692](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41323891692) 三项全部成功，共 386 项通过（含 8 原生、70 UI、14 真实来源和 5 容器）；未完成公司或人工量规验收。[可复查报告、输出原文与复用脚本](docs/REAL-BUSINESS-ACCEPTANCE.md)。
 
@@ -17,6 +17,8 @@
 真实方法质量反馈已收到：用户确认候选与复用草稿符合该项质量要求；相关修正和结算竞态的 [CI 41422563963](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41422563963) 三项全部成功。本机开源 embedding 已安装为登录服务，并保存、实际验证“本机中文向量”连接，无外部按次费用；文档按 400 字符容量完整分块。固定检索题 Top1 7/8、Recall@3 8/8，另通过 2574 字符长文末尾检索。容量/常驻实现 cbbf8b6 的 [CI 41426430075](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41426430075) 三项全部成功，共 418 检查；来源项首次拉镜像 502，重试后 15 个真实来源用例通过。不代表整体验收。[本机部署与限制](docs/LOCAL-EMBEDDING.md) · [方法输出](docs/REAL-METHODS-ACCEPTANCE.md) · [检索证据](docs/SEMANTIC-QUALITY.md)。
 
 历史消息搜索新增：企业消息可直接查询来源历史并分页、回到原消息，也可交给 DSH/Hermes 以相同范围执行；编辑/删除/过期、来源变更和员工失权会过滤或拒绝旧内容。实现 527c985 的 [CI 41430371512](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41430371512) 三项全部成功，共 425 检查（含 252 DB、74 UI、9 原生、16 真实来源、6 容器）；使用合成账号/资料与协议模型，仍非公司正式验收。[搜索契约与范围](docs/MESSAGE-SEARCH.md)。
+
+当前交付核对已同步 [最新状态与剩余验收](docs/DELIVERY-CHECKLIST.md#当前交付状态)：本机演示界面、CI 中的真实来源、实际模型与公司部署分别记录。正在准备本机持久化 Nextcloud 通信/文件试用环境，以便在同一套环境中验证这些链路；来源就绪前不把当前演示页面表述为公司 IM 已部署。
 
 ## 实际界面
 
@@ -29,6 +31,8 @@
 导航、项目及标签切换采用约 180ms 淡入和轻微上移；不会因后台刷新反复播放，开启系统“减少动态效果”时关闭。
 
 ## 技术架构
+
+新增[独立 Nextcloud 与 CPU 向量服务的私有试用部署](docs/DEPLOYMENT-PRIVATE-TRIAL.md)：来源与产品分库分角色，API/Worker 不持有来源管理员密码，公开模型按摘要白名单构建；小内存配置将单 Worker 并发限制为 1。2026-11-03 本地 63 单元、类型检查通过，新增来源隔离容器用例待 CI；云端已准备 Docker，应用健康和容量尚未验证，整体交付仍在推进。
 
 - React + TypeScript + Vite：聊天、项目上下文、任务、成果和设置。
 - NestJS 模块化业务核心 + 独立执行 Worker。

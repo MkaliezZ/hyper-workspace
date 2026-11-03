@@ -21,6 +21,74 @@ function compose(...command: string[]) {
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
+test("Optional source database initialization is idempotent, cannot read product data and refuses credential rotation", async () => {
+  test.setTimeout(120000);
+  const previous = process.env.HYPER_NEXTCLOUD_DB_PASSWORD;
+  const password =
+    randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", "");
+  const run = (...command: string[]) =>
+    compose(
+      "run",
+      "--rm",
+      "--no-deps",
+      "-e",
+      "HYPER_NEXTCLOUD_DB_PASSWORD",
+      "initialize",
+      "node",
+      ...command,
+    );
+  try {
+    process.env.HYPER_NEXTCLOUD_DB_PASSWORD = password;
+    for (let i = 0; i < 2; i++) {
+      const result = JSON.parse(
+        run("/app/scripts/deploy-nextcloud.mjs", "--execute"),
+      );
+      expect(result).toMatchObject({
+        status: "ready",
+        administratorRoleGranted: false,
+        sourceTablesModified: false,
+      });
+    }
+    const probe = `
+      import {Client} from 'pg';
+      const url=new URL(process.env.DATABASE_URL);url.username='hyper_nextcloud_source';url.password=process.env.HYPER_NEXTCLOUD_DB_PASSWORD;
+      const sourceBusiness=new Client({connectionString:url.toString()});let denied='';
+      try{await sourceBusiness.connect()}catch(e){denied=e.code}finally{await sourceBusiness.end()}
+      if(denied!=='42501')throw Error('Source identity could connect to product data');
+      url.pathname='/hyper_nextcloud_source';const source=new Client({connectionString:url.toString()});await source.connect();
+      let role;try{
+        role=(await source.query("SELECT current_user AS name,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=current_user")).rows[0];
+        await source.query('CREATE TEMP TABLE ownership_probe(value text)');
+      }finally{await source.end()}
+      url.username='hyper_runtime';url.password=process.env.DB_RUNTIME_PASSWORD;const productSource=new Client({connectionString:url.toString()});let reverse='';
+      try{await productSource.connect()}catch(e){reverse=e.code}finally{await productSource.end()}
+      process.stdout.write(JSON.stringify({denied,reverse,role}));`;
+    const result = JSON.parse(run("--input-type=module", "-e", probe));
+    expect(result).toEqual({
+      denied: "42501",
+      reverse: "42501",
+      role: {
+        name: "hyper_nextcloud_source",
+        rolsuper: false,
+        rolcreatedb: false,
+        rolcreaterole: false,
+        rolreplication: false,
+        rolbypassrls: false,
+      },
+    });
+    process.env.HYPER_NEXTCLOUD_DB_PASSWORD = "cd".repeat(32);
+    expect(() =>
+      run("/app/scripts/deploy-nextcloud.mjs", "--execute"),
+    ).toThrow();
+    process.env.HYPER_NEXTCLOUD_DB_PASSWORD = password;
+    expect(
+      JSON.parse(run("/app/scripts/deploy-nextcloud.mjs", "--execute")).status,
+    ).toBe("ready");
+  } finally {
+    if (previous === undefined) delete process.env.HYPER_NEXTCLOUD_DB_PASSWORD;
+    else process.env.HYPER_NEXTCLOUD_DB_PASSWORD = previous;
+  }
+});
 async function session(context: any) {
   // Issue a synthetic demo session from the API container's own loopback. Never weaken the public login check.
   const raw = compose(
@@ -103,7 +171,7 @@ test("API and Worker use the restricted role without administrator credentials o
         for(const sql of ["ALTER TABLE cw_users ADD COLUMN forbidden text","SELECT * FROM pg_authid","SELECT pg_read_file('postgresql.conf')"]){
           try{await pool.query(sql);denied.push('unexpected-success')}catch(error){denied.push(error.code)}
         }
-        process.stdout.write(JSON.stringify({role,denied,adminEnvironment:'DB_PASSWORD' in process.env || 'DB_RUNTIME_PASSWORD' in process.env}));
+        process.stdout.write(JSON.stringify({role,denied,adminEnvironment:['DB_PASSWORD','DB_RUNTIME_PASSWORD','HYPER_NEXTCLOUD_DB_PASSWORD','NEXTCLOUD_ADMIN_PASSWORD','HYPER_NEXTCLOUD_ADMIN_PASSWORD'].some(key=>key in process.env)}));
       }finally{await pool.end()}
     `,
       ),

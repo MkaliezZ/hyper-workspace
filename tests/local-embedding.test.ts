@@ -15,6 +15,28 @@ import {
   createLocalEmbeddingConfig,
   readLocalEmbeddingConfig,
 } from "../runtime/evaluations/local-config.mjs";
+import { embeddingRuntime } from "../runtime/evaluations/embedding-runtime.mjs";
+
+test("Embedding rejects unrelated listener addresses before reading model files or starting inference", async () => {
+  await assert.rejects(
+    embeddingRuntime({
+      cache: "/model-must-not-be-loaded",
+      credential: "ab".repeat(32),
+      host: "169.254.169.254",
+    }),
+    /listener must use loopback/,
+  );
+});
+test("Wildcard container binding cannot use the public evaluation credential", async () => {
+  await assert.rejects(
+    embeddingRuntime({
+      cache: "/model-must-not-be-loaded",
+      credential: "synthetic-local-embedding-evaluation",
+      host: "0.0.0.0",
+    }),
+    /private 256-bit service credential/,
+  );
+});
 
 test("Local model configuration creates a private random capability and repeated initialization preserves it", async () => {
   const dir = await mkdtemp(join(tmpdir(), "hyper-local-model-")),

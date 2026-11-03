@@ -21,6 +21,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { PgBoss } from "pg-boss";
+import { workerRunConcurrency } from "./worker-options.js";
 import {
   TaskInput,
   TaskRewrite,
@@ -94,7 +95,10 @@ export class RunProcessor {
       this.consumeSchedules = true;
       await this.boss.work<{ runId: string }>(
         "hyper-run",
-        { pollingIntervalSeconds: 1, localConcurrency: 2 },
+        {
+          pollingIntervalSeconds: 1,
+          localConcurrency: workerRunConcurrency(),
+        },
         async (jobs) => {
           for (const job of jobs) await this.process(job.data.runId);
         },

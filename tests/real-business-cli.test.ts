@@ -38,6 +38,8 @@ const localTools = [
   new URL("../runtime/evaluations/embedding-server.mjs", import.meta.url),
   new URL("../runtime/evaluations/download-embedding.mjs", import.meta.url),
   new URL("../runtime/evaluations/local-service.mjs", import.meta.url),
+  new URL("../runtime/evaluations/container-service.mjs", import.meta.url),
+  new URL("../runtime/evaluations/prepare-container.mjs", import.meta.url),
 ];
 test("Optional embedding tools default to no network/model startup even without installed evaluation dependencies", () => {
   for (const tool of localTools) {

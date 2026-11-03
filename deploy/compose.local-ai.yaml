@@ -1,0 +1,40 @@
+services:
+  embedding:
+    image: hyper-workspace-embedding:${HYPER_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: runtime/evaluations/Dockerfile
+      additional_contexts:
+        embedding_model: ${HYPER_EMBEDDING_MODEL_CONTEXT:-./runtime/evaluations/build-context}
+    init: true
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=1770
+    secrets: [embedding_config]
+    expose: ["3116"]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3116/health').then(async r=>{await r.arrayBuffer();process.exit(r.ok?0:1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    stop_grace_period: 45s
+    restart: unless-stopped
+  api:
+    depends_on:
+      embedding: { condition: service_healthy }
+  worker:
+    depends_on:
+      embedding: { condition: service_healthy }
+secrets:
+  embedding_config:
+    file: ${HYPER_EMBEDDING_CONFIG_FILE:?Set the owned private embedding configuration file}

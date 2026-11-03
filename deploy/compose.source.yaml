@@ -1,0 +1,55 @@
+services:
+  source-initialize:
+    image: hyper-workspace:${HYPER_IMAGE_TAG:-local}
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      DATABASE_URL: postgres://hyper:${DB_PASSWORD:?Generate private configuration first}@db:5432/hyper
+      HYPER_NEXTCLOUD_DB_PASSWORD: ${HYPER_NEXTCLOUD_DB_PASSWORD:?Set an independent private source database password}
+    command: [node, /app/scripts/deploy-nextcloud.mjs, --execute]
+    depends_on:
+      initialize: { condition: service_completed_successfully }
+    restart: "no"
+  nextcloud:
+    image: nextcloud:33.0.10-apache@sha256:5ded1127972ea84c29792215f0621c71929ed315cc47be946b489c7a1c1ad305
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: hyper_nextcloud_source
+      POSTGRES_USER: hyper_nextcloud_source
+      POSTGRES_PASSWORD: ${HYPER_NEXTCLOUD_DB_PASSWORD:?Set an independent private source database password}
+      NEXTCLOUD_ADMIN_USER: ${HYPER_NEXTCLOUD_ADMIN_USER:?Set the explicit source administrator UID}
+      NEXTCLOUD_ADMIN_PASSWORD: ${HYPER_NEXTCLOUD_ADMIN_PASSWORD:?Generate a private source administrator password}
+      NEXTCLOUD_TRUSTED_DOMAINS: "127.0.0.1 nextcloud"
+      OVERWRITEHOST: 127.0.0.1:${HYPER_NEXTCLOUD_PORT:-8090}
+      OVERWRITEPROTOCOL: http
+      PHP_MEMORY_LIMIT: 256M
+      PHP_UPLOAD_LIMIT: 16M
+    ports: ["127.0.0.1:${HYPER_NEXTCLOUD_PORT:-8090}:80"]
+    volumes: [nextcloud_data:/var/www/html]
+    depends_on:
+      source-initialize: { condition: service_completed_successfully }
+    healthcheck:
+      test:
+        [
+          CMD,
+          php,
+          -r,
+          '$$s=json_decode(@file_get_contents("http://127.0.0.1/status.php"),true);exit(is_array($$s)&&!empty($$s["installed"])&&empty($$s["maintenance"])?0:1);',
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 36
+      start_period: 60s
+    stop_grace_period: 30s
+    restart: unless-stopped
+  api:
+    depends_on:
+      nextcloud: { condition: service_healthy }
+  worker:
+    depends_on:
+      nextcloud: { condition: service_healthy }
+volumes:
+  nextcloud_data:

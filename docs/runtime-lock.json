@@ -911,5 +911,45 @@
       },
       "verification": "Each completed job log inspected 2026-11-02; source 16 passed/11.4m, deployment 6 passed/3.5m. Synthetic source employees and protocol models, not company or supplier quality acceptance."
     }
+  },
+  "privateTrialDeployment": {
+    "status": "implemented-awaiting-container-verification",
+    "date": "2026-11-03",
+    "contract": "docs/DEPLOYMENT-PRIVATE-TRIAL.md",
+    "overlays": [
+      "deploy/compose.source.yaml",
+      "deploy/compose.local-ai.yaml",
+      "deploy/compose.small.yaml"
+    ],
+    "sourceDatabase": {
+      "name": "hyper_nextcloud_source",
+      "role": "hyper_nextcloud_source",
+      "separateFromProduct": true,
+      "passwordRotation": "refused",
+      "initializer": "scripts/deploy-nextcloud.mjs"
+    },
+    "embedding": {
+      "lock": "runtime/evaluations/embedding-model.lock.json",
+      "dependencies": "runtime/evaluations/package-lock.json",
+      "publicModelBuildContext": "explicit-six-file-whitelist",
+      "hostPortPublished": false,
+      "listenerCredentialBits": 256,
+      "linuxInferenceVerified": false
+    },
+    "worker": {
+      "defaultConcurrency": 2,
+      "pilotConcurrency": 1,
+      "allowedConcurrency": [
+        1,
+        8
+      ]
+    },
+    "evidence": {
+      "localUnitPassed": 63,
+      "typecheck": "passed",
+      "newContainerTests": "pending",
+      "cloudApplicationDeployment": "not-yet-verified",
+      "formalCompanyAcceptance": false
+    }
   }
 }

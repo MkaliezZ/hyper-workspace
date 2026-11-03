@@ -6,6 +6,8 @@
 
 ## 准备和执行
 
+独立 Linux 容器服务通过 `Dockerfile`、`container-service.mjs --serve` 与公开权重白名单上下文构建，使用独立私有配置和内部网络监听，详见[私有试用部署](../../docs/DEPLOYMENT-PRIVATE-TRIAL.md)。本机常驻验证与 Linux 容器验证分开记录。
+
 从仓库根目录运行，需要 Node 24，已验证平台是本机 macOS Intel；Linux/其他平台的真实推理质量不从依赖支持列表推导为已验收。
 
 ```bash

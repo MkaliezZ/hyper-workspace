@@ -16,7 +16,7 @@ flowchart LR
   Worker --> NC
 ```
 
-Compose 启动数据库、一次性迁移/工作区初始化、API 与 Worker。API/Worker 使用同一个构建镜像，包含相同版本的执行器；API 提供 `apps/web/dist` 的已构建网页，不运行 Vite。Nextcloud 保持独立来源，需使用已配置的兼容实例；本包不自动创建来源员工、群组、分享或产品管理员。
+Compose 启动数据库、一次性迁移/工作区初始化、API 与 Worker。API/Worker 使用同一个构建镜像，包含相同版本的执行器；API 提供 `apps/web/dist` 的已构建网页，不运行 Vite。默认接入已配置的独立 Nextcloud；另有[新建私有来源与 CPU 向量服务的可选部署](DEPLOYMENT-PRIVATE-TRIAL.md)。部署不自动创建正式员工、群组、分享或产品管理员。
 
 API/Worker 使用 UID/GID 10001、只读根文件系统、去除 Linux capabilities、临时 `/tmp`。只有 Worker 挂载 `runs` 写入卷，数据库使用 `database` 卷；默认不挂载主机目录或 Docker socket，不公开 PostgreSQL 端口。产品端口只绑定主机 `127.0.0.1:8080`，供本机访问或组织代理转发。执行器原生工具仍关闭，这些设置不等于完整生产沙箱或隔离验收。
 

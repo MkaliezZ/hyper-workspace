@@ -27,8 +27,17 @@ export async function embeddingRuntime({
   credential,
   serviceId = "evaluation",
   port = 0,
+  host = "127.0.0.1",
   publicStats = false,
 }) {
+  if (!["127.0.0.1", "0.0.0.0"].includes(host))
+    throw Error(
+      "Embedding listener must use loopback or an explicit container binding",
+    );
+  if (host === "0.0.0.0" && !/^[a-f0-9]{64}$/.test(credential ?? ""))
+    throw Error(
+      "Container binding requires a private 256-bit service credential",
+    );
   await verifyEmbeddingModel(cache);
   const { pipeline, env } = await import("@huggingface/transformers");
   env.allowRemoteModels = false;
@@ -179,7 +188,7 @@ export async function embeddingRuntime({
   }
   await new Promise((ok, fail) => {
     server.once("error", fail);
-    server.listen(port, "127.0.0.1", ok);
+    server.listen(port, host, ok);
   });
   return {
     server,

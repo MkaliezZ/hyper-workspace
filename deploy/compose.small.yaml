@@ -1,0 +1,37 @@
+# Optional pilot limits; capacity must be measured for the intended workload.
+services:
+  db:
+    mem_limit: 256m
+    cpus: 0.75
+    command:
+      [
+        postgres,
+        -c,
+        shared_buffers=64MB,
+        -c,
+        work_mem=4MB,
+        -c,
+        max_connections=60,
+      ]
+  initialize:
+    mem_limit: 384m
+    cpus: 1.0
+  source-initialize:
+    mem_limit: 192m
+    cpus: 0.5
+  api:
+    mem_limit: 384m
+    cpus: 1.0
+  worker:
+    mem_limit: 640m
+    cpus: 1.0
+    environment:
+      WORKER_RUN_CONCURRENCY: "1"
+  nextcloud:
+    mem_limit: 640m
+    cpus: 1.0
+    volumes:
+      - ./deploy/nextcloud-small.conf:/etc/apache2/mods-enabled/mpm_prefork.conf:ro
+  embedding:
+    mem_limit: 384m
+    cpus: 1.0
