@@ -52,6 +52,24 @@ HYPER_EMBEDDING_CONFIG_FILE=/absolute/private/embedding.json
 HYPER_EMBEDDING_MODEL_CONTEXT=/absolute/public-model-context
 ```
 
+在新 Linux 安装上，可从源码根目录执行下面的配置生成命令。目标必须尚不存在；已有服务保留原配置，不重新生成凭据。命令不打印 credential：
+
+```sh
+node --input-type=module - <<'JS'
+import { createLocalEmbeddingConfig } from './runtime/evaluations/local-config.mjs';
+import { resolve } from 'node:path';
+import { lstat } from 'node:fs/promises';
+const path = resolve('.runtime/embedding-private/service.json');
+try { await lstat(path); throw new Error('Existing configuration: preserve it.'); }
+catch (error) { if (error.code !== 'ENOENT') throw error; }
+await createLocalEmbeddingConfig(path);
+console.log('Private embedding service configuration created; credential omitted.');
+JS
+sudo chown 10001:10001 .runtime/embedding-private/service.json
+```
+
+生成时已设置文件0600、私有子目录0700。将配置文件的实际绝对路径写入 `HYPER_EMBEDDING_CONFIG_FILE`；仅在受限设置页使用其中 credential，不输出到聊天或日志。改为容器所有者后，不用主机普通账号再次运行配置生成器覆盖它。
+
 Docker Compose 文件型 secret 在 Linux 以绑定文件提供；必须核对实际所有者/权限。服务拒绝非本人、符号链接或其他用户可读的配置。它只在容器网络监听 3116，未发布主机端口；需要独立 256-bit Bearer 凭据。API/Worker 不直接挂载该文件，连接仍通过产品模型配置及凭据服务保存。
 
 ## 启动与来源配置

@@ -4,9 +4,9 @@
 
 面向企业内部的 AI 协作 IM：讨论有沉淀，行动有回执，成果能修改，经验能复用。蓝、白、黑配色；拥有自己的业务核心与企业资产服务。
 
-**首阶段软件交付收尾中，公司局域网服务器待准备。** 当前已实现聊天/项目、任务/成果、来源文档、模型配置、向量检索、方法复用、权限与执行恢复。阿里杭州私有试用中，真实 Nextcloud + DeepSeek + 双原生执行器已完成 22 次成功 Run，3 次失败保留并核对；仅使用合成资料。公司服务器尚未安装，不据此声称生产上线。Calendar、复杂办公/媒体按冻结基线后续阶段补齐。
+**首阶段可安装源码与部署指南已齐，公司局域网服务器待准备。** 当前已实现聊天/项目、任务/成果、来源文档、模型配置、向量检索、方法复用、权限与执行恢复。阿里杭州私有试用中，真实 Nextcloud + DeepSeek + 双原生执行器已完成22次成功Run，3次失败保留并核对；仅使用合成资料。公司服务器尚未安装，不据此声称生产上线。Calendar、复杂办公/媒体按冻结基线后续阶段补齐。
 
-最新完整代码 `f77e7b7` 的 [Actions 41631467691](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41631467691) 三项全部成功，449 项检查，76 项 UI 无重试，18 项真实来源通过；新补[同名项目辨认与目标隔离](docs/PROJECT-IDENTITY.md)的完整 CI 另行核对。[当前交付状态](docs/DELIVERY-CHECKLIST.md#当前交付状态) · [真实云端联合记录](docs/CLOUD-TRIAL-ACCEPTANCE.md) · [公司内网安装](docs/DEPLOYMENT-INTRANET.md) · [软件交付入口](docs/DELIVERY.md)。
+实现 `5b7d0bb8490b45d2c69939b35d8ac6173d3d599f` 的 [CI 41696471949](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41696471949) 三个任务全部成功，逐份完成日志核对453项：65单元、9 Python、8解析、255数据库、9原生、78 UI、18真实来源、7容器、4 IP TLS/代理；78 UI无重试，来源18项用时13.5分钟。真实来源新增本人历史元数据与来源撤权404，容器包括043迁移及配套产品恢复。协议模型与真实供应商结果仍分别记录。 [软件交付入口](docs/DELIVERY.md) · [交付核对](docs/DELIVERY-CHECKLIST.md#当前交付状态) · [云端联合记录](docs/CLOUD-TRIAL-ACCEPTANCE.md) · [公司内网安装](docs/DEPLOYMENT-INTRANET.md)。
 
 跟进提醒新增工作区/项目/本人三层规则：全部变化、仅重要变化、静默和最短合并间隔；静默检查保留公共待通知变化，其他符合条件的同事仍可合并发布。人工、DSH/Hermes 共用版本与权限服务；个人配置不广播到项目。提醒模块 `1c67e314108247646c35ff0fd9ef3f5d12ce0000` 的 [CI 41301871596](https://github.com/MkaliezZ/hyper-workspace/actions/runs/41301871596) 三项全部成功，共 372 项通过，含本人原任务找回、70 UI、14 真实来源及 4 容器场景。真实 DeepSeek 的 DSH 配置/Hermes 私有回读各一次成功，来源为合成服务、0 次来源写入；整体尚未交付。[功能、API、恢复与验证边界](docs/NOTIFICATION-POLICY.md)。 [桌面](docs/images/notification-policy-desktop.png) · [手机](docs/images/notification-policy-mobile.png)。
 
@@ -24,7 +24,7 @@
 
 ## 实际界面
 
-执行详情提供实际回执和默认折叠过程记录；新增项目“执行记录”找回本人的历史 Run，刷新后仍能打开，读取前后重新鉴权。已补齐真实工具的操作名称和方法状态；慢来源刷新防止请求重叠。[功能、验证与人工评阅材料](docs/RUN-DETAILS.md) · [桌面截图](docs/images/run-details-desktop.png) · [手机展开截图](docs/images/run-details-mobile.png)。原详情入口完整 CI 449 项通过；用户确认清晰度、日志按需展开和失败说明三项材料。新增历史入口、043 索引和完整工具名称已通过本地 255 DB/3 UI/65 单元及类型/构建，新批完整 CI 与云端更新后复验另记。
+执行详情提供实际回执和默认折叠过程记录；新增项目“执行记录”找回本人的历史 Run，刷新后仍能打开，读取前后重新鉴权。已补齐真实工具的操作名称和方法状态；慢来源刷新防止请求重叠。[功能、验证与人工评阅材料](docs/RUN-DETAILS.md) · [桌面截图](docs/images/run-details-desktop.png) · [手机展开截图](docs/images/run-details-mobile.png)。原详情入口完整 CI 449 项通过；用户确认清晰度、日志按需展开和失败说明三项材料。新增历史入口、043 索引和完整工具名称已通过本地 255 DB/3 UI/65 单元及类型/构建，历史入口与043索引的完整CI453项通过；私有云候选环境也通过真实重新登录后的历史回执/手机展开复验，0次新模型或业务写入。[真实截图](docs/images/cloud-run-history-desktop.png)。
 
 下图为本地运行截图，使用明确标记的演示资料和真实 PostgreSQL 持久化。演示执行不调用真实模型。
 
@@ -32,7 +32,7 @@
 
 [查看移动端截图](docs/images/workspace-mobile.png) · [设计参考与核对记录](docs/design/DESIGN.md)
 
-导航、项目及标签切换采用约 180ms 淡入和轻微上移；不会因后台刷新反复播放，开启系统“减少动态效果”时关闭。
+导航、项目及标签切换采用约 180ms 淡入和轻微上移；不会因后台刷新反复播放，开启系统“减少动态效果”时关闭。 2026-11-04 浏览器只读核对实际观察到180ms淡入/6px位移动画，系统减少动效模式下主面板动画为0；未调用模型或写业务。
 
 ## 技术架构
 

@@ -1165,7 +1165,36 @@
         "build": "passed",
         "fullIntegration": 255
       },
-      "fullNewCI": "pending"
+      "fullNewCI": "passed; see newCI",
+      "newCI": {
+        "runId": 41696471949,
+        "commit": "5b7d0bb8490b45d2c69939b35d8ac6173d3d599f",
+        "status": "all three jobs success",
+        "checks": 453,
+        "unit": 65,
+        "python": 9,
+        "parsers": 8,
+        "database": 255,
+        "native": 9,
+        "ui": 78,
+        "source": 18,
+        "containers": 7,
+        "tlsProxy": 4,
+        "uiRetries": 0,
+        "sourceMinutes": 13.5,
+        "completedLogsInspected": true
+      },
+      "cloudUI": {
+        "status": "passed-post-update-read-only-ui",
+        "existingRun": "b883814e-6ee2-4ca7-ba4f-9b32e0f0aa3f",
+        "historyEvents": 5,
+        "sourceLogin": "real Nextcloud Login Flow",
+        "collapsedByDefault": true,
+        "mobileExpanded": true,
+        "horizontalOverflow": false,
+        "newModelOrBusinessWrites": 0,
+        "companyAcceptance": false
+      }
     }
   },
   "projectIdentity": {
@@ -1191,7 +1220,16 @@
       "typecheck": "passed",
       "build": "passed"
     },
-    "newCommitCI": "pending"
+    "newCommitCI": {
+      "commit": "f4859cd98f218b7d9290875dbd0dd85d34812b16",
+      "runId": 41693005097,
+      "allJobs": "success",
+      "checks": 450,
+      "ui": 77,
+      "source": 18,
+      "sourceMinutes": 17.8,
+      "logInspected": true
+    }
   },
   "cloudJointAcceptance": {
     "date": "2026-11-03",
@@ -1208,18 +1246,18 @@
     "contract": "docs/CLOUD-TRIAL-ACCEPTANCE.md",
     "sourceRecovery": "docs/SOURCE-BACKUP-RESTORE.md",
     "latestApplicationImage": {
-      "revision": "f4859cd98f218b7d9290875dbd0dd85d34812b16",
-      "tag": "f4859cd-app",
-      "imageId": "sha256:2838f5c7155ba728e2b2493af28bbeb594e8a32dda72ec51aa943bd9466c8b38",
-      "verifiedApplicationFiles": 122,
+      "revision": "5b7d0bb8490b45d2c69939b35d8ac6173d3d599f",
+      "tag": "5b7d0bb-app",
+      "imageId": "sha256:1bcfdfb5f8fd4e4f132b1a5fb157342817224e8a2a65f576fafe770f4600b146",
+      "verifiedApplicationAndSQLFiles": 165,
       "uid": 10001,
       "unchangedServices": [
         "db",
         "embedding",
         "nextcloud"
       ],
-      "migrationAtUpdate": "042",
-      "newHistoryUpdate": "not deployed yet"
+      "migration": "043 index only",
+      "newHistoryUpdate": "deployed to private trial, not company host"
     },
     "finalProductBackup": {
       "backupId": "e66b5f81-f056-4016-bf85-4bea38bda2b4",
@@ -1229,6 +1267,48 @@
       "credentialChecks": 21,
       "schemaAtCapture": "042 / f4859cd",
       "productionPromoted": false
+    },
+    "schema043ProductBackup": {
+      "backupId": "a1a31c67-b753-45e7-97a3-8594acb8526c",
+      "bytes": 345742,
+      "restoreId": "fabaea36-b71e-4d20-be0f-077036e43d4e",
+      "status": "verified_isolated",
+      "credentialChecks": 23,
+      "schemaAtCapture": "043 / 5b7d0bb",
+      "productionPromoted": false,
+      "pairedWithOlderSourceSnapshot": false
+    },
+    "latestFullCI": {
+      "runId": 41696471949,
+      "commit": "5b7d0bb8490b45d2c69939b35d8ac6173d3d599f",
+      "status": "all three jobs success",
+      "checks": 453,
+      "unit": 65,
+      "python": 9,
+      "parsers": 8,
+      "database": 255,
+      "native": 9,
+      "ui": 78,
+      "source": 18,
+      "containers": 7,
+      "tlsProxy": 4,
+      "uiRetries": 0,
+      "sourceMinutes": 13.5,
+      "completedLogsInspected": true
     }
+  },
+  "renderedMotionVerification": {
+    "date": "2026-11-04",
+    "scope": "Local rendered development UI, read-only navigation; Browser plugin absent, Playwright fallback",
+    "ordinary": {
+      "durationMs": 180,
+      "fadeAndTranslation": true,
+      "sampledRunningFrames": 1
+    },
+    "reducedMotion": {
+      "mainAnimations": 0
+    },
+    "newModelOrBusinessWrites": 0,
+    "ciTestCountContribution": 0
   }
 }
