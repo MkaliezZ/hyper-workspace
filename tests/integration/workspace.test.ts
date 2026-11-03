@@ -340,6 +340,14 @@ test("Concurrent delivery creates one artifact and ordered events; revisions ret
     events.map((e) => e.sequence),
     events.map((_, i) => i + 1),
   );
+  const firstPage = await service.events(s, run.id, 0, 1);
+  assert.deepEqual(firstPage, events.slice(0, 1));
+  const nextPage = await service.events(s, run.id, firstPage[0].sequence, 1);
+  assert.deepEqual(nextPage, events.slice(1, 2));
+  await assert.rejects(service.events(peer, run.id, 0, 1));
+  await assert.rejects(
+    service.events(outside, run.id, firstPage[0].sequence, 1),
+  );
   await assert.rejects(service.getRun(peer, run.id));
 });
 test("Cancelled queued runs perform no business action", async () => {

@@ -17,6 +17,10 @@
 | `34b11b17-8376-43f4-8607-89a788812b14` | DSH / 第一项员工分配 | succeeded；明确的来源 UID 对应真实产品员工 ID，分配后版本 2、状态 open、负责人回读一致 |
 | `0012a26f-3e96-4a7b-8d77-66e5cf8bcee6` | DSH / 第二项员工分配 | failed；错误显示 Runtime connection closed。核对该 Run 的动作记录为空，第二项仍为版本 1、未分配；没有盲目重放 |
 | `efaa5188-2cd8-4786-8702-1697da6a7b4b` | DSH / 检查当前状态后明确续做第二项分配 | succeeded；一条 task.assign 动作 completed，模型 HTTP 200 / completed / reported，回读负责人、open 和版本 2 通过 |
+| `a42a16b7-1b45-4ac5-83f1-4e94d5f8e7bb` | Hermes / 同一成果续改 | failed；达到 180 秒限制，动作记录为空，模型请求 completed / reported（输入 4,164、输出 996），未冒充零费用 |
+| `5268ee7a-71f6-43b3-a471-b93de19cbd5e` | Hermes / 核对旧版本后续改 | succeeded；在 API 阶段关闭已验证的浏览器页面后，原成果版本 1 → 2，仍经完整当前来源与权限检查 |
+| `2cbccc10-c3bb-4e68-b0c9-c7de68673565` | DSH / 项目周报 | succeeded；项目周报成果真实保存并回读 |
+| `8b861815-bf45-4a17-a475-e3614ef5294d` | DSH / 静默跟进 | succeeded；无后续变化时 notify=false |
 
 第三个 Run 的模型请求记录为 HTTP 200、transport unknown / usage unknown，不能据此断言供应商未计费或把它改成零费用。该 Run 未完成分配也不影响前两次已完成的真实对象。后续续跑必须保留失败编号，读取当前任务版本和已发生动作后再提交新的明确请求。
 
@@ -37,6 +41,8 @@ Hermes、往返续改、周报、静默跟进和私人文档检索/解读尚未�
 已用现有主密钥创建并离线校验 289,166 字节的一致归档，备份编号 `859ffbee-5d14-4f20-afb8-d23fbb2738bb`，SHA-256 `c2c70ad5e7a9c8934ed581c4394c20dc4434e5821ffde410b06a673d853f17f4`。实际恢复到新建隔离库，状态 `verified_isolated`，恢复编号 `9afb58c2-8d3f-4cc9-a115-ec8326d04c78`，7 条活动凭据密文检查通过，旧队列不存在，未启动 API/Worker、未调用外部业务系统、未切换原库。
 
 该快照时三个 Run 均已终止，隔离报告中的 activeRuns / recoveryRuns 为 0；不据此声称本次验证了云端在途 Run 的恢复。Nextcloud 原件/数据库另需一致备份，该产品库归档不替代来源备份或公司灾备切流。归档、签名与私有配置留在管理员受限目录，不提交公库。
+
+后续明确等待一个新 Run 开始，再在原环境继续运行时取得第二份有效快照：备份 `ed7ac516-afb8-4430-9cb7-872202892912`，305,102 字节，SHA-256 `b87f855371e2bcc7268379f7dd565fea42a85934b6217ddf2f36425f680817ac`。隔离恢复 `48e9610f-5488-4227-a49e-a1067ff15dd7` 为 verified_isolated、15 条活动密文检查通过；原为 running 的 Hermes / assign_task `38fa0fb7-1e0c-490d-ba0e-64fc91671ce4` 在恢复库实际回读为 recovery_required，recoveryRuns=1、activeRuns=0，旧队列和登录均清理。未启动恢复库服务、未调用外部业务、未切换原库、未重放分配。一次较早的捕获未赶上活动窗口，recoveryRuns=0，保留为无在途恢复记录，不算该项通过证据。
 
 ## 最新独立 CI
 

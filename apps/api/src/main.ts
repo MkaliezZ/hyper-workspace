@@ -1109,6 +1109,27 @@ class ApiController {
       .parse(body);
     return new WorkPlanService(db).edit(await subject(req), uuid(id), input);
   }
+  @Get("runs/:id/history") async history(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Query("after") after = "0",
+  ) {
+    const since = Number(after);
+    if (!Number.isSafeInteger(since) || since < 0)
+      throw new BadRequestException("无效事件游标。");
+    const records = await service.events(
+      await subject(req),
+      uuid(id),
+      since,
+      101,
+    );
+    const events = records.slice(0, 100);
+    return {
+      events,
+      after: events.at(-1)?.sequence ?? since,
+      hasMore: records.length > events.length,
+    };
+  }
   @Get("runs/:id/events") async events(
     @Req() req: Request,
     @Res() res: Response,

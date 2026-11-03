@@ -741,6 +741,11 @@ p {
   gap: 15px;
   color: #2451a2;
   font-size: 12px;
+  flex-wrap: wrap;
+}
+.run-strip > span {
+  flex: 1 1 240px;
+  overflow-wrap: anywhere;
 }
 .run-strip.failed,
 .run-strip.recovery_required {
@@ -750,6 +755,41 @@ p {
 .run-strip button {
   white-space: nowrap;
   text-decoration: underline;
+}
+.run-details {
+  padding: 0 24px 24px;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.run-details h3 {
+  font-size: 15px;
+}
+.run-detail-state {
+  color: #2451a2;
+  font-weight: 600;
+}
+.run-receipts {
+  padding-left: 20px;
+}
+.run-receipts li {
+  margin-bottom: 12px;
+}
+.run-receipts span {
+  display: block;
+}
+.run-detail-usage,
+.run-detail-events {
+  font-size: 13px;
+  color: #566278;
+}
+.run-detail-events {
+  margin: 16px 0;
+}
+.run-detail-events ol {
+  padding-left: 22px;
+}
+.run-detail-events time {
+  font-variant-numeric: tabular-nums;
 }
 .follow-up-status {
   display: block;

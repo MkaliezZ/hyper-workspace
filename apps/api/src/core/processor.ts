@@ -177,7 +177,12 @@ export class RunProcessor {
     if (!run) return;
     const abort = new AbortController();
     const timer = setTimeout(
-      () => abort.abort(new Error("Task time limit exceeded.")),
+      () =>
+        abort.abort(
+          new Error(
+            "本次执行超过时间限制。请核对已完成操作和当前业务状态，再决定是否续做。",
+          ),
+        ),
       180000,
     );
     const heartbeat = setInterval(() => {
@@ -188,10 +193,16 @@ export class RunProcessor {
         )
         .then((r) => {
           if (!r.rowCount)
-            abort.abort(new Error("Task stopped or lease lost."));
+            abort.abort(
+              new Error(
+                "执行已停止或运行租约失效。请先核对已完成操作，不要直接重复提交。",
+              ),
+            );
         })
         .catch(() =>
-          abort.abort(new Error("Execution lease could not be renewed.")),
+          abort.abort(
+            new Error("暂时无法续期运行租约。请先核对当前执行和已完成操作。"),
+          ),
         );
     }, 1000);
     let scopeTimer: ReturnType<typeof setInterval> | undefined;

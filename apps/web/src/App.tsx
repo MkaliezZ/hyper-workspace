@@ -25,6 +25,7 @@ import {
   ArtifactsPanel,
 } from "./components/WorkPanels";
 import { Dialog } from "./components/Dialog";
+import { RunDetails, runErrorText } from "./components/RunDetails";
 import { ModelSettings, type ModelSummary } from "./components/ModelSettings";
 import { EnterpriseMessages } from "./components/EnterpriseMessages";
 import { Login } from "./components/Login";
@@ -56,6 +57,7 @@ export function App() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const [runError, setRunError] = useState("");
+  const [detailsRunId, setDetailsRunId] = useState<string | null>(null);
   const [section, setSection] = useState<Section>("messages"),
     [tab, setTab] = useState<Tab>("discussion"),
     [query, setQuery] = useState(""),
@@ -103,6 +105,7 @@ export function App() {
     const clearPrivateDrafts = () => {
       artifactScope.current++;
       setDialog(null);
+      setDetailsRunId(null);
       setSelectedArtifact(null);
       setSelectedTask(null);
       setEdit("");
@@ -176,8 +179,13 @@ export function App() {
   }, []);
   useEffect(() => {
     if (!view?.project.source) return;
+    let polling = false;
     const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void load(view.project.id);
+      if (document.visibilityState !== "visible" || polling) return;
+      polling = true;
+      void load(view.project.id).finally(() => {
+        polling = false;
+      });
     }, 10000);
     return () => clearInterval(timer);
   }, [view?.project.id, view?.project.source?.roomId, load]);
@@ -460,7 +468,7 @@ export function App() {
                   recovery_required: "需要核对已执行操作",
                 } as any
               )[run.state] ?? run.state}
-              {run.error ? "：" + run.error : ""}
+              {run.error ? "：" + runErrorText(run.error) : ""}
               {run.workflow === "follow_up" && run.result?.receipts?.[0] ? (
                 <small className="follow-up-status" role="status">
                   {run.result.receipts[0].notify
@@ -469,6 +477,9 @@ export function App() {
                 </small>
               ) : null}
             </span>
+            <button onClick={() => setDetailsRunId(run.id)}>
+              查看执行详情
+            </button>
             {replyReceipt ? (
               <button
                 disabled={busy}
@@ -516,6 +527,13 @@ export function App() {
               <button onClick={() => setRun(null)}>收起</button>
             )}
           </div>
+        ) : null}
+        {run && detailsRunId === run.id ? (
+          <RunDetails
+            key={view.user.id + ":" + view.project.id + ":" + run.id}
+            runId={run.id}
+            onClose={() => setDetailsRunId(null)}
+          />
         ) : null}
         {section === "messages" || section === "projects" ? (
           <>

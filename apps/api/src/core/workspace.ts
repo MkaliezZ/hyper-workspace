@@ -1365,12 +1365,12 @@ export class WorkspaceService {
       ).publicRunMetadata(s, r.rows[0].result);
     return r.rows[0];
   }
-  async events(s: Subject, id: string, after = 0) {
+  async events(s: Subject, id: string, after = 0, limit = 2147483647) {
     const run = await this.getRun(s, id);
     const rows = (
       await this.db.pool.query(
-        'SELECT event_id AS "eventId",run_id AS "runId",sequence,kind,data,occurred_at AS "occurredAt",\'1.0.0\' AS "schemaVersion" FROM cw_run_events WHERE run_id=$1 AND sequence>$2 ORDER BY sequence',
-        [id, after],
+        'SELECT event_id AS "eventId",run_id AS "runId",sequence,kind,data,occurred_at AS "occurredAt",\'1.0.0\' AS "schemaVersion" FROM cw_run_events WHERE run_id=$1 AND sequence>$2 ORDER BY sequence LIMIT $3',
+        [id, after, limit],
       )
     ).rows;
     return run.workflow === "manage_communication"

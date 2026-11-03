@@ -957,8 +957,8 @@
       "localBuild": "passed"
     },
     "ci": {
-      "commit": "99f327d90b318cd065672a8e5043b00d998d9299",
-      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41624169417",
+      "commit": "7d95c56fbf2d18f321e3f9c2a62dbdc26b87747c",
+      "run": "https://github.com/MkaliezZ/hyper-workspace/actions/runs/41627810356",
       "allJobs": "success",
       "checks": 445,
       "counts": {
@@ -972,7 +972,7 @@
         "deployment": 7,
         "tlsProxy": 4
       },
-      "verification": "All three completed job logs inspected. 74 UI passed without retries; 18 real source cases passed in 20.0m, including idle connection exhaustion regression. Not full real-supplier or company acceptance."
+      "verification": "All completed logs inspected: 445 checks, 74 UI passed without retries, 18 real source cases passed in 20.1m; all three jobs succeeded. This precedes the new Run details implementation."
     },
     "buildTransport": {
       "debianDefault": "https://deb.debian.org",
@@ -1036,7 +1036,22 @@
       "activeRunsAtSnapshot": 0,
       "externalBusinessSystemsCalled": false,
       "servicesStarted": false,
-      "productionPromoted": false
+      "productionPromoted": false,
+      "inflightCapture": {
+        "backupId": "ed7ac516-afb8-4430-9cb7-872202892912",
+        "restoreId": "48e9610f-5488-4227-a49e-a1067ff15dd7",
+        "bytes": 305102,
+        "sha256": "b87f855371e2bcc7268379f7dd565fea42a85934b6217ddf2f36425f680817ac",
+        "credentialChecks": 15,
+        "capturedRun": "38fa0fb7-1e0c-490d-ba0e-64fc91671ce4",
+        "capturedState": "running",
+        "restoredState": "recovery_required",
+        "recoveryRuns": 1,
+        "activeRuns": 0,
+        "externalBusinessSystemsCalled": false,
+        "servicesStarted": false,
+        "productionPromoted": false
+      }
     },
     "sourceIdleConnections": {
       "source": "https://httpd.apache.org/docs/2.4/misc/perf-tuning.html",
@@ -1074,5 +1089,25 @@
     "missingMetadataLicenseTexts": "Original busboy/streamsearch permission texts preserved with hashes; no SPDX invented",
     "networkUsed": false,
     "wholeImageLicenseReview": false
+  },
+  "runDetails": {
+    "date": "2026-11-03",
+    "mapping": ["P04", "P07", "P08", "C05", "A09", "A10", "E04", "E08", "E10"],
+    "contract": "docs/RUN-DETAILS.md",
+    "historyEndpoint": "GET /api/runs/:id/history?after=0",
+    "pageSize": 100,
+    "sourcePolling": "one pending periodic workspace read per effect; no permission cache added",
+    "receipts": "result and event representations matched one-for-one, retaining separate identical operations",
+    "revocation": "current getRun/source/private checks; failed refresh removes old data",
+    "localVerification": {
+      "browser": 2,
+      "integrationAndPolicy": 25,
+      "additionalReceiptUnit": 2,
+      "priorFullUnit": 63,
+      "typecheck": "passed",
+      "build": "passed"
+    },
+    "fullCI": "pending for new implementation commit",
+    "humanLogAndFailureReview": "pending; existing minutes clarity feedback retains its original scope"
   }
 }

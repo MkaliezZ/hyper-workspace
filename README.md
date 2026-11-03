@@ -22,6 +22,8 @@
 
 ## 实际界面
 
+执行详情新增实际回执和默认折叠的过程记录，退出或失权后清除旧内容；慢来源刷新防止请求重叠。[功能、验证与人工评阅材料](docs/RUN-DETAILS.md) · [桌面截图](docs/images/run-details-desktop.png) · [手机展开截图](docs/images/run-details-mobile.png)。该批已做本地行为验证，完整 CI 以对应提交为准。
+
 下图为本地运行截图，使用明确标记的演示资料和真实 PostgreSQL 持久化。演示执行不调用真实模型。
 
 ![Hyper Workspace 桌面界面](docs/images/workspace-desktop.png)
