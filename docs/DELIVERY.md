@@ -4,7 +4,7 @@
 
 ## 安装顺序
 
-1. 使用交付包清单中的完整源码 revision，在 Linux amd64 准备 Docker Engine、Buildx、Compose 及 Node 24；先检查已有服务和端口。当前完整镜像构建与实际容器证据见 [部署说明](DEPLOYMENT.md)，依赖及各模块许可证见 [DEPENDENCIES.md](DEPENDENCIES.md)。源码包不含预构建镜像、Node/Python 依赖或模型权重，需要联网准备这些固定输入，不是离线安装包。
+1. 使用交付包清单中的完整源码 revision，在 Linux amd64 准备 Docker Engine、Buildx、Compose、Node 24 及 Python 3.12+（来源 Talk 准备工具需要）；先检查已有服务和端口。当前完整镜像构建与实际容器证据见 [部署说明](DEPLOYMENT.md)，依赖及各模块许可证见 [DEPENDENCIES.md](DEPENDENCIES.md)。源码包不含预构建镜像、Node/Python 依赖或模型权重，需要联网准备这些固定输入，不是离线安装包。
 2. 源码包解压到新目录；若使用 Git，则 clone 公库并 checkout 清单中的完整 revision。运行 `node scripts/deploy-init.mjs` 生成全新的受限 `.env.compose`；已有安装保留原配置和主密钥，不覆盖。
 3. 如公司已有兼容 Nextcloud，按 [基础部署](DEPLOYMENT.md)接入公开 API；如新建独立来源和免费本地 CPU embedding，按 [来源/向量部署](DEPLOYMENT-PRIVATE-TRIAL.md)准备服务、固定权重、独立账号/库与 Talk。模型本地推理没有外部按次费用，主机资源仍由公司承担。
 4. 按 [公司内网 IP 安装](DEPLOYMENT-INTRANET.md)设置两个 HTTPS IP 入口、IP SAN 证书、员工设备 CA 信任及 Nginx；使用全部实际 Compose 叠加文件。仅开放公司网段的 HTTPS，不公开数据库或向量端口。

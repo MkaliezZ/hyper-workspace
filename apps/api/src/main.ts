@@ -1057,6 +1057,17 @@ class ApiController {
     await queue.enqueue(r.id);
     return r;
   }
+  @Get("projects/:id/runs") async recentRuns(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Query("before") before?: string,
+  ) {
+    return service.recentRuns(
+      await subject(req),
+      uuid(id),
+      before === undefined ? undefined : uuid(before),
+    );
+  }
   @Get("runs/:id") async runStatus(
     @Req() req: Request,
     @Param("id") id: string,

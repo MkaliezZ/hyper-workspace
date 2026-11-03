@@ -26,6 +26,7 @@ import {
 } from "./components/WorkPanels";
 import { Dialog } from "./components/Dialog";
 import { RunDetails, runErrorText } from "./components/RunDetails";
+import { RunHistoryPanel } from "./components/RunHistoryPanel";
 import { ModelSettings, type ModelSummary } from "./components/ModelSettings";
 import { EnterpriseMessages } from "./components/EnterpriseMessages";
 import { Login } from "./components/Login";
@@ -45,7 +46,8 @@ type Tab =
   | "artifacts"
   | "briefs"
   | "decisions"
-  | "workplans";
+  | "workplans"
+  | "runs";
 export function App() {
   const [view, setView] = useState<WorkspaceView | null>(null),
     [login, setLogin] = useState(false),
@@ -546,6 +548,7 @@ export function App() {
                   ["decisions", "决定"],
                   ["tasks", "任务"],
                   ["artifacts", "成果"],
+                  ["runs", "执行记录"],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -580,6 +583,16 @@ export function App() {
                     await refresh();
                   })
                 }
+              />
+            ) : tab === "runs" ? (
+              <RunHistoryPanel
+                key={view.user.id + ":" + view.project.id}
+                projectId={view.project.id}
+                onOpen={(value) => {
+                  if (loadedProject.current !== view.project.id) return;
+                  setRun(value);
+                  setDetailsRunId(value.id);
+                }}
               />
             ) : tab === "workplans" ? (
               <WorkPlanPanel

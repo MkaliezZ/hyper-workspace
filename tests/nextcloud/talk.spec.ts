@@ -1738,6 +1738,21 @@ test("Source project scope survives both real engines and blocks results after r
       await db.pool.query("SELECT version FROM cw_tasks WHERE id=$1", [task.id])
     ).rows[0].version;
     expect(fixture.violations).toEqual([]);
+    const ownHistory = await actor.context.request.get(
+      origin + "/api/projects/" + workspace.project.id + "/runs",
+    );
+    expect(ownHistory.status()).toBe(200);
+    const historyPage = await ownHistory.json();
+    expect(historyPage.items.length).toBeGreaterThan(0);
+    expect(historyPage.items.length).toBeLessThanOrEqual(20);
+    for (const entry of historyPage.items)
+      expect(Object.keys(entry).sort()).toEqual([
+        "createdAt",
+        "engine",
+        "id",
+        "state",
+        "workflow",
+      ]);
     currentEngine = "revoked";
     revoke = true;
     const interrupted = await start("dsh", "follow_up");
@@ -1795,6 +1810,13 @@ test("Source project scope survives both real engines and blocks results after r
       ).status(),
     ).toBe(404);
     expect((await actor.context.request.get(directoryPath)).status()).toBe(404);
+    expect(
+      (
+        await actor.context.request.get(
+          origin + "/api/projects/" + workspace.project.id + "/runs",
+        )
+      ).status(),
+    ).toBe(404);
     expect(revokedSchedule).toEqual({
       checks_started: 1,
       last_run_id: savedSchedule.last_run_id,

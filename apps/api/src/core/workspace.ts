@@ -1294,6 +1294,33 @@ export class WorkspaceService {
       throw new ConflictException("相同幂等键不能用于不同任务。");
     return { id: old.id, state: old.state, created: false };
   }
+  async recentRuns(s: Subject, projectId: string, before?: string) {
+    await assertMember(this.db, s);
+    await this.access.assert(s, projectId);
+    const rows = (
+      await this.db.pool.query(
+        `SELECT r.id,r.state,r.engine,r.workflow,r.created_at AS "createdAt"
+         FROM cw_runs r JOIN cw_conversations v
+           ON v.id=r.conversation_id AND v.workspace_id=r.workspace_id
+         WHERE r.workspace_id=$1 AND r.actor_id=$2 AND v.project_id=$3
+           AND ($4::uuid IS NULL OR (r.created_at,r.id)<(
+             SELECT previous.created_at,previous.id FROM cw_runs previous
+             JOIN cw_conversations pv ON pv.id=previous.conversation_id AND pv.workspace_id=previous.workspace_id
+             WHERE previous.id=$4 AND previous.workspace_id=$1 AND previous.actor_id=$2 AND pv.project_id=$3
+           ))
+         ORDER BY r.created_at DESC,r.id DESC LIMIT 21`,
+        [s.workspaceId, s.id, projectId, before ?? null],
+      )
+    ).rows;
+    await assertMember(this.db, s);
+    await this.access.assert(s, projectId);
+    const items = rows.slice(0, 20);
+    return {
+      items,
+      hasMore: rows.length > 20,
+      before: items.at(-1)?.id ?? null,
+    };
+  }
   async getRun(s: Subject, id: string) {
     await assertMember(this.db, s);
     const target = (

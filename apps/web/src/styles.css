@@ -2698,3 +2698,33 @@ p {
 .organization-budget-panel details {margin-top:20px;overflow-wrap:anywhere;}
 .organization-budget-panel details pre {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;}
 .organization-budget-panel .toolbar {display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
+
+.run-history {
+  padding: 24px;
+}
+.run-history > p {
+  color: var(--muted);
+}
+.run-history ul {
+  list-style: none;
+  padding: 0;
+}
+.run-history li {
+  margin: 10px 0;
+}
+.run-history li button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 14px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.run-history li span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

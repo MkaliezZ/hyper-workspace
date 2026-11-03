@@ -1,6 +1,6 @@
 # Install within Nginx's http context after replacing 192.168.10.50 with the
 # reserved LAN IP. The certificate must contain that IP as an IP SAN.
-# Backend ports match HYPER_HTTP_PORT=8180 / HYPER_NEXTCLOUD_PORT=8090.
+# Backend ports match HYPER_PORT=8180 / HYPER_NEXTCLOUD_PORT=8090.
 server {
     listen 192.168.10.50:443 ssl;
     server_name 192.168.10.50;

@@ -608,3 +608,99 @@ test("Human and AI task creation share canonical readback and reject membership 
     await racingDb.close();
   }
 });
+
+test("Own project Run history paginates stable metadata and rejects foreign projects, actors and cursors", async () => {
+  const ownerProject = await service.createProject(
+      s,
+      "History scope",
+      "Return no prompt or result",
+    ),
+    otherProject = await service.createProject(
+      s,
+      "Other history scope",
+      "Distinct conversation",
+    ),
+    own: string[] = [];
+  for (let i = 0; i < 23; i++) {
+    const run = await service.startRun(s, {
+      conversationId: ownerProject.conversationId,
+      workflow: "discussion_to_minutes",
+      engine: "fixture",
+      instruction: "Private synthetic instruction " + i,
+      idempotencyKey: randomUUID(),
+    });
+    own.push(run.id);
+    await service.cancel(s, run.id);
+  }
+  const other = await service.startRun(s, {
+    conversationId: otherProject.conversationId,
+    workflow: "discussion_to_minutes",
+    engine: "fixture",
+    instruction: "Other project",
+    idempotencyKey: randomUUID(),
+  });
+  await service.cancel(s, other.id);
+  // Equal timestamps exercise the UUID tie-breaker without serializing time into a cursor.
+  await db.pool.query(
+    "UPDATE cw_runs SET created_at='2026-11-04T00:00:00.123456Z' WHERE id=ANY($1::uuid[])",
+    [own],
+  );
+  const first = await service.recentRuns(s, ownerProject.id);
+  assert.equal(first.items.length, 20);
+  assert.equal(first.hasMore, true);
+  for (const row of first.items)
+    assert.deepEqual(Object.keys(row).sort(), [
+      "createdAt",
+      "engine",
+      "id",
+      "state",
+      "workflow",
+    ]);
+  const second = await service.recentRuns(s, ownerProject.id, first.before!);
+  assert.equal(second.items.length, 3);
+  assert.equal(second.hasMore, false);
+  assert.deepEqual(
+    new Set([...first.items, ...second.items].map((row) => row.id)),
+    new Set(own),
+  );
+  assert.equal(
+    (await service.recentRuns(peer, ownerProject.id)).items.length,
+    0,
+  );
+  assert.equal(
+    (await service.recentRuns(s, ownerProject.id, other.id)).items.length,
+    0,
+  );
+  await assert.rejects(service.recentRuns(outside, ownerProject.id));
+  await assert.rejects(service.getRun(peer, first.items[0].id));
+});
+
+test("History is denied again after current workspace membership is revoked", async () => {
+  const actor: Subject = {
+    ...s,
+    id: randomUUID(),
+    name: "Revocable history owner",
+  };
+  await db.pool.query("INSERT INTO cw_users(id,name)VALUES($1,$2)", [
+    actor.id,
+    actor.name,
+  ]);
+  await db.pool.query(
+    "INSERT INTO cw_members(workspace_id,user_id,role)VALUES($1,$2,'member')",
+    [workspace, actor.id],
+  );
+  const destination = await service.createProject(
+    actor,
+    "Revocable history",
+    "No stale list",
+  );
+  assert.equal(
+    (await service.recentRuns(actor, destination.id)).items.length,
+    0,
+  );
+  await db.pool.query(
+    "DELETE FROM cw_members WHERE workspace_id=$1 AND user_id=$2",
+    [workspace, actor.id],
+  );
+  await assert.rejects(service.recentRuns(actor, destination.id));
+});

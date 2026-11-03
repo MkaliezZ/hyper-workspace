@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { TerminalStates, type RunEvent, type RunState } from "@hyper/contracts";
+import {
+  TerminalStates,
+  type PlannedAction,
+  type RunEvent,
+  type RunState,
+} from "@hyper/contracts";
 import { api } from "../api";
 import { Dialog } from "./Dialog";
 
@@ -25,7 +30,8 @@ export function runErrorText(value: string) {
     }[value] ?? value
   );
 }
-const actionLabels: Record<string, string> = {
+const actionLabels: Record<PlannedAction["tool"], string> = {
+  "work.plan": "整理工作计划",
   "artifact.create": "保存成果",
   "artifact.revise": "修改成果",
   "artifact.review": "记录成果验收",
@@ -33,10 +39,53 @@ const actionLabels: Record<string, string> = {
   "task.update": "修改待办",
   "task.assign": "分配负责人",
   "project.report": "保存项目周报",
-  "project.follow_up": "核对项目变化",
-  "method.create": "保存方法候选",
-  "method.publish": "发布方法",
-  "method.withdraw": "撤回方法",
+  "follow_up.check": "核对项目变化",
+  "follow_up.configure": "配置定时跟进",
+  "method.write": "保存方法草稿",
+  "method.manage": "管理方法",
+  "policy.configure": "配置执行规则",
+  "notifications.manage": "管理提醒偏好",
+  "usage.report": "核对模型用量",
+  "spending.manage": "管理价格与预算",
+  "brief.write": "保存任务说明",
+  "brief.manage": "管理任务说明",
+  "directory.read": "读取通讯录",
+  "organization.manage": "管理组织",
+  "communication.manage": "管理会话",
+  "attachment.share": "分享文件附件",
+  "decision.write": "保存项目决定",
+  "decision.manage": "管理项目决定",
+  "knowledge.answer": "保存资料问答",
+  "communication.draft": "保存回复草稿",
+  "file.reading.save": "保存文档解读",
+};
+function receiptLabel(receipt: Record<string, unknown>) {
+  if (
+    receipt.tool === "method.manage" &&
+    typeof receipt.operation === "string"
+  ) {
+    const label: Record<string, string> = {
+      verify: "记录员工方法验证",
+      publish: "发布方法",
+      withdraw: "撤回方法",
+      transfer: "移交方法维护人",
+    };
+    if (label[receipt.operation]) return label[receipt.operation];
+  }
+  return typeof receipt.tool === "string"
+    ? (actionLabels[receipt.tool as PlannedAction["tool"]] ?? "业务操作")
+    : "业务操作";
+}
+const receiptStateLabels: Record<string, string> = {
+  open: "待处理",
+  doing: "进行中",
+  done: "已完成",
+  draft: "草稿",
+  accepted: "已验收",
+  changes_requested: "待修改",
+  candidate: "方法候选",
+  published: "已发布",
+  withdrawn: "已撤回",
 };
 const eventLabels: Record<RunEvent["kind"], string> = {
   "run.started": "开始执行",
@@ -205,9 +254,7 @@ export function RunDetails({
                 {receipts.map((receipt, index) => (
                   <li key={index}>
                     <strong>
-                      {typeof receipt.tool === "string"
-                        ? (actionLabels[receipt.tool] ?? "业务操作")
-                        : "业务操作"}
+                      {receiptLabel(receipt)}
                       {typeof receipt.title === "string"
                         ? " · " + receipt.title
                         : ""}
@@ -221,20 +268,12 @@ export function RunDetails({
                     {typeof receipt.dueDate === "string" ? (
                       <span>截止日期：{receipt.dueDate}</span>
                     ) : null}
-                    {typeof receipt.status === "string" ? (
+                    {typeof (receipt.status ?? receipt.state) === "string" ? (
                       <span>
                         状态：
-                        {(
-                          {
-                            open: "待处理",
-                            doing: "进行中",
-                            done: "已完成",
-                            draft: "草稿",
-                            accepted: "已验收",
-                            changes_requested: "待修改",
-                            withdrawn: "已撤回",
-                          } as Record<string, string>
-                        )[receipt.status] ?? receipt.status}
+                        {receiptStateLabels[
+                          String(receipt.status ?? receipt.state)
+                        ] ?? String(receipt.status ?? receipt.state)}
                       </span>
                     ) : null}
                     {receipt.changed === false ? (

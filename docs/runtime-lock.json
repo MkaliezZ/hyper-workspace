@@ -1140,7 +1140,33 @@
       "uiRetries": 0,
       "source": 18
     },
-    "humanLogAndFailureReview": "User answered both satisfied on 2026-11-03; together with prior minutes clarity all three E08 criteria have scoped human feedback, not company adoption."
+    "humanLogAndFailureReview": "User answered both satisfied on 2026-11-03; together with prior minutes clarity all three E08 criteria have scoped human feedback, not company adoption.",
+    "historyDiscovery": {
+      "endpoint": "GET /api/projects/:id/runs?before=<id>",
+      "scope": "Current actor and exact project; current membership/source checked before and after metadata query; full private/source check on open",
+      "fields": [
+        "id",
+        "engine",
+        "workflow",
+        "state",
+        "createdAt"
+      ],
+      "pageSize": 20,
+      "pagination": "created_at/id descending keyset; cursor bound to exact actor/project",
+      "migration": "043_run_history.sql, index only",
+      "ui": "Project execution history survives page reload; clears rows on denied/failed reads",
+      "actionLabels": "Complete PlannedAction tool union plus actual method state",
+      "localVerification": {
+        "workspaceIntegration": 17,
+        "newIntegrationCases": 2,
+        "browser": 3,
+        "unit": 65,
+        "typecheck": "passed",
+        "build": "passed",
+        "fullIntegration": 255
+      },
+      "fullNewCI": "pending"
+    }
   },
   "projectIdentity": {
     "mapping": [
@@ -1180,6 +1206,29 @@
     "priced": 0,
     "companyDeployment": "company LAN Linux host/IP pending; cloud private validation only",
     "contract": "docs/CLOUD-TRIAL-ACCEPTANCE.md",
-    "sourceRecovery": "docs/SOURCE-BACKUP-RESTORE.md"
+    "sourceRecovery": "docs/SOURCE-BACKUP-RESTORE.md",
+    "latestApplicationImage": {
+      "revision": "f4859cd98f218b7d9290875dbd0dd85d34812b16",
+      "tag": "f4859cd-app",
+      "imageId": "sha256:2838f5c7155ba728e2b2493af28bbeb594e8a32dda72ec51aa943bd9466c8b38",
+      "verifiedApplicationFiles": 122,
+      "uid": 10001,
+      "unchangedServices": [
+        "db",
+        "embedding",
+        "nextcloud"
+      ],
+      "migrationAtUpdate": "042",
+      "newHistoryUpdate": "not deployed yet"
+    },
+    "finalProductBackup": {
+      "backupId": "e66b5f81-f056-4016-bf85-4bea38bda2b4",
+      "bytes": 345090,
+      "restoreId": "0a468c2b-6cce-4325-8032-c1596b0ee4f1",
+      "status": "verified_isolated",
+      "credentialChecks": 21,
+      "schemaAtCapture": "042 / f4859cd",
+      "productionPromoted": false
+    }
   }
 }
